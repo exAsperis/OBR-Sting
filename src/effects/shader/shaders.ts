@@ -1,8 +1,25 @@
 import type { ShaderPreset } from "../../types";
 
-const common = `
-uniform shader scene;
-uniform mat3 modelView;
+const staticAnimation = "return 1.0;";
+const pulseAnimation = "return mix(1.0 - depth, 1.0, 0.5 + 0.5 * sin(time * rate * 6.283185));";
+const flickerAnimation = "float noise = fract(sin(floor(time * max(rate, 0.01) * 12.0) * 43758.5453)); return mix(1.0 - depth, 1.0, noise);";
+
+const softAura = `
+  float feather = clamp(0.10 * spread, 0.02, 0.45);
+  float innerFade = smoothstep(max(0.0, innerRadius - feather), innerRadius, distanceFromCenter);
+  float outerFade = 1.0 - smoothstep(max(innerRadius, outerRadius - feather), outerRadius, distanceFromCenter);
+  float mask = innerFade * outerFade;
+`;
+
+const crispRing = `
+  float feather = clamp(0.012 * spread, 0.005, 0.07);
+  float innerEdge = smoothstep(max(0.0, innerRadius - feather), innerRadius + feather, distanceFromCenter);
+  float outerEdge = 1.0 - smoothstep(max(innerRadius, outerRadius - feather), outerRadius + feather, distanceFromCenter);
+  float mask = innerEdge * outerEdge;
+`;
+
+function buildShader(mask: string, animation: string, opacity: number, extraUniforms = ""): string {
+  return `
 uniform vec2 size;
 uniform float time;
 uniform vec3 signalColor;
@@ -10,30 +27,38 @@ uniform float strength;
 uniform float rate;
 uniform float depth;
 uniform float spread;
+uniform vec2 centerOffset;
+uniform float innerRadius;
+uniform float outerRadius;
+${extraUniforms}
 
 float animationFactor() {
-  return 1.0;
+  ${animation}
 }
 
 half4 main(float2 coord) {
-  vec2 screen = (vec3(coord, 1.0) * modelView).xy;
-  half4 source = scene.eval(screen);
-  float amount = clamp(strength * animationFactor(), 0.0, 1.0);
-  return half4(mix(source.rgb, half3(signalColor), amount * 0.55), source.a);
+  vec2 centered = (coord / size - vec2(0.5)) * 2.0 - centerOffset;
+  float distanceFromCenter = length(centered);
+  ${mask}
+  float alpha = clamp(strength * animationFactor() * mask * ${opacity.toFixed(2)}, 0.0, 1.0);
+  return half4(half3(signalColor) * alpha, alpha);
 }`;
+}
 
-const pulse = common.replace("return 1.0;", "return mix(1.0 - depth, 1.0, 0.5 + 0.5 * sin(time * rate * 6.283185));");
-const flicker = common.replace(
-  "return 1.0;",
-  "float noise = fract(sin(floor(time * max(rate, 0.01) * 12.0) * 43758.5453)); return mix(1.0 - depth, 1.0, noise);",
-);
-const glow = common.replace(
-  "float amount = clamp(strength * animationFactor(), 0.0, 1.0);",
-  "vec2 uv = coord / size; float edge = 1.0 - smoothstep(0.0, 0.5, min(min(uv.x, 1.0-uv.x), min(uv.y, 1.0-uv.y)) * spread * 2.0); float amount = clamp(strength * animationFactor() * mix(0.55, 1.0, edge), 0.0, 1.0);",
-);
-const outline = common.replace(
-  "float amount = clamp(strength * animationFactor(), 0.0, 1.0);",
-  "vec2 uv = coord / size; float border = 1.0 - smoothstep(0.0, clamp(0.018 * spread, 0.005, 0.12), min(min(uv.x, 1.0-uv.x), min(uv.y, 1.0-uv.y))); float amount = clamp(strength * border, 0.0, 1.0);",
-);
+const glow = buildShader(softAura, staticAnimation, 0.62);
+const pulse = buildShader(softAura, pulseAnimation, 0.72);
+const flicker = buildShader(softAura, flickerAnimation, 0.72);
+const outline = buildShader(crispRing, staticAnimation, 0.95);
+const beamMask = `
+  float feather = clamp(0.025 * spread, 0.008, 0.12);
+  float radialMask = smoothstep(innerRadius, innerRadius + feather, distanceFromCenter)
+    * (1.0 - smoothstep(max(innerRadius, outerRadius - feather), outerRadius, distanceFromCenter));
+  float forward = smoothstep(-feather, feather, dot(centered, beamDirection));
+  float angularDistance = acos(clamp(dot(normalize(centered + vec2(0.00001)), beamDirection), -1.0, 1.0));
+  float halfWidth = radians(beamWidth * 0.5);
+  float coneMask = 1.0 - smoothstep(max(0.0, halfWidth - feather), halfWidth, angularDistance);
+  float mask = radialMask * forward * coneMask;
+`;
+const beam = buildShader(beamMask, staticAnimation, 0.82, "uniform vec2 beamDirection;\nuniform float beamWidth;");
 
-export const SHADERS: Record<ShaderPreset, string> = { glow, pulse, flicker, outline };
+export const SHADERS: Record<ShaderPreset, string> = { glow, pulse, flicker, outline, beam };

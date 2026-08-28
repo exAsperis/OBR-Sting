@@ -1,6 +1,7 @@
 import OBR, { type Item, type Player } from "@owlbear-rodeo/sdk";
 import { DETECTOR_KEY } from "../constants";
 import { ShaderEffectExecutor } from "../effects/shader/executor";
+import { EmanationEffectExecutor } from "../effects/emanation/executor";
 import { EffectExecutorRegistry } from "../effects/registry";
 import { buildRuntimeEffectKey } from "../effects/runtimeKey";
 import { parseDetectorMetadata } from "../metadata/parse";
@@ -21,6 +22,7 @@ export class ProximityEngine {
 
   constructor() {
     this.registry.register(new ShaderEffectExecutor());
+    this.registry.register(new EmanationEffectExecutor());
   }
 
   setItems(items: Item[]): void { this.latestItems = items; this.schedule(); }
@@ -40,7 +42,7 @@ export class ProximityEngine {
         await this.reconcile();
       } while (this.dirty);
     } catch (error) {
-      console.error("[Proximity Signals:error] Reconciliation failed", error);
+      console.error("[Sting:error] Reconciliation failed", error);
     } finally {
       this.running = false;
       if (this.dirty) void this.run();
@@ -51,6 +53,7 @@ export class ProximityEngine {
     if (!this.player) return;
     const graph = buildAttachmentGraph(this.latestItems);
     const signalIndex = indexEmittersBySignal(this.latestItems);
+    const gridScale = await OBR.scene.grid.getScale();
     const desiredByType = new Map<string, DesiredEffect[]>();
     const debug: DebugRuleState[] = [];
 
@@ -58,7 +61,7 @@ export class ProximityEngine {
       const metadata = parseDetectorMetadata(detector.metadata[DETECTOR_KEY]);
       if (!metadata?.enabled) continue;
       for (const rule of metadata.rules.filter((entry) => entry.enabled)) {
-        const evaluation = await evaluateRule(detector, rule, signalIndex, graph);
+        const evaluation = await evaluateRule(detector, rule, signalIndex, graph, gridScale.parsed.multiplier);
         const debugEffects: DebugRuleState["effects"] = [];
         for (const effect of rule.effects.filter((entry) => entry.enabled)) {
           const target = resolveEffectTarget(effect.target, detector, evaluation.detectedEmitter, graph);

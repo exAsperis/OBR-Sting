@@ -1,7 +1,7 @@
 import type { Item, Player } from "@owlbear-rodeo/sdk";
 
 export type Falloff = "binary" | "linear" | "smoothstep";
-export type ShaderPreset = "glow" | "pulse" | "flicker" | "outline";
+export type ShaderPreset = "glow" | "pulse" | "flicker" | "outline" | "beam";
 
 export type EffectTargetV1 =
   | { type: "detector" }
@@ -29,10 +29,31 @@ export interface ShaderEffectDefinitionV1 {
   color: string;
   maxIntensity: number;
   spread: number;
+  geometry?: {
+    /** Percentage of the target half-width/height. */
+    offsetX: number;
+    offsetY: number;
+    /** Percentage of the normalized target radius. */
+    innerRadius: number;
+    outerRadius: number;
+  };
+  /** Angular width in degrees for directional beam effects. */
+  beamWidth?: number;
   animation?: { rate: number; depth: number };
 }
 
-export type EffectDefinitionV1 = ShaderEffectDefinitionV1;
+export interface EmanationEffectDefinitionV1 {
+  id: string;
+  type: "emanation";
+  enabled: boolean;
+  target: EffectTargetV1;
+  audience: EffectAudienceV1;
+  presetName: string;
+  /** The external API can only remove every aura on a source. */
+  removeAllOnDeactivate: boolean;
+}
+
+export type EffectDefinitionV1 = ShaderEffectDefinitionV1 | EmanationEffectDefinitionV1;
 
 export interface DetectionRuleV1 {
   id: string;

@@ -1,6 +1,14 @@
-# Proximity Signals for Owlbear Rodeo
+# Sting for Owlbear Rodeo
 
-Proximity Signals is a generic, declarative proximity rules engine for Owlbear Rodeo. Scene items can emit arbitrary signal tags; detectors respond with one or more audience-aware local shader effects.
+Proximity sensing effects triggers.
+
+Sting is a generic, declarative proximity rules engine for Owlbear Rodeo. Scene items can emit arbitrary signal tags; detectors respond with one or more audience-aware local shader effects.
+
+## Auras and Emanations integration
+
+Sting can optionally trigger named presets or preset groups from Auras and Emanations through its documented local broadcast API. Enable the integration in Sting, then add an **A&E preset** effect to a detection rule and enter the preset name exactly as it appears in Auras and Emanations.
+
+Cleanup is opt-in per effect. The external API only exposes `REMOVE_AURAS`, which removes every Auras and Emanations aura from the target. Sting therefore leaves cleanup disabled by default and shows a warning beside the option.
 
 ## Local development
 
@@ -13,13 +21,13 @@ Add `http://localhost:5173/manifest-local.json` as an Owlbear Rodeo extension.
 
 ## Configuration
 
-Only the GM can configure items. Select one scene item and open **Proximity Signals…** from its context menu or use the extension action:
+Only the GM can configure items. Select one scene item and open **Sting…** from its context menu or use the extension action:
 
 1. Add zero or more emitter signal tags.
 2. Add detector rules with a signal, inner/outer scene-unit range, and falloff curve.
 3. Add any number of effects to each rule.
-4. Choose each effect's target, audience, shader preset, color, intensity, and animation.
-5. Save the configuration to item metadata.
+4. Choose each effect's target, audience, shader preset, color, intensity, animation, center offset, and inner/outer radius.
+5. Changes save automatically to item metadata after a short validation delay.
 
 The background page evaluates rules on every client even while the editor is closed. Derived proximity state and Effect item IDs are never written to the shared scene.
 
@@ -35,8 +43,8 @@ pnpm run build
 
 ## Current SDK notes
 
-- Shader effects use experimental local-only Owlbear Effect items on the `POST_PROCESS` layer.
-- Attachment effects fill the target's bounds. The built-in glow and outline presets therefore emphasize pixels within those bounds; renderer behavior on transparent or hidden artwork should be checked in the target Owlbear release.
+- Shader effects use experimental local-only Owlbear `ATTACHMENT` Effect items.
+- Attachment effects fill the target's bounds. The built-in glow and outline presets therefore render transparent color overlays within those bounds; renderer behavior on transparent or hidden artwork should be checked in the target Owlbear release.
 - Item ownership is encapsulated through `createdUserId`, which is the ownership identity exposed on SDK items. GM **Assign Owner** behavior should be verified in multiplayer testing.
 - Hidden emitters are not filtered. A player can only evaluate hidden items that Owlbear exposes to that player's client; the extension does not bypass Owlbear visibility boundaries.
 - Range comparisons use `OBR.scene.grid.getDistance()`, so the current grid measurement and scale remain authoritative.

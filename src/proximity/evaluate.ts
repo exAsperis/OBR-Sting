@@ -1,8 +1,9 @@
-import OBR, { type Item } from "@owlbear-rodeo/sdk";
+import type { Item } from "@owlbear-rodeo/sdk";
 import { EMITTER_KEY } from "../constants";
 import { parseEmitterMetadata } from "../metadata/parse";
 import { isSameAttachmentFamily } from "../scene/attachments";
 import type { AttachmentGraph, DetectionRuleV1, RuleEvaluation } from "../types";
+import { getSceneDistance } from "./distance";
 import { calculateStrength } from "./strength";
 
 export function indexEmittersBySignal(items: Item[]): Map<string, Item[]> {
@@ -19,12 +20,13 @@ export async function evaluateRule(
   rule: DetectionRuleV1,
   signalIndex: Map<string, Item[]>,
   graph: AttachmentGraph,
+  scaleMultiplier: number,
 ): Promise<RuleEvaluation> {
   const matches = (signalIndex.get(rule.signal) ?? []).filter((item) => !isSameAttachmentFamily(detector, item, graph));
   let nearest: Item | null = null;
   let distance: number | null = null;
   for (const emitter of matches) {
-    const candidate = await OBR.scene.grid.getDistance(detector.position, emitter.position);
+    const candidate = await getSceneDistance(detector.position, emitter.position, scaleMultiplier);
     if (distance === null || candidate < distance) {
       distance = candidate;
       nearest = emitter;

@@ -1,5 +1,5 @@
 import OBR from "@owlbear-rodeo/sdk";
-import { CONTEXT_MENU_ID } from "../constants";
+import { CONTEXT_MENU_ID, EMANATION_INTEGRATION_KEY } from "../constants";
 import { ProximityEngine } from "./engine";
 
 OBR.onReady(() => {
@@ -29,7 +29,7 @@ OBR.onReady(() => {
     id: CONTEXT_MENU_ID,
     icons: [{
       icon: iconUrl,
-      label: "Proximity Signals…",
+      label: "Sting…",
       filter: { min: 1, max: 1, roles: ["GM"], permissions: ["UPDATE"] },
     }],
     embed: { url: extensionUrl, height: 700 },
@@ -38,6 +38,8 @@ OBR.onReady(() => {
   const stopReady = OBR.scene.onReadyChange((ready) => void attachScene(ready));
   const stopPlayer = OBR.player.onChange(() => void refreshPlayer());
   const stopParty = OBR.party.onChange((party) => engine.setParty(party));
+  const integrationChanged = (event: StorageEvent) => { if (event.key === EMANATION_INTEGRATION_KEY) engine.schedule(); };
+  window.addEventListener("storage", integrationChanged);
   void Promise.all([OBR.scene.isReady().then(attachScene), refreshPlayer(), refreshParty()]);
 
   window.addEventListener("beforeunload", () => {
@@ -46,6 +48,7 @@ OBR.onReady(() => {
     stopReady();
     stopPlayer();
     stopParty();
+    window.removeEventListener("storage", integrationChanged);
     void OBR.contextMenu.remove(CONTEXT_MENU_ID);
     void engine.clear();
   }, { once: true });

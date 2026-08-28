@@ -1,8 +1,9 @@
 import type { Item } from "@owlbear-rodeo/sdk";
 import { describe, expect, it } from "vitest";
 import { buildRuntimeEffectKey } from "./effects/runtimeKey";
-import { parseDetectorMetadata, parseEmitterMetadata } from "./metadata/parse";
+import { parseDetectorMetadata, parseEffectDefinition, parseEmitterMetadata } from "./metadata/parse";
 import { calculateStrength } from "./proximity/strength";
+import { toSceneUnits } from "./proximity/distance";
 import { buildAttachmentGraph, isSameAttachmentFamily, resolveCarrier, resolveParent } from "./scene/attachments";
 import { isAudienceMember, resolveEffectTarget } from "./scene/resolve";
 import { normalizeSignal, normalizeSignals } from "./signals/normalize";
@@ -31,6 +32,10 @@ describe("signal normalization", () => {
 });
 
 describe("strength", () => {
+  it("converts grid cells to the displayed scene unit", () => {
+    expect(toSceneUnits(14, 5)).toBe(70);
+    expect(toSceneUnits(3, 1.5)).toBe(4.5);
+  });
   it("handles outer and inner boundaries", () => {
     expect(calculateStrength(61, 60, 5, "linear")).toBe(0);
     expect(calculateStrength(60, 60, 5, "linear")).toBe(0);
@@ -59,6 +64,16 @@ describe("versioned detector parsing", () => {
   it("rejects invalid ranges and duplicate stable IDs", () => {
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("a"), range: { inner: 10, outer: 10 } }] })).toBeNull();
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [rule("a"), rule("a")] })).toBeNull();
+  });
+  it("parses valid shader geometry and rejects inverted radii", () => {
+    const configured = { ...effect(), geometry: { offsetX: 20, offsetY: -15, innerRadius: 30, outerRadius: 120 } };
+    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [rule("a", [configured])] })?.rules[0].effects[0]).toMatchObject(configured);
+    const invalid = { ...effect(), geometry: { offsetX: 0, offsetY: 0, innerRadius: 80, outerRadius: 40 } };
+    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [rule("a", [invalid])] })).toBeNull();
+  });
+
+  it("parses Auras and Emanations preset triggers", () => {
+    expect(parseEffectDefinition({ id: "ae", type: "emanation", enabled: true, target: { type: "detector" }, audience: { type: "everyone" }, presetName: "Spirits", removeAllOnDeactivate: true })).toMatchObject({ type: "emanation", presetName: "Spirits", removeAllOnDeactivate: true });
   });
 });
 

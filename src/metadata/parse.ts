@@ -6,6 +6,8 @@ import type {
   EffectDefinitionV1,
   EffectTargetV1,
   EmitterMetadataV1,
+  EmanationEffectDefinitionV1,
+  ShaderEffectDefinitionV1,
   ShaderPreset,
 } from "../types";
 
@@ -42,18 +44,46 @@ function parseAudience(value: unknown): EffectAudienceV1 | null {
 }
 
 export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null {
-  if (!record(value) || value.type !== "shader" || !id(value.id) || typeof value.enabled !== "boolean") return null;
+  if (!record(value) || !id(value.id) || typeof value.enabled !== "boolean") return null;
   const target = parseTarget(value.target);
   const audience = parseAudience(value.audience);
-  const presets: ShaderPreset[] = ["glow", "pulse", "flicker", "outline"];
-  if (!target || !audience || !presets.includes(value.preset as ShaderPreset) || !color(value.color)) return null;
+  if (!target || !audience) return null;
+  if (value.type === "emanation") {
+    if (!id(value.presetName) || typeof value.removeAllOnDeactivate !== "boolean") return null;
+    return {
+      id: value.id,
+      type: "emanation",
+      enabled: value.enabled,
+      target,
+      audience,
+      presetName: value.presetName.trim(),
+      removeAllOnDeactivate: value.removeAllOnDeactivate,
+    } satisfies EmanationEffectDefinitionV1;
+  }
+  if (value.type !== "shader") return null;
+  const presets: ShaderPreset[] = ["glow", "pulse", "flicker", "outline", "beam"];
+  if (!presets.includes(value.preset as ShaderPreset) || !color(value.color)) return null;
   if (!finite(value.maxIntensity) || value.maxIntensity < 0 || value.maxIntensity > 2) return null;
   if (!finite(value.spread) || value.spread <= 0 || value.spread > 4) return null;
+  let geometry: ShaderEffectDefinitionV1["geometry"];
+  if (value.geometry !== undefined) {
+    if (!record(value.geometry)) return null;
+    const { offsetX, offsetY, innerRadius, outerRadius } = value.geometry;
+    if (!finite(offsetX) || !finite(offsetY) || !finite(innerRadius) || !finite(outerRadius)) return null;
+    if (offsetX < -100 || offsetX > 100 || offsetY < -100 || offsetY > 100) return null;
+    if (innerRadius < 0 || outerRadius <= innerRadius || outerRadius > 200) return null;
+    geometry = { offsetX, offsetY, innerRadius, outerRadius };
+  }
   let animation: { rate: number; depth: number } | undefined;
   if (value.animation !== undefined) {
     if (!record(value.animation) || !finite(value.animation.rate) || !finite(value.animation.depth)) return null;
     if (value.animation.rate < 0 || value.animation.rate > 10 || value.animation.depth < 0 || value.animation.depth > 1) return null;
     animation = { rate: value.animation.rate, depth: value.animation.depth };
+  }
+  let beamWidth: number | undefined;
+  if (value.beamWidth !== undefined) {
+    if (!finite(value.beamWidth) || value.beamWidth < 5 || value.beamWidth > 120) return null;
+    beamWidth = value.beamWidth;
   }
   return {
     id: value.id,
@@ -65,6 +95,8 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     color: value.color.toLowerCase(),
     maxIntensity: value.maxIntensity,
     spread: value.spread,
+    ...(geometry ? { geometry } : {}),
+    ...(beamWidth !== undefined ? { beamWidth } : {}),
     ...(animation ? { animation } : {}),
   };
 }
