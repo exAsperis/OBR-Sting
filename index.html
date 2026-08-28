@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#17141f" />
+    <meta name="description" content="Configure generic proximity signals and private local effects in Owlbear Rodeo." />
+    <link rel="icon" href="./icon.svg" />
+    <link rel="stylesheet" href="/src/showcase.css" />
+    <title>Proximity Signals for Owlbear Rodeo</title>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="./" aria-label="Proximity Signals home">
+        <img src="./icon.svg" alt="" width="34" height="34" />
+        <span>Proximity Signals</span>
+      </a>
+      <a class="header-link" href="https://github.com/exAsperis/OBR-Sting">View on GitHub</a>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Signals · Detectors · Local effects</p>
+          <h1>Let scene items respond to what is nearby.</h1>
+          <p class="lede">Tag any item as a signal emitter, configure detection rules on another, and create audience-aware local effects without encoding game-specific concepts.</p>
+          <div class="actions">
+            <a class="button primary" href="https://github.com/exAsperis/OBR-Sting">View source</a>
+            <a class="button secondary" href="#getting-started">How it works</a>
+          </div>
+        </div>
+        <aside class="preview" aria-label="Proximity Signals features">
+          <div class="preview-bar"><span></span><span></span><span></span></div>
+          <div class="preview-body">
+            <p class="mini-label">Declarative rules engine</p>
+            <h2>Nearby, on your terms.</h2>
+            <div class="feature-grid">
+              <div><strong>Emit</strong><span>Arbitrary signal tags</span></div>
+              <div><strong>Detect</strong><span>Multiple rules</span></div>
+              <div><strong>Target</strong><span>Any scene item</span></div>
+              <div><strong>Audience</strong><span>Private local visuals</span></div>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="section" aria-labelledby="included-heading">
+        <p class="eyebrow">General by design</p>
+        <h2 id="included-heading">One engine, any meaning.</h2>
+        <div class="cards">
+          <article><span>01</span><h3>Signals</h3><p>Use your own vocabulary. Items only advertise normalized tags; detectors decide what those tags mean.</p></article>
+          <article><span>02</span><h3>Rules</h3><p>Layer multiple ranges, falloff curves, targets, and effects—even for the same signal.</p></article>
+          <article><span>03</span><h3>Privacy</h3><p>Each client independently renders only the local effects intended for that player.</p></article>
+        </div>
+      </section>
+
+      <section class="section setup" id="getting-started" aria-labelledby="setup-heading">
+        <div>
+          <p class="eyebrow">Getting started</p>
+          <h2 id="setup-heading">Configure the scene, then let it run.</h2>
+          <p>GMs configure scene items from the extension popover. The background runtime keeps evaluating even after the editor closes.</p>
+        </div>
+        <ol>
+          <li><span>1</span><div><strong>Tag emitters</strong><p>Add one or more signals to items that advertise nearby facts.</p></div></li>
+          <li><span>2</span><div><strong>Create detector rules</strong><p>Choose a signal, range, response curve, and one or more effects.</p></div></li>
+          <li><span>3</span><div><strong>Choose targets and audiences</strong><p>Each effect independently decides what it acts on and who sees it.</p></div></li>
+          <li><span>4</span><div><strong>Keep playing</strong><p>The local runtime handles movement, scene changes, and cleanup automatically.</p></div></li>
+        </ol>
+      </section>
+    </main>
+
+    <footer class="site-footer"><p>A general proximity rules engine for Owlbear Rodeo.</p></footer>
+  </body>
+</html>

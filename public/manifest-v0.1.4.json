@@ -1,0 +1,17 @@
+{
+  "name": "Proximity Signals",
+  "version": "0.1.4",
+  "manifest_version": 1,
+  "description": "A generic proximity signal and local-effects system for Owlbear Rodeo.",
+  "author": "ex Asperis",
+  "homepage_url": "https://github.com/exAsperis/OBR-Sting",
+  "icon": "https://exasperis.github.io/OBR-Sting/icon.svg?v=0.1.4",
+  "action": {
+    "title": "Proximity Signals",
+    "icon": "https://exasperis.github.io/OBR-Sting/icon.svg?v=0.1.4",
+    "popover": "https://exasperis.github.io/OBR-Sting/extension.html?v=0.1.4",
+    "width": 440,
+    "height": 700
+  },
+  "background_url": "https://exasperis.github.io/OBR-Sting/background.html?v=0.1.4"
+}

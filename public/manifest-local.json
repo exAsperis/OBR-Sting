@@ -1,0 +1,17 @@
+{
+  "name": "Proximity Signals (Local)",
+  "version": "0.1.4",
+  "manifest_version": 1,
+  "description": "Local development build of Proximity Signals.",
+  "author": "ex Asperis",
+  "homepage_url": "http://localhost:5173/",
+  "icon": "http://localhost:5173/icon.svg",
+  "action": {
+    "title": "Proximity Signals (Local)",
+    "icon": "http://localhost:5173/icon.svg",
+    "popover": "http://localhost:5173/extension.html",
+    "width": 440,
+    "height": 700
+  },
+  "background_url": "http://localhost:5173/background.html"
+}

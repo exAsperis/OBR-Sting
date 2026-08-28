@@ -1,0 +1,30 @@
+{
+  "name": "proximity-signals",
+  "private": true,
+  "version": "0.1.4",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "pnpm run check:versions && tsc -b && vite build",
+    "check:identity": "node scripts/check-project-identity.mjs",
+    "check:versions": "node scripts/check-versions.mjs",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@owlbear-rodeo/sdk": "^3.1.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.0",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^5.0.2",
+    "jsdom": "^26.1.0",
+    "typescript": "~5.8.3",
+    "vite": "^7.1.5",
+    "vitest": "^3.2.4"
+  }
+}
