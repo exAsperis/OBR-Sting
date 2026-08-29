@@ -6,7 +6,8 @@ export function buildRuntimeEffectKey(
   effectType = "",
   providerId = "",
   actionId = "",
+  detectedEmitterId = "",
 ): string {
-  return [detectorId, ruleId, effectId, targetId, effectType, providerId, actionId]
+  return [detectorId, ruleId, effectId, targetId, effectType, providerId, actionId, detectedEmitterId]
     .map((part) => `${part.length}:${part}`).join("|");
 }

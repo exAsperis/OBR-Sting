@@ -73,66 +73,78 @@ export class ProximityEngine {
       const metadata = parseDetectorMetadata(detector.metadata[DETECTOR_KEY]);
       if (!metadata?.enabled) continue;
       for (const rule of metadata.rules.filter((entry) => entry.enabled)) {
-        const evaluation = await evaluateRule(detector, rule, signalIndex, graph, gridScale.parsed.multiplier);
-        const ruleKey = `${detector.id.length}:${detector.id}|${rule.id.length}:${rule.id}`;
-        nextRuleKeys.add(ruleKey);
-        const previous = this.ruleStates.get(ruleKey) ?? null;
-        const current = toRuleSnapshot(evaluation);
-        const transition = deriveTransition(previous, current);
-        this.ruleStates.set(ruleKey, current);
+        const result = await evaluateRule(detector, rule, signalIndex, graph, gridScale.parsed.multiplier);
+        const baseRuleKey = `${detector.id.length}:${detector.id}|${rule.id.length}:${rule.id}`;
         const debugEffects: DebugRuleState["effects"] = [];
-        for (const effect of rule.effects.filter((entry) => entry.enabled)) {
-          const target = resolveEffectTarget(effect.target, detector, evaluation.detectedEmitter, graph);
-          const audienceMatch = isAudienceMember(effect.audience, this.player, detector, target, graph);
-          const runtimeKey = target ? buildRuntimeEffectKey(
-            detector.id,
-            rule.id,
-            effect.id,
-            target.id,
-            effect.type,
-            effect.type === "integration" ? effect.providerId : "",
-            effect.type === "integration" ? effect.actionId : "",
-          ) : null;
-          const lifecycle = effect.type === "integration" ? effect.lifecycle : "continuous";
-          // Integration authority and delivery policy are provider/action concerns.
-          // Native effects retain per-client audience filtering here.
-          const dispatchMatch = effect.type === "integration" || audienceMatch;
-          if (target && dispatchMatch && runtimeKey) {
-            const desired: DesiredEffect = { ...evaluation, effect, target, localPlayer: this.player, party: this.party, graph, runtimeKey, current, previous, transition, audienceMatch };
-            seenEffectKeys.add(runtimeKey);
-            if (lifecycle === "continuous" && current.active) batchFor(effect.type).desired.push(desired);
-            if (lifecycle !== "continuous" && transition.type === lifecycle) batchFor(effect.type).events.push(desired);
-            if (current.active) this.lastActiveEffects.set(runtimeKey, desired);
-            else this.lastActiveEffects.delete(runtimeKey);
+        for (const evaluation of result.evaluations) {
+          const emitterId = evaluation.detectedEmitter?.id ?? "";
+          const ruleKey = rule.aggregation === "all"
+            ? `${baseRuleKey}|${emitterId.length}:${emitterId}`
+            : baseRuleKey;
+          nextRuleKeys.add(ruleKey);
+          const previous = this.ruleStates.get(ruleKey) ?? null;
+          const current = toRuleSnapshot(evaluation);
+          const transition = deriveTransition(previous, current);
+          this.ruleStates.set(ruleKey, current);
+          for (const effect of rule.effects.filter((entry) => entry.enabled)) {
+            const target = resolveEffectTarget(effect.target, detector, evaluation.detectedEmitter, graph);
+            const audienceMatch = isAudienceMember(effect.audience, this.player, detector, target, graph);
+            const runtimeKey = target ? buildRuntimeEffectKey(
+              detector.id,
+              rule.id,
+              effect.id,
+              target.id,
+              effect.type,
+              effect.type === "integration" ? effect.providerId : "",
+              effect.type === "integration" ? effect.actionId : "",
+              rule.aggregation === "all" ? emitterId : "",
+            ) : null;
+            const lifecycle = effect.type === "integration" ? effect.lifecycle : "continuous";
+            // Integration authority and delivery policy are provider/action concerns.
+            // Native effects retain per-client audience filtering here.
+            const dispatchMatch = effect.type === "integration" || audienceMatch;
+            if (target && dispatchMatch && runtimeKey) {
+              const desired: DesiredEffect = { ...evaluation, effect, target, localPlayer: this.player, party: this.party, graph, runtimeKey, current, previous, transition, audienceMatch };
+              seenEffectKeys.add(runtimeKey);
+              if (lifecycle === "continuous" && current.active) batchFor(effect.type).desired.push(desired);
+              if (lifecycle !== "continuous" && transition.type === lifecycle) batchFor(effect.type).events.push(desired);
+              if (current.active) this.lastActiveEffects.set(runtimeKey, desired);
+              else this.lastActiveEffects.delete(runtimeKey);
+            }
+            debugEffects.push({
+              effectId: effect.id,
+              type: effect.type,
+              lifecycle,
+              transition: transition.type,
+              targetType: effect.target.type,
+              targetName: target?.name ?? null,
+              audience: effect.audience.type,
+              audienceMatch,
+              runtimeKey,
+              localItemId: null,
+              ...(effect.type === "integration" ? {
+                providerId: effect.providerId,
+                actionId: effect.actionId,
+                providerStatus: "unchecked",
+              } : {}),
+            });
           }
-          debugEffects.push({
-            effectId: effect.id,
-            type: effect.type,
-            lifecycle,
-            transition: transition.type,
-            targetType: effect.target.type,
-            targetName: target?.name ?? null,
-            audience: effect.audience.type,
-            audienceMatch,
-            runtimeKey,
-            localItemId: null,
-            ...(effect.type === "integration" ? {
-              providerId: effect.providerId,
-              actionId: effect.actionId,
-              providerStatus: "unchecked",
-            } : {}),
-          });
         }
+        const activeEvaluations = result.evaluations.filter((evaluation) => evaluation.strength > 0 && evaluation.detectedEmitter);
         debug.push({
           detectorId: detector.id,
           detectorName: detector.name,
           ruleId: rule.id,
           signal: rule.signal,
+          aggregation: rule.aggregation,
           range: rule.range,
-          matchingEmitterCount: evaluation.matchingEmitterCount,
-          emitterName: evaluation.detectedEmitter?.name ?? null,
-          distance: evaluation.distance,
-          strength: evaluation.strength,
+          matchingEmitterCount: result.matchingEmitterCount,
+          activeEmitterCount: activeEvaluations.length,
+          detections: activeEvaluations.map((evaluation) => ({
+            emitterName: evaluation.detectedEmitter!.name || evaluation.detectedEmitter!.id,
+            distance: evaluation.distance!,
+            strength: evaluation.strength,
+          })),
           effects: debugEffects,
         });
       }
@@ -166,7 +178,7 @@ export class ProximityEngine {
         continue;
       }
       for (const rule of debug) for (const effect of rule.effects) {
-        if (!effect.runtimeKey) continue;
+        if (effect.type !== executor.type || !effect.runtimeKey) continue;
         effect.localItemId = report.localIds.get(effect.runtimeKey) ?? null;
         effect.executionStatus = report.statuses.get(effect.runtimeKey);
         if (effect.type === "integration") effect.providerStatus = effect.executionStatus === "provider-unavailable" ? "unavailable" : "configured";

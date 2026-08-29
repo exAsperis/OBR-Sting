@@ -2,7 +2,7 @@ import type { Item } from "@owlbear-rodeo/sdk";
 import { EMITTER_KEY } from "../constants";
 import { parseEmitterMetadata } from "../metadata/parse";
 import { isSameAttachmentFamily } from "../scene/attachments";
-import type { AttachmentGraph, DetectionRuleV1, RuleEvaluation } from "../types";
+import type { AttachmentGraph, DetectionRuleV1, RuleEvaluation, RuleEvaluationSet } from "../types";
 import { getSceneDistance } from "./distance";
 import { calculateStrength } from "./strength";
 
@@ -15,29 +15,44 @@ export function indexEmittersBySignal(items: Item[]): Map<string, Item[]> {
   return index;
 }
 
+export function selectRuleEvaluations(rule: DetectionRuleV1, candidates: RuleEvaluation[]): RuleEvaluation[] {
+  const ordered = [...candidates].sort((left, right) => (left.distance ?? Infinity) - (right.distance ?? Infinity));
+  return rule.aggregation === "all"
+    ? ordered.filter((candidate) => candidate.strength > 0)
+    : ordered.slice(0, 1);
+}
+
 export async function evaluateRule(
   detector: Item,
   rule: DetectionRuleV1,
   signalIndex: Map<string, Item[]>,
   graph: AttachmentGraph,
   scaleMultiplier: number,
-): Promise<RuleEvaluation> {
+): Promise<RuleEvaluationSet> {
   const matches = (signalIndex.get(rule.signal) ?? []).filter((item) => !isSameAttachmentFamily(detector, item, graph));
-  let nearest: Item | null = null;
-  let distance: number | null = null;
+  const candidates: RuleEvaluation[] = [];
   for (const emitter of matches) {
-    const candidate = await getSceneDistance(detector.position, emitter.position, scaleMultiplier);
-    if (distance === null || candidate < distance) {
-      distance = candidate;
-      nearest = emitter;
-    }
+    const distance = await getSceneDistance(detector.position, emitter.position, scaleMultiplier);
+    candidates.push({
+      detector,
+      rule,
+      matchingEmitterCount: matches.length,
+      detectedEmitter: emitter,
+      distance,
+      strength: calculateStrength(distance, rule.range.outer, rule.range.inner, rule.falloff),
+    });
   }
+  const selected = selectRuleEvaluations(rule, candidates);
+  if (rule.aggregation === "all") return { matchingEmitterCount: matches.length, evaluations: selected };
   return {
-    detector,
-    rule,
     matchingEmitterCount: matches.length,
-    detectedEmitter: nearest,
-    distance,
-    strength: distance === null ? 0 : calculateStrength(distance, rule.range.outer, rule.range.inner, rule.falloff),
+    evaluations: [selected[0] ?? {
+      detector,
+      rule,
+      matchingEmitterCount: 0,
+      detectedEmitter: null,
+      distance: null,
+      strength: 0,
+    }],
   };
 }

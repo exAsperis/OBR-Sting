@@ -15,11 +15,14 @@ describe("shader presets", () => {
     expect(SHADERS.glow).toContain("0.45");
   });
 
-  it("supports optional pulse and flicker animation on every shader preset", () => {
+  it("supports opacity, flicker, and directional radial animation on every shader preset", () => {
     for (const shader of Object.values(SHADERS)) {
       expect(shader).toContain("animationMode");
       expect(shader).toContain("sin(time * rate");
       expect(shader).toContain("float noise");
+      expect(shader).toContain("radialDirection");
+      expect(shader).toContain("waveWidth");
+      expect(shader).toContain("distanceFromCenter - innerRadius");
     }
   });
 

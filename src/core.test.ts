@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { buildRuntimeEffectKey } from "./effects/runtimeKey";
 import { parseDetectorMetadata, parseEffectDefinition, parseEmitterMetadata } from "./metadata/parse";
 import { calculateStrength } from "./proximity/strength";
+import { selectRuleEvaluations } from "./proximity/evaluate";
 import { toSceneUnits } from "./proximity/distance";
 import { buildAttachmentGraph, isSameAttachmentFamily, resolveCarrier, resolveParent } from "./scene/attachments";
 import { isAudienceMember, resolveEffectTarget } from "./scene/resolve";
@@ -65,6 +66,11 @@ describe("versioned detector parsing", () => {
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("a"), range: { inner: 10, outer: 10 } }] })).toBeNull();
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [rule("a"), rule("a")] })).toBeNull();
   });
+  it("accepts closest and all aggregation modes", () => {
+    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [rule("closest")] })?.rules[0].aggregation).toBe("nearest");
+    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("all"), aggregation: "all" }] })?.rules[0].aggregation).toBe("all");
+    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("bad"), aggregation: "count" }] })).toBeNull();
+  });
   it("parses valid shader geometry and rejects inverted radii", () => {
     const configured = { ...effect(), geometry: { offsetX: 20, offsetY: -15, innerRadius: 30, outerRadius: 120 } };
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [rule("a", [configured])] })?.rules[0].effects[0]).toMatchObject(configured);
@@ -81,6 +87,12 @@ describe("versioned detector parsing", () => {
   it.each(["pulse", "flicker"] as const)("migrates legacy %s presets to glow animations", (preset) => {
     const parsed = parseEffectDefinition({ ...effect(), preset, animation: { rate: 2, depth: 0.6 } });
     expect(parsed).toMatchObject({ preset: "glow", animation: { mode: preset, rate: 2, depth: 0.6 } });
+  });
+
+  it("parses radial pulse direction and wave width", () => {
+    const radial = { ...effect(), animation: { mode: "radial-pulse", rate: 1.5, depth: 0.8, radialDirection: "inward", waveWidth: 0.3 } };
+    expect(parseEffectDefinition(radial)).toMatchObject(radial);
+    expect(parseEffectDefinition({ ...radial, animation: { ...radial.animation, waveWidth: 2 } })).toBeNull();
   });
 
   it("parses Auras and Emanations preset triggers", () => {
@@ -158,5 +170,32 @@ describe("runtime effect identity", () => {
       buildRuntimeEffectKey("d", "r:e", "t", "x"),
     ];
     expect(new Set(keys).size).toBe(keys.length);
+  });
+  it("separates all-mode effects by detected emitter", () => {
+    expect(buildRuntimeEffectKey("d", "r", "e", "same-target", "shader", "", "", "a"))
+      .not.toBe(buildRuntimeEffectKey("d", "r", "e", "same-target", "shader", "", "", "b"));
+  });
+});
+
+describe("rule aggregation", () => {
+  const detector = item("detector");
+  const evaluation = (emitterId: string, distance: number, strength: number) => ({
+    detector,
+    rule: rule("aggregate"),
+    matchingEmitterCount: 3,
+    detectedEmitter: item(emitterId),
+    distance,
+    strength,
+  });
+
+  it("selects only the nearest candidate in closest mode", () => {
+    const selected = selectRuleEvaluations(rule("nearest"), [evaluation("far", 40, 0.3), evaluation("near", 10, 0.9)]);
+    expect(selected.map((entry) => entry.detectedEmitter?.id)).toEqual(["near"]);
+  });
+
+  it("selects every positive-strength candidate in distance order for all mode", () => {
+    const allRule = { ...rule("all"), aggregation: "all" as const };
+    const selected = selectRuleEvaluations(allRule, [evaluation("far", 70, 0), evaluation("middle", 30, 0.5), evaluation("near", 10, 0.9)]);
+    expect(selected.map((entry) => entry.detectedEmitter?.id)).toEqual(["near", "middle"]);
   });
 });

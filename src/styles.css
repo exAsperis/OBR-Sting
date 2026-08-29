@@ -115,6 +115,7 @@ output { float: right; color: var(--obr-muted); font-size: 10px; }
 .debug-view .facts { grid-template-columns: 1fr 1fr; }
 .debug-effect { display: grid; gap: 3px; margin-top: 8px; padding: 8px; border-radius: 9px; background: var(--soft); }
 .debug-effect span { color: var(--obr-muted); font-size: 11px; }
+.debug-detection { display: flex; justify-content: space-between; gap: 8px; margin-top: 7px; color: var(--obr-muted); font-size: 11px; }
 footer { padding: 12px 4px 2px; text-align: center; color: var(--obr-muted); font-size: 10px; }
 .center-panel { display: flex; min-height: 100vh; padding: 30px; align-items: center; justify-content: center; flex-direction: column; text-align: center; }
 .center-panel p { max-width: 330px; margin: 8px 0 14px; color: var(--obr-muted); line-height: 1.5; }

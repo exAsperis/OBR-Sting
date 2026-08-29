@@ -6,10 +6,11 @@ Sting is a generic, declarative proximity rules engine for Owlbear Rodeo. Scene 
 
 ## Modular effects and integrations
 
-Each detector rule is evaluated once. Sting derives enter, exit, nearest-change, and
-continuous lifecycle state, then dispatches configured effects through isolated
-executors. Native visual effects and external integrations compose without provider
-logic entering the proximity engine.
+Each detector rule evaluates either its closest matching emitter or every matching
+emitter in range. Sting derives enter, exit, nearest-change, and continuous lifecycle
+state, then dispatches configured effects through isolated executors. Native visual
+effects and external integrations compose without provider logic entering the proximity
+engine.
 
 Integration providers are trusted TypeScript adapters compiled into Sting. They are not
 user-authored scripts or dynamically loaded plugins. Unknown provider configurations are
@@ -35,7 +36,7 @@ Add `http://localhost:5173/manifest-local.json` as an Owlbear Rodeo extension.
 Only the GM can configure items. Select one scene item and open **Sting…** from its context menu or use the extension action:
 
 1. Add zero or more emitter signal tags.
-2. Add detector rules with a signal, inner/outer scene-unit range, and falloff curve.
+2. Add detector rules with a signal, closest/all detection mode, inner/outer scene-unit range, and falloff curve.
 3. Add any number of effects to each rule.
 4. Choose each effect's target, audience, shader preset, color, intensity, animation, center offset, and inner/outer radius.
 5. Changes save automatically to item metadata after a short validation delay.

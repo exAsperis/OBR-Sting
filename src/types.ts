@@ -2,7 +2,7 @@ import type { Item, Player } from "@owlbear-rodeo/sdk";
 
 export type Falloff = "binary" | "linear" | "smoothstep";
 export type ShaderPreset = "glow" | "beam";
-export type ShaderAnimationMode = "none" | "pulse" | "flicker";
+export type ShaderAnimationMode = "none" | "pulse" | "flicker" | "radial-pulse";
 export type EffectLifecycle = "continuous" | "enter" | "exit" | "nearest-change";
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
@@ -44,7 +44,13 @@ export interface ShaderEffectDefinitionV1 {
   };
   /** Angular width in degrees for directional beam effects. */
   beamWidth?: number;
-  animation?: { mode: ShaderAnimationMode; rate: number; depth: number };
+  animation?: {
+    mode: ShaderAnimationMode;
+    rate: number;
+    depth: number;
+    radialDirection?: "outward" | "inward";
+    waveWidth?: number;
+  };
 }
 
 export interface IntegrationEffectDefinitionV1 {
@@ -67,7 +73,7 @@ export interface DetectionRuleV1 {
   enabled: boolean;
   signal: string;
   range: { outer: number; inner: number };
-  aggregation: "nearest";
+  aggregation: "nearest" | "all";
   falloff: Falloff;
   effects: EffectDefinitionV1[];
 }
@@ -88,6 +94,11 @@ export interface RuleEvaluation {
   detectedEmitter: Item | null;
   distance: number | null;
   strength: number;
+}
+
+export interface RuleEvaluationSet {
+  matchingEmitterCount: number;
+  evaluations: RuleEvaluation[];
 }
 
 export interface RuleSnapshot {
@@ -142,10 +153,10 @@ export interface DebugRuleState {
   detectorName: string;
   ruleId: string;
   signal: string;
+  aggregation: DetectionRuleV1["aggregation"];
   range: DetectionRuleV1["range"];
   matchingEmitterCount: number;
-  emitterName: string | null;
-  distance: number | null;
-  strength: number;
+  activeEmitterCount: number;
+  detections: Array<{ emitterName: string; distance: number; strength: number }>;
   effects: DebugEffectState[];
 }

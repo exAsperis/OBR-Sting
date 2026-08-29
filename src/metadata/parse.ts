@@ -108,9 +108,17 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     if (!record(value.animation) || !finite(value.animation.rate) || !finite(value.animation.depth)) return null;
     if (value.animation.rate < 0 || value.animation.rate > 10 || value.animation.depth < 0 || value.animation.depth > 1) return null;
     const inferredMode = legacyPreset === "pulse" || legacyPreset === "flicker" ? legacyPreset : "none";
-    const modes: ShaderAnimationMode[] = ["none", "pulse", "flicker"];
+    const modes: ShaderAnimationMode[] = ["none", "pulse", "flicker", "radial-pulse"];
     if (value.animation.mode !== undefined && !modes.includes(value.animation.mode as ShaderAnimationMode)) return null;
-    animation = { mode: value.animation.mode as ShaderAnimationMode ?? inferredMode, rate: value.animation.rate, depth: value.animation.depth };
+    if (value.animation.radialDirection !== undefined && !["outward", "inward"].includes(String(value.animation.radialDirection))) return null;
+    if (value.animation.waveWidth !== undefined && (!finite(value.animation.waveWidth) || value.animation.waveWidth < 0.05 || value.animation.waveWidth > 1)) return null;
+    animation = {
+      mode: value.animation.mode as ShaderAnimationMode ?? inferredMode,
+      rate: value.animation.rate,
+      depth: value.animation.depth,
+      ...(value.animation.radialDirection !== undefined ? { radialDirection: value.animation.radialDirection as "outward" | "inward" } : {}),
+      ...(value.animation.waveWidth !== undefined ? { waveWidth: value.animation.waveWidth } : {}),
+    };
   } else if (legacyPreset === "pulse" || legacyPreset === "flicker") {
     animation = { mode: legacyPreset, rate: 1, depth: 0.35 };
   }
@@ -144,7 +152,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
 export function parseDetectionRule(value: unknown): DetectionRuleV1 | null {
   if (!record(value) || !id(value.id) || typeof value.enabled !== "boolean") return null;
   const signal = typeof value.signal === "string" ? normalizeSignal(value.signal) : "";
-  if (!signal || value.aggregation !== "nearest" || !["binary", "linear", "smoothstep"].includes(String(value.falloff))) return null;
+  if (!signal || !["nearest", "all"].includes(String(value.aggregation)) || !["binary", "linear", "smoothstep"].includes(String(value.falloff))) return null;
   if (!record(value.range) || !finite(value.range.outer) || !finite(value.range.inner)) return null;
   if (value.range.outer <= 0 || value.range.inner < 0 || value.range.inner >= value.range.outer) return null;
   if (!Array.isArray(value.effects)) return null;
@@ -160,7 +168,7 @@ export function parseDetectionRule(value: unknown): DetectionRuleV1 | null {
     enabled: value.enabled,
     signal,
     range: { outer: value.range.outer, inner: value.range.inner },
-    aggregation: "nearest",
+    aggregation: value.aggregation as DetectionRuleV1["aggregation"],
     falloff: value.falloff as DetectionRuleV1["falloff"],
     effects,
   };
