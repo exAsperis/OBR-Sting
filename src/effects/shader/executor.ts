@@ -4,6 +4,7 @@ import type { DesiredEffect, ShaderEffectDefinitionV1 } from "../../types";
 import type { EffectDispatchBatch, EffectExecutor, EffectReconcileReport } from "../registry";
 import { resolveShaderGeometry } from "./geometry";
 import { SHADERS } from "./shaders";
+import { stableEffectZIndex } from "./zIndex";
 
 interface RuntimeState {
   localItemId: string;
@@ -109,6 +110,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
       const direction = { x: directionVector.x / directionLength, y: directionVector.y / directionLength };
       const scale = effectScale(effect);
       const effectLayout = layout(bounds, scale);
+      const effectZIndex = stableEffectZIndex(context.runtimeKey);
       const nextLayoutHash = JSON.stringify([effectLayout, direction]);
       const hash = configHash(effect);
       let existing = this.states.get(context.runtimeKey);
@@ -126,6 +128,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
           .width(effectLayout.width)
           .height(effectLayout.height)
           .position(effectLayout.position)
+          .zIndex(effectZIndex)
           .sksl(SHADERS[effect.preset])
           .uniforms(uniforms(effect, context.strength, scale, direction))
           .blendMode("SRC_OVER")
@@ -143,6 +146,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
             item.width = effectLayout.width;
             item.height = effectLayout.height;
             item.position = effectLayout.position;
+            item.zIndex = effectZIndex;
             item.uniforms = uniforms(effect, context.strength, scale, direction);
           }
         });

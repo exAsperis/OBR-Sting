@@ -18,7 +18,9 @@ const configurableAnimation = `
 
 const softAura = `
   float feather = clamp(0.10 * spread, 0.005, 0.45);
-  float innerFade = smoothstep(max(0.0, innerRadius - feather), innerRadius, distanceFromCenter);
+  float innerFade = innerRadius <= 0.0001
+    ? 1.0
+    : smoothstep(max(0.0, innerRadius - feather), innerRadius, distanceFromCenter);
   float outerFade = 1.0 - smoothstep(max(innerRadius, outerRadius - feather), outerRadius, distanceFromCenter);
   float mask = innerFade * outerFade;
 `;

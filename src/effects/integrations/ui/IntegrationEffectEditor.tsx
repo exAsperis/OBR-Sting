@@ -5,10 +5,11 @@ import { SliderNumber } from "../../../components/SliderNumber";
 
 const Label = ({ children, tooltip }: { children: React.ReactNode; tooltip?: string }) => <span className="field-label" title={tooltip}>{children}</span>;
 
-export function IntegrationEffectEditor({ effect, items, providerEnabled, onChange, onDelete }: {
+export function IntegrationEffectEditor({ effect, items, providerEnabled, onSave, onChange, onDelete }: {
   effect: IntegrationEffectDefinitionV1;
   items: Item[];
   providerEnabled: boolean;
+  onSave: () => void;
   onChange: (update: (effect: IntegrationEffectDefinitionV1) => IntegrationEffectDefinitionV1) => void;
   onDelete: () => void;
 }) {
@@ -18,7 +19,7 @@ export function IntegrationEffectEditor({ effect, items, providerEnabled, onChan
   const setParameter = (key: string, value: JsonValue) => onChange((current) => ({ ...current, parameters: { ...current.parameters, [key]: value } }));
 
   return <div className="effect-card emanation-card">
-    <div className="section-title"><strong>{provider?.displayName ?? effect.providerId} · {action?.displayName ?? effect.actionId}</strong><label className="toggle"><input type="checkbox" checked={effect.enabled} onChange={(event) => onChange((value) => ({ ...value, enabled: event.target.checked }))} /> Enabled</label></div>
+    <div className="section-title"><strong>{provider?.displayName ?? effect.providerId} · {action?.displayName ?? effect.actionId}</strong><div className="effect-header-actions"><button className="mini-icon" title="Save this effect to your browser-local library." aria-label="Save effect to library" onClick={onSave}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l2 2v16H5V3Zm3 0v6h8V3M8 21v-8h8v8" /></svg></button><label className="toggle"><input type="checkbox" checked={effect.enabled} onChange={(event) => onChange((value) => ({ ...value, enabled: event.target.checked }))} /> Enabled</label></div></div>
     {!providerEnabled && <p className="validation-error" role="status">Extension unavailable or unverified. Configuration is retained and execution is skipped while this integration is disabled.</p>}
     {(!provider || !action) && <p className="validation-error" role="status">This Sting build does not include the configured provider action. Configuration is retained.</p>}
     <div className="form-grid">

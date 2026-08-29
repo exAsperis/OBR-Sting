@@ -18,6 +18,7 @@ export interface IntegrationActionCatalogEntry {
 export interface IntegrationProviderCatalogEntry {
   id: string;
   displayName: string;
+  iconUrl: string;
   schemaVersion: number;
   actions: readonly IntegrationActionCatalogEntry[];
 }
@@ -25,6 +26,7 @@ export interface IntegrationProviderCatalogEntry {
 export const INTEGRATION_CATALOG: readonly IntegrationProviderCatalogEntry[] = [{
   id: "auras-emanations",
   displayName: "Auras & Emanations",
+  iconUrl: "./icon-reticle.svg",
   schemaVersion: 1,
   actions: [{
     id: "preset-aura",

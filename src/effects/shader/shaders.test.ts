@@ -10,6 +10,7 @@ describe("shader presets", () => {
 
   it("lets glow range from a crisp ring to a soft aura", () => {
     expect(SHADERS.glow).toContain("innerFade");
+    expect(SHADERS.glow).toContain("innerRadius <= 0.0001");
     expect(SHADERS.glow).toContain("centerOffset");
     expect(SHADERS.glow).toContain("effectSize");
     expect(SHADERS.glow).toContain("effectRotation");
