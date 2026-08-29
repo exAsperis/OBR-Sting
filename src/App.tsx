@@ -1,4 +1,4 @@
-import OBR, { type Item, type Player } from "@owlbear-rodeo/sdk";
+import OBR, { isImage, type Item, type Player } from "@owlbear-rodeo/sdk";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DETECTOR_KEY, EMANATION_INTEGRATION_KEY, EMITTER_KEY, EXTENSION_NAME, SETTINGS_KEY } from "./constants";
 import { parseDetectorMetadata, parseEmitterMetadata } from "./metadata/parse";
@@ -10,11 +10,15 @@ import { normalizeSignal } from "./signals/normalize";
 import type { DebugRuleState, DetectionRuleV1, DetectorMetadataV1, EffectAudienceV1, EffectDefinitionV1, EffectTargetV1, EmitterMetadataV1, ShaderEffectDefinitionV1 } from "./types";
 import { StatusPanel } from "./components/StatusPanel";
 import { useOwlbear } from "./hooks/useOwlbear";
-import { DEFAULT_SCENE_SETTINGS, parseSceneSettings, type SceneSettingsV1 } from "./settings";
+import { DEFAULT_ROOM_SETTINGS, parseRoomSettings, type RoomSettingsV1 } from "./settings";
+import { SliderNumber } from "./components/SliderNumber";
 
 const newEffect = (): ShaderEffectDefinitionV1 => ({ id: crypto.randomUUID(), type: "shader", enabled: true, target: { type: "detector" }, audience: { type: "everyone" }, preset: "glow", color: "#55aaff", maxIntensity: 1, spread: 1.25, animation: { mode: "none", rate: 1, depth: 0.35 } });
 const newRule = (): DetectionRuleV1 => ({ id: crypto.randomUUID(), enabled: true, signal: "signal", aggregation: "nearest", range: { outer: 60, inner: 5 }, falloff: "smoothstep", effects: [newEffect()] });
-const Label = ({ children }: { children: React.ReactNode }) => <span className="field-label">{children}</span>;
+const Label = ({ children, tooltip }: { children: React.ReactNode; tooltip?: string }) => <span className="field-label" title={tooltip}>{children}</span>;
+const Icon = ({ children }: { children: React.ReactNode }) => <svg viewBox="0 0 24 24" aria-hidden="true">{children}</svg>;
+const BugIcon = () => <Icon><path d="M8 8h8v9a4 4 0 0 1-8 0V8Zm2-3h4l1 3H9l1-3ZM5 11h3m8 0h3M5 16h3m8 0h3M7 7 5 5m12 2 2-2" /></Icon>;
+const GearIcon = () => <Icon><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0-5 1 2.2 2.4.6 2-1.2 2 2-1.2 2 .6 2.4L21 12l-2.2 1-.6 2.4 1.2 2-2 2-2-1.2-2.4.6L12 21l-1-2.2-2.4-.6-2 1.2-2-2 1.2-2-.6-2.4L3 12l2.2-1 .6-2.4-1.2-2 2-2 2 1.2 2.4-.6L12 3Z" /></Icon>;
 const configurationSignature = (emitter: EmitterMetadataV1, detector: DetectorMetadataV1) => JSON.stringify({
   emitter: emitter.signals.length ? emitter : null,
   detector: detector.rules.length ? detector : null,
@@ -32,12 +36,14 @@ export default function App() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [debug, setDebug] = useState<DebugRuleState[]>([]);
   const [showDebug, setShowDebug] = useState(false);
+  const [showSettings, setShowSettings] = useState(true);
   const [gridUnit, setGridUnit] = useState("");
   const [emanationEnabled, setEmanationEnabled] = useState(() => localStorage.getItem(EMANATION_INTEGRATION_KEY) === "true");
-  const [sceneSettings, setSceneSettings] = useState<SceneSettingsV1>(DEFAULT_SCENE_SETTINGS);
+  const [roomSettings, setRoomSettings] = useState<RoomSettingsV1>(DEFAULT_ROOM_SETTINGS);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const hydratedItemId = useRef<string | null>(null);
   const lastSavedSignature = useRef("");
+  const selectionSignature = useRef("");
   const selected = items.find((item) => item.id === selectedId) ?? null;
   const sceneSignals = useMemo(() => [...new Set(items.flatMap((item) => parseEmitterMetadata(item.metadata[EMITTER_KEY])?.signals ?? []))].sort(), [items]);
 
@@ -45,7 +51,14 @@ export default function App() {
     const allItems = nextItems ?? await OBR.scene.items.getItems();
     setItems(allItems);
     const selection = await OBR.player.getSelection();
-    setSelectedId(selection?.length === 1 ? selection[0] : null);
+    const nextSelectedId = selection?.length === 1 ? selection[0] : null;
+    const nextSignature = selection?.length === 1 ? `one:${selection[0]}` : `count:${selection?.length ?? 0}`;
+    if (selectionSignature.current !== nextSignature) {
+      selectionSignature.current = nextSignature;
+      setShowSettings(nextSelectedId === null);
+      setShowDebug(false);
+    }
+    setSelectedId(nextSelectedId);
   }, []);
 
   useEffect(() => {
@@ -61,15 +74,15 @@ export default function App() {
   }, [connection.sceneReady, connection.status, loadSelection]);
 
   useEffect(() => {
-    if (connection.status !== "ready" || !connection.sceneReady) {
-      setSceneSettings(DEFAULT_SCENE_SETTINGS);
+    if (connection.status !== "ready") {
+      setRoomSettings(DEFAULT_ROOM_SETTINGS);
       return;
     }
-    const applySettings = (metadata: Awaited<ReturnType<typeof OBR.scene.getMetadata>>) => setSceneSettings(parseSceneSettings(metadata[SETTINGS_KEY]));
-    void OBR.scene.getMetadata().then(applySettings);
-    const stopSettings = OBR.scene.onMetadataChange(applySettings);
+    const applySettings = (metadata: Awaited<ReturnType<typeof OBR.room.getMetadata>>) => setRoomSettings(parseRoomSettings(metadata[SETTINGS_KEY]));
+    void OBR.room.getMetadata().then(applySettings);
+    const stopSettings = OBR.room.onMetadataChange(applySettings);
     return stopSettings;
-  }, [connection.sceneReady, connection.status]);
+  }, [connection.status]);
 
   useEffect(() => {
     if (!selected) return;
@@ -95,13 +108,13 @@ export default function App() {
   const updateRule = (index: number, update: (rule: DetectionRuleV1) => DetectionRuleV1) => setDetector((current) => ({ ...current, rules: current.rules.map((rule, i) => i === index ? update(rule) : rule) }));
   const updateEffect = (ruleIndex: number, effectIndex: number, update: (effect: EffectDefinitionV1) => EffectDefinitionV1) => updateRule(ruleIndex, (rule) => ({ ...rule, effects: rule.effects.map((effect, i) => i === effectIndex ? update(effect) : effect) }));
   const toggleEmanation = (enabled: boolean) => { localStorage.setItem(EMANATION_INTEGRATION_KEY, String(enabled)); setEmanationEnabled(enabled); };
-  const updateDistanceMethod = (distanceMethod: SceneSettingsV1["distanceMethod"]) => {
-    const next: SceneSettingsV1 = { version: 1, distanceMethod };
-    setSceneSettings(next);
+  const updateDistanceMethod = (distanceMethod: RoomSettingsV1["distanceMethod"]) => {
+    const next: RoomSettingsV1 = { version: 1, distanceMethod };
+    setRoomSettings(next);
     setSettingsError(null);
-    void OBR.scene.setMetadata({ [SETTINGS_KEY]: next }).catch(() => {
-      setSettingsError("Unable to save scene settings.");
-      void OBR.scene.getMetadata().then((metadata) => setSceneSettings(parseSceneSettings(metadata[SETTINGS_KEY])));
+    void OBR.room.setMetadata({ [SETTINGS_KEY]: next }).catch(() => {
+      setSettingsError("Unable to save room settings.");
+      void OBR.room.getMetadata().then((metadata) => setRoomSettings(parseRoomSettings(metadata[SETTINGS_KEY])));
     });
   };
   const addSignal = () => { const value = normalizeSignal(signalDraft); if (value && !emitter.signals.includes(value)) setEmitter({ version: 1, signals: [...emitter.signals, value] }); setSignalDraft(""); };
@@ -142,24 +155,24 @@ export default function App() {
   if (connection.status === "connecting") return <StatusPanel title="Connecting to Owlbear Rodeo" message="Waiting for the room SDK to become ready…" />;
   if (connection.status === "error") return <StatusPanel title="Extension unavailable" message={connection.error ?? "Unable to initialize."} onRetry={() => void connection.refresh()} />;
 
+  const extensionRoot = new URL("./", window.location.href).href;
   return <main className="app-shell">
-    <header className="app-header"><div><span className="eyebrow">Proximity sensing effects triggers</span><h1>{EXTENSION_NAME}</h1></div><button className="secondary-button" onClick={() => setShowDebug((value) => !value)}>{showDebug ? "Editor" : "Debug"}</button></header>
+    <header className="app-header"><div className="brand"><img src="./icon.svg" alt="" /><h1>{EXTENSION_NAME}</h1></div><nav className="header-actions" aria-label="Extension views"><button className={`icon-button${showDebug ? " active" : ""}`} title="Debug runtime" aria-label="Debug runtime" onClick={() => { setShowDebug((value) => !value); setShowSettings(false); }}><BugIcon /></button><button className={`icon-button${showSettings ? " active" : ""}`} title="Settings" aria-label="Settings" onClick={() => { setShowSettings((value) => !value); setShowDebug(false); }}><GearIcon /></button><a className="icon-button" href={extensionRoot} target="_blank" rel="noreferrer" title="Open Sting help" aria-label="Open Sting help">?</a></nav></header>
     {!connection.sceneReady && <div className="notice">Open a scene to configure proximity signals.</div>}
     {connection.sceneReady && connection.role !== "GM" && <div className="notice">The runtime is active. Only the GM can configure scene items.</div>}
     {connection.sceneReady && connection.role === "GM" && !selected && <div className="notice">Select exactly one scene item to configure it.</div>}
-    {connection.sceneReady && <details className="content-card extensions-section settings-section">
-      <summary><span><strong className="extensions-title">Settings</strong><small>{sceneSettings.distanceMethod === "euclidean" ? "Straight-line distance" : "Scene grid distance"}</small></span></summary>
+    {connection.status === "ready" && showSettings && <section className="content-card settings-section"><div className="section-title"><div><h2>Settings</h2><p className="muted">{roomSettings.distanceMethod === "euclidean" ? "Straight-line distance" : "Scene grid distance"}</p></div></div>
       <div className="settings-content">
-        <label><Label>Distance calculation</Label><select value={sceneSettings.distanceMethod} disabled={connection.role !== "GM"} onChange={(event) => updateDistanceMethod(event.target.value as SceneSettingsV1["distanceMethod"])}><option value="grid">Scene grid rules</option><option value="euclidean">Straight-line (Euclidean)</option></select></label>
+        <label title="Choose how Sting measures ranges and determines which signal is closest."><Label tooltip="Choose how Sting measures ranges and determines which signal is closest.">Distance calculation</Label><select title="Choose the room-wide distance calculation method." value={roomSettings.distanceMethod} disabled={connection.role !== "GM"} onChange={(event) => updateDistanceMethod(event.target.value as RoomSettingsV1["distanceMethod"])}><option value="grid">Scene grid rules</option><option value="euclidean">Straight-line (Euclidean)</option></select></label>
         <p className="muted">Controls signal range, falloff, and which signal is considered closest.</p>
-        <div className="settings-subsection"><strong>Extensions</strong><div className="extension-row"><div><strong>Auras &amp; Emanations</strong><p className="muted">Trigger named presets through the installed extension.</p></div><label className="toggle"><input type="checkbox" checked={emanationEnabled} disabled={connection.role !== "GM"} onChange={(event) => toggleEmanation(event.target.checked)} /> Enabled</label></div></div>
+        <div className="settings-subsection"><strong>Extensions</strong><div className="extension-row"><div><strong>Auras &amp; Emanations</strong><p className="muted">Trigger named presets through the installed extension.</p></div><label className="toggle" title="Allow Sting rules to execute Auras &amp; Emanations actions."><input type="checkbox" checked={emanationEnabled} disabled={connection.role !== "GM"} onChange={(event) => toggleEmanation(event.target.checked)} /> Enabled</label></div></div>
         {settingsError && <div className="validation-error" role="alert">{settingsError}</div>}
       </div>
-    </details>}
-    {showDebug ? <DebugView rules={debug} /> : selected && connection.role === "GM" ? <>
-      <section className="item-heading"><span className="eyebrow">Selected item</span><h2>{selected.name || "Unnamed item"}</h2><code>{selected.id}</code></section>
-      <section className="content-card"><h2>Emitter</h2><p className="muted">Advertise arbitrary facts; ranges and responses belong on detectors.</p><div className="chips">{emitter.signals.map((signal) => <button key={signal} className="chip" onClick={() => setEmitter({ version: 1, signals: emitter.signals.filter((value) => value !== signal) })}>{signal}<span>×</span></button>)}</div><div className="input-row"><input list="scene-signals" value={signalDraft} placeholder="Add signal…" onChange={(event) => setSignalDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addSignal(); } }} /><button onClick={addSignal}>Add</button></div><datalist id="scene-signals">{sceneSignals.map((signal) => <option key={signal} value={signal} />)}</datalist></section>
-      <section className="content-card"><div className="section-title"><div><h2>Detector</h2><p className="muted">Each rule produces one strength shared by all of its effects.</p></div><label className="toggle"><input type="checkbox" checked={detector.enabled} onChange={(event) => setDetector({ ...detector, enabled: event.target.checked })} /> Enabled</label></div>{detector.rules.map((rule, ruleIndex) => <RuleEditor key={rule.id} rule={rule} index={ruleIndex} unit={gridUnit} items={items} party={party} emanationEnabled={emanationEnabled} onChange={(update) => updateRule(ruleIndex, update)} onEffect={(effectIndex, update) => updateEffect(ruleIndex, effectIndex, update)} onDelete={() => setDetector({ ...detector, rules: detector.rules.filter((_, i) => i !== ruleIndex) })} />)}<button className="wide-button" onClick={() => setDetector({ ...detector, rules: [...detector.rules, newRule()] })}>+ Add detection rule</button></section>
+    </section>}
+    {showDebug ? <DebugView rules={debug} /> : selected && !showSettings && connection.role === "GM" ? <>
+      <section className="item-heading"><div className="selected-thumbnail">{isImage(selected) && selected.image.mime.startsWith("image/") ? <img src={selected.image.url} alt="" /> : <span aria-hidden="true">◇</span>}</div><div><span className="eyebrow">Selected item</span><h2>{selected.name || "Unnamed item"}</h2><code>{selected.id}</code></div></section>
+      <section className="content-card"><h2 title="Add text tags to this item that can be detected by detector items.">Emitter</h2><div className="chips">{emitter.signals.map((signal) => <button title={`Remove the ${signal} signal from this item.`} key={signal} className="chip" onClick={() => setEmitter({ version: 1, signals: emitter.signals.filter((value) => value !== signal) })}>{signal}<span>×</span></button>)}</div><div className="input-row"><input title="Signal tag this item advertises." list="scene-signals" value={signalDraft} placeholder="Add signal…" onChange={(event) => setSignalDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addSignal(); } }} /><button title="Add this signal to the selected item." onClick={addSignal}>Add</button></div><datalist id="scene-signals">{sceneSignals.map((signal) => <option key={signal} value={signal} />)}</datalist></section>
+      <section className="content-card"><div className="section-title"><h2 title="Add detection rules that respond when matching emitter tags are within range.">Detector</h2><label className="toggle" title="Enable or disable every detection rule on this item."><input type="checkbox" checked={detector.enabled} onChange={(event) => setDetector({ ...detector, enabled: event.target.checked })} /> Enabled</label></div>{detector.rules.map((rule, ruleIndex) => <RuleEditor key={rule.id} rule={rule} index={ruleIndex} unit={gridUnit} items={items} party={party} emanationEnabled={emanationEnabled} onChange={(update) => updateRule(ruleIndex, update)} onEffect={(effectIndex, update) => updateEffect(ruleIndex, effectIndex, update)} onDelete={() => setDetector({ ...detector, rules: detector.rules.filter((_, i) => i !== ruleIndex) })} />)}<button className="wide-button" title="Add another detection rule to this item." onClick={() => setDetector({ ...detector, rules: [...detector.rules, newRule()] })}>+ Add detection rule</button></section>
       {saveError && <div className="validation-error" role="alert">{saveError}</div>}<div className="autosave-status" role="status">{autosaveStatus === "saving" ? "Saving…" : autosaveStatus === "error" ? "Not saved" : "Saved automatically"}</div>
     </> : null}
   </main>;
@@ -167,12 +180,12 @@ export default function App() {
 
 interface RuleEditorProps { rule: DetectionRuleV1; index: number; unit: string; items: Item[]; party: Player[]; emanationEnabled: boolean; onChange: (update: (rule: DetectionRuleV1) => DetectionRuleV1) => void; onEffect: (index: number, update: (effect: EffectDefinitionV1) => EffectDefinitionV1) => void; onDelete: () => void; }
 function RuleEditor({ rule, index, unit, items, party, emanationEnabled, onChange, onEffect, onDelete }: RuleEditorProps) {
-  return <article className="rule-card"><div className="section-title"><h3>Rule {index + 1}</h3><label className="toggle"><input type="checkbox" checked={rule.enabled} onChange={(event) => onChange((value) => ({ ...value, enabled: event.target.checked }))} /> Active</label></div><div className="form-grid">
-    <label><Label>Signal</Label><input value={rule.signal} onChange={(event) => onChange((value) => ({ ...value, signal: event.target.value }))} /></label>
-    <label><Label>Falloff</Label><select value={rule.falloff} onChange={(event) => onChange((value) => ({ ...value, falloff: event.target.value as DetectionRuleV1["falloff"] }))}><option value="smoothstep">Smooth</option><option value="linear">Linear</option><option value="binary">Binary</option></select></label>
-    <label><Label>Detection mode</Label><select value={rule.aggregation} onChange={(event) => onChange((value) => ({ ...value, aggregation: event.target.value as DetectionRuleV1["aggregation"] }))}><option value="nearest">Closest signal</option><option value="all">All signals in range</option></select></label>
-    <label><Label>Outer range {unit && `(${unit})`}</Label><input type="number" min="0.01" step="0.5" value={rule.range.outer} onChange={(event) => onChange((value) => ({ ...value, range: { ...value.range, outer: Number(event.target.value) } }))} /></label>
-    <label><Label>Full strength at {unit && `(${unit})`}</Label><input type="number" min="0" step="0.5" value={rule.range.inner} onChange={(event) => onChange((value) => ({ ...value, range: { ...value.range, inner: Number(event.target.value) } }))} /></label>
+  return <article className="rule-card"><div className="section-title"><h3>Rule {index + 1}</h3><label className="toggle" title="Enable or disable this detection rule."><input type="checkbox" checked={rule.enabled} onChange={(event) => onChange((value) => ({ ...value, enabled: event.target.checked }))} /> Active</label></div><div className="form-grid">
+    <label title="Signal tag this rule listens for."><Label tooltip="Signal tag this rule listens for.">Signal</Label><input value={rule.signal} onChange={(event) => onChange((value) => ({ ...value, signal: event.target.value }))} /></label>
+    <label title="How effect strength changes between the full-strength and outer ranges."><Label tooltip="How effect strength changes between the full-strength and outer ranges.">Falloff</Label><select value={rule.falloff} onChange={(event) => onChange((value) => ({ ...value, falloff: event.target.value as DetectionRuleV1["falloff"] }))}><option value="smoothstep">Smooth</option><option value="linear">Linear</option><option value="binary">Binary</option></select></label>
+    <label title="Choose the closest matching emitter or every matching emitter in range."><Label tooltip="Choose the closest matching emitter or every matching emitter in range.">Detection mode</Label><select value={rule.aggregation} onChange={(event) => onChange((value) => ({ ...value, aggregation: event.target.value as DetectionRuleV1["aggregation"] }))}><option value="nearest">Closest signal</option><option value="all">All signals in range</option></select></label>
+    <SliderNumber tooltip="Maximum detection distance." label={`Outer range${unit ? ` (${unit})` : ""}`} min={0.5} step={0.5} value={rule.range.outer} suffix={unit ? ` ${unit}` : ""} onChange={(outer) => onChange((value) => ({ ...value, range: { inner: Math.min(value.range.inner, Math.max(0, outer - 0.5)), outer } }))} />
+    <SliderNumber tooltip="Distance at or below which effects use full strength." label={`Full strength at${unit ? ` (${unit})` : ""}`} min={0} max={Math.max(0, rule.range.outer - 0.5)} step={0.5} value={rule.range.inner} suffix={unit ? ` ${unit}` : ""} onChange={(inner) => onChange((value) => ({ ...value, range: { ...value.range, inner } }))} />
   </div><div className="effects-heading"><h4>Effects <span>{rule.effects.length}</span></h4></div>{rule.effects.map((effect, effectIndex) => effect.type === "shader" ? <EffectEditor key={effect.id} effect={effect} items={items} party={party} onChange={(update) => onEffect(effectIndex, (current) => current.type === "shader" ? update(current) : current)} onDelete={() => onChange((value) => ({ ...value, effects: value.effects.filter((_, i) => i !== effectIndex) }))} /> : <IntegrationEffectEditor key={effect.id} effect={effect} items={items} providerEnabled={emanationEnabled} onChange={(update) => onEffect(effectIndex, (current) => current.type === "integration" ? update(current) : current)} onDelete={() => onChange((value) => ({ ...value, effects: value.effects.filter((_, i) => i !== effectIndex) }))} />)}<div className="card-actions"><button onClick={() => onChange((value) => ({ ...value, effects: [...value.effects, newEffect()] }))}>+ Sting effect</button><button onClick={() => onChange((value) => ({ ...value, effects: [...value.effects, createIntegrationEffect()] }))}>+ A&amp;E integration</button><button className="danger" onClick={onDelete}>Delete rule</button></div></article>;
 }
 
@@ -184,23 +197,19 @@ function EffectEditor({ effect, items, party, onChange, onDelete }: { effect: Sh
   const setGeometry = (field: keyof typeof geometry, value: number) => onChange((current) => ({ ...current, geometry: { ...resolveShaderGeometry(current), [field]: value } }));
   const setAnimation = (update: Partial<NonNullable<ShaderEffectDefinitionV1["animation"]>>) => onChange((current) => ({ ...current, animation: { mode: "none", rate: 1, depth: 0.35, radialDirection: "outward", waveWidth: 0.22, ...current.animation, ...update } }));
   return <div className="effect-card"><div className="section-title"><strong>{effect.preset[0].toUpperCase() + effect.preset.slice(1)}</strong><label className="toggle"><input type="checkbox" checked={effect.enabled} onChange={(event) => onChange((value) => ({ ...value, enabled: event.target.checked }))} /> Enabled</label></div><div className="form-grid">
-    <label><Label>Preset</Label><select value={effect.preset} onChange={(event) => onChange((value) => { const preset = event.target.value as ShaderEffectDefinitionV1["preset"]; return { ...value, preset, geometry: DEFAULT_GEOMETRY[preset] }; })}><option value="glow">Glow</option><option value="beam">Directional beam</option></select></label>
-    <label><Label>Target</Label><select value={effect.target.type} onChange={(event) => setTarget(event.target.value as EffectTargetV1["type"])}><option value="detector">Detector</option><option value="parent">Parent</option><option value="carrier">Carrier</option><option value="detected-emitter">Detected emitter</option><option value="specific-item">Specific item</option></select></label>
-    {effect.target.type === "specific-item" && <label className="wide"><Label>Specific item</Label><select value={effect.target.itemId} onChange={(event) => onChange((value) => ({ ...value, target: { type: "specific-item", itemId: event.target.value } }))}>{items.map((item) => <option key={item.id} value={item.id}>{item.name || item.id}</option>)}</select></label>}
-    <label><Label>Audience</Label><select value={effect.audience.type} onChange={(event) => setAudience(event.target.value as EffectAudienceV1["type"])}><option value="everyone">Everyone</option><option value="gm">GM only</option><option value="players">Players</option><option value="detector-owner">Detector owner</option><option value="carrier-owner">Carrier owner</option><option value="target-owner">Target owner</option><option value="specific-users">Specific users</option></select></label>
-    <label><Label>Color</Label><input type="color" value={effect.color} onChange={(event) => onChange((value) => ({ ...value, color: event.target.value }))} /></label>
-    <label><Label>Maximum intensity</Label><input type="range" min="0" max="2" step="0.05" value={effect.maxIntensity} onChange={(event) => onChange((value) => ({ ...value, maxIntensity: Number(event.target.value) }))} /><output>{effect.maxIntensity.toFixed(2)}</output></label>
-    <label><Label>Edge softness</Label><input type="range" min="0.05" max="4" step="0.05" value={effect.spread} onChange={(event) => onChange((value) => ({ ...value, spread: Number(event.target.value) }))} /><output>{effect.spread.toFixed(2)}</output></label>
-    {effect.preset === "beam" && <label><Label>Beam width (°)</Label><input type="range" min="5" max="120" step="1" value={effect.beamWidth ?? 38} onChange={(event) => onChange((value) => ({ ...value, beamWidth: Number(event.target.value) }))} /><output>{effect.beamWidth ?? 38}°</output></label>}
-    <label><Label>X offset (%)</Label><input type="number" min="-100" max="100" step="1" value={geometry.offsetX} onChange={(event) => setGeometry("offsetX", Number(event.target.value))} /></label>
-    <label><Label>Y offset (%)</Label><input type="number" min="-100" max="100" step="1" value={geometry.offsetY} onChange={(event) => setGeometry("offsetY", Number(event.target.value))} /></label>
-    <label><Label>{effect.preset === "beam" ? "Beam start (%)" : "Inner radius (%)"}</Label><input type="number" min="0" max="199" step="1" value={geometry.innerRadius} onChange={(event) => setGeometry("innerRadius", Number(event.target.value))} /></label>
-    <label><Label>{effect.preset === "beam" ? "Beam length (%)" : "Outer radius (%)"}</Label><input type="number" min="1" max="200" step="1" value={geometry.outerRadius} onChange={(event) => setGeometry("outerRadius", Number(event.target.value))} /></label>
-    <p className="field-hint">100% reaches the target edge. Use close radii and low edge softness for a crisp ring; separate the radii and raise softness for a broad glow.</p>
+    <label title="Choose the native visual shape."><Label tooltip="Choose the native visual shape.">Preset</Label><select value={effect.preset} onChange={(event) => onChange((value) => { const preset = event.target.value as ShaderEffectDefinitionV1["preset"]; return { ...value, preset, geometry: DEFAULT_GEOMETRY[preset] }; })}><option value="glow">Glow</option><option value="beam">Directional beam</option></select></label>
+    <div className="paired-controls wide"><label title="Scene item that receives the effect."><Label tooltip="Scene item that receives the effect.">Target</Label><select value={effect.target.type} onChange={(event) => setTarget(event.target.value as EffectTargetV1["type"])}><option value="detector">Detector</option><option value="parent">Parent</option><option value="carrier">Carrier</option><option value="detected-emitter">Detected emitter</option><option value="specific-item">Specific item</option></select></label><label title="Players who can see this effect."><Label tooltip="Players who can see this effect.">Audience</Label><select value={effect.audience.type} onChange={(event) => setAudience(event.target.value as EffectAudienceV1["type"])}><option value="everyone">Everyone</option><option value="gm">GM only</option><option value="players">Players</option><option value="detector-owner">Detector owner</option><option value="carrier-owner">Carrier owner</option><option value="target-owner">Target owner</option><option value="specific-users">Specific users</option></select></label></div>
+    {effect.target.type === "specific-item" && <label className="wide" title="Exact scene item to target."><Label tooltip="Exact scene item to target.">Specific item</Label><select value={effect.target.itemId} onChange={(event) => onChange((value) => ({ ...value, target: { type: "specific-item", itemId: event.target.value } }))}>{items.map((item) => <option key={item.id} value={item.id}>{item.name || item.id}</option>)}</select></label>}
+    <label title="Effect color."><Label tooltip="Effect color.">Color</Label><input type="color" value={effect.color} onChange={(event) => onChange((value) => ({ ...value, color: event.target.value }))} /></label>
+    <SliderNumber tooltip="Maximum opacity and strength at full detection." label="Maximum intensity" min={0} max={2} step={0.05} decimals={2} value={effect.maxIntensity} onChange={(maxIntensity) => onChange((value) => ({ ...value, maxIntensity }))} />
+    <SliderNumber tooltip="Feathering at the inner and outer edges." label="Edge softness" min={0.05} max={4} step={0.05} decimals={2} value={effect.spread} onChange={(spread) => onChange((value) => ({ ...value, spread }))} />
+    {effect.preset === "beam" && <SliderNumber tooltip="Angular width of the directional beam." label="Beam width" min={5} max={120} step={1} value={effect.beamWidth ?? 38} suffix="°" onChange={(beamWidth) => onChange((value) => ({ ...value, beamWidth }))} />}
+    <div className="paired-controls wide"><SliderNumber tooltip="Move the effect center horizontally as a percentage of target size." label="X offset" min={-100} max={100} step={1} value={geometry.offsetX} suffix="%" onChange={(value) => setGeometry("offsetX", value)} /><SliderNumber tooltip="Move the effect center vertically as a percentage of target size." label="Y offset" min={-100} max={100} step={1} value={geometry.offsetY} suffix="%" onChange={(value) => setGeometry("offsetY", value)} /></div>
+    {effect.preset === "beam" ? <div className="paired-controls wide"><SliderNumber tooltip="Radial distance where the beam begins; 100% is the target edge." label="Beam start" min={0} max={Math.max(0, geometry.outerRadius - 1)} step={1} value={geometry.innerRadius} suffix="%" onChange={(value) => setGeometry("innerRadius", value)} /><SliderNumber tooltip="Radial distance where the beam ends; 100% is the target edge." label="Beam end" min={geometry.innerRadius + 1} max={200} step={1} value={geometry.outerRadius} suffix="%" onChange={(value) => setGeometry("outerRadius", value)} /></div> : <><SliderNumber tooltip="Inner edge of the glow; 100% is the target edge." label="Inner radius" min={0} max={Math.max(0, geometry.outerRadius - 1)} step={1} value={geometry.innerRadius} suffix="%" onChange={(value) => setGeometry("innerRadius", value)} /><SliderNumber tooltip="Outer edge of the glow; 100% is the target edge." label="Outer radius" min={geometry.innerRadius + 1} max={200} step={1} value={geometry.outerRadius} suffix="%" onChange={(value) => setGeometry("outerRadius", value)} /></>}
     <details className="animation-section wide" open={animationOpen} onToggle={(event) => setAnimationOpen(event.currentTarget.open)}><summary>Animation <small>{effect.animation?.mode ?? "none"}</small></summary><div className="animation-grid">
-      <label><Label>Mode</Label><select value={effect.animation?.mode ?? "none"} onChange={(event) => setAnimation({ mode: event.target.value as NonNullable<ShaderEffectDefinitionV1["animation"]>["mode"] })}><option value="none">None</option><option value="pulse">Pulse</option><option value="flicker">Flicker</option><option value="radial-pulse">Radial pulse</option></select></label>
-      {(effect.animation?.mode ?? "none") !== "none" && <><label><Label>Rate</Label><input type="number" min="0" max="10" step="0.1" value={effect.animation?.rate ?? 1} onChange={(event) => setAnimation({ rate: Number(event.target.value) })} /></label><label><Label>Depth</Label><input type="range" min="0" max="1" step="0.05" value={effect.animation?.depth ?? 0.35} onChange={(event) => setAnimation({ depth: Number(event.target.value) })} /><output>{(effect.animation?.depth ?? 0.35).toFixed(2)}</output></label></>}
-      {effect.animation?.mode === "radial-pulse" && <><label><Label>Direction</Label><select value={effect.animation.radialDirection ?? "outward"} onChange={(event) => setAnimation({ radialDirection: event.target.value as "outward" | "inward" })}><option value="outward">Outward</option><option value="inward">Inward</option></select></label><label><Label>Wave width</Label><input type="range" min="0.05" max="1" step="0.05" value={effect.animation.waveWidth ?? 0.22} onChange={(event) => setAnimation({ waveWidth: Number(event.target.value) })} /><output>{(effect.animation.waveWidth ?? 0.22).toFixed(2)}</output></label></>}
+      <label title="Choose how effect intensity changes over time."><Label tooltip="Choose how effect intensity changes over time.">Mode</Label><select value={effect.animation?.mode ?? "none"} onChange={(event) => setAnimation({ mode: event.target.value as NonNullable<ShaderEffectDefinitionV1["animation"]>["mode"] })}><option value="none">None</option><option value="pulse">Pulse</option><option value="flicker">Flicker</option><option value="radial-pulse">Radial pulse</option></select></label>
+      {(effect.animation?.mode ?? "none") !== "none" && <><SliderNumber tooltip="Animation cycles per second." label="Rate" min={0} max={10} step={0.1} decimals={1} value={effect.animation?.rate ?? 1} onChange={(rate) => setAnimation({ rate })} /><SliderNumber tooltip="Difference between the dim and bright animation phases." label="Depth" min={0} max={1} step={0.05} decimals={2} value={effect.animation?.depth ?? 0.35} onChange={(depth) => setAnimation({ depth })} /></>}
+      {effect.animation?.mode === "radial-pulse" && <><label title="Direction the radial pulse travels."><Label tooltip="Direction the radial pulse travels.">Direction</Label><select value={effect.animation.radialDirection ?? "outward"} onChange={(event) => setAnimation({ radialDirection: event.target.value as "outward" | "inward" })}><option value="outward">Outward</option><option value="inward">Inward</option></select></label><SliderNumber tooltip="Thickness of the traveling radial band." label="Wave width" min={0.05} max={1} step={0.05} decimals={2} value={effect.animation.waveWidth ?? 0.22} onChange={(waveWidth) => setAnimation({ waveWidth })} /></>}
     </div></details>
   </div>{effect.audience.type === "specific-users" && <fieldset><legend>Specific users</legend>{party.length ? party.map((player) => <label className="user-check" key={player.id}><input type="checkbox" checked={effect.audience.type === "specific-users" && effect.audience.userIds.includes(player.id)} onChange={(event) => onChange((value) => { const audience = value.audience.type === "specific-users" ? value.audience : { type: "specific-users" as const, userIds: [] }; return { ...value, audience: { ...audience, userIds: event.target.checked ? [...audience.userIds, player.id] : audience.userIds.filter((id) => id !== player.id) } }; })} />{player.name} <small>{player.role}</small></label>) : <p className="muted">No connected users. Stored offline IDs are retained.</p>}</fieldset>}<button className="danger text-button" onClick={onDelete}>Delete effect</button></div>;
 }

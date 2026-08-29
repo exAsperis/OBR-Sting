@@ -8,7 +8,7 @@ import { getSceneDistance, toSceneUnits } from "./proximity/distance";
 import { buildAttachmentGraph, isSameAttachmentFamily, resolveCarrier, resolveParent } from "./scene/attachments";
 import { isAudienceMember, resolveEffectTarget } from "./scene/resolve";
 import { normalizeSignal, normalizeSignals } from "./signals/normalize";
-import { DEFAULT_SCENE_SETTINGS, parseSceneSettings } from "./settings";
+import { DEFAULT_ROOM_SETTINGS, parseRoomSettings } from "./settings";
 import type { DetectionRuleV1, EffectAudienceV1, EffectDefinitionV1 } from "./types";
 
 const item = (id: string, attachedTo?: string, owner = `${id}-owner`): Item => ({
@@ -181,11 +181,11 @@ describe("runtime effect identity", () => {
   });
 });
 
-describe("scene settings", () => {
+describe("room settings", () => {
   it("parses supported distance methods and defaults invalid settings", () => {
-    expect(parseSceneSettings({ version: 1, distanceMethod: "euclidean" })).toEqual({ version: 1, distanceMethod: "euclidean" });
-    expect(parseSceneSettings({ version: 1, distanceMethod: "taxicab" })).toEqual(DEFAULT_SCENE_SETTINGS);
-    expect(parseSceneSettings(undefined)).toEqual(DEFAULT_SCENE_SETTINGS);
+    expect(parseRoomSettings({ version: 1, distanceMethod: "euclidean" })).toEqual({ version: 1, distanceMethod: "euclidean" });
+    expect(parseRoomSettings({ version: 1, distanceMethod: "taxicab" })).toEqual(DEFAULT_ROOM_SETTINGS);
+    expect(parseRoomSettings(undefined)).toEqual(DEFAULT_ROOM_SETTINGS);
   });
 });
 

@@ -48,9 +48,18 @@ fieldset { margin: 10px 0 0; border: 1px solid var(--border); border-radius: 10p
 code { color: var(--obr-muted); font-size: 10px; word-break: break-all; }
 .app-shell { max-width: 100%; padding: 12px; overflow-x: hidden; }
 .app-header, .section-title, .card-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.app-header { position: sticky; top: 0; z-index: 2; padding: 8px 2px 12px; background: color-mix(in srgb, var(--obr-bg) 88%, transparent); backdrop-filter: blur(12px); }
-.item-heading { padding: 12px 4px 2px; }
-.item-heading code { display: block; margin-top: 3px; }
+.app-header { padding: 5px 2px 10px; }
+.brand, .header-actions { display: flex; align-items: center; gap: 8px; }
+.brand img { width: 30px; height: 30px; object-fit: contain; }
+.header-actions { margin-left: auto; }
+.icon-button { display: inline-grid; width: 32px; height: 32px; padding: 0; place-items: center; border: 1px solid var(--border); border-radius: 50%; background: transparent; color: var(--obr-muted); text-decoration: none; font-size: 16px; font-weight: 800; }
+.icon-button:hover, .icon-button.active { border-color: color-mix(in srgb, var(--obr-primary) 55%, transparent); background: var(--soft); color: var(--obr-primary); }
+.icon-button svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.item-heading { display: flex; min-width: 0; padding: 12px 4px 2px; align-items: center; gap: 10px; }
+.item-heading > div:last-child { min-width: 0; }
+.item-heading code { display: block; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.selected-thumbnail { display: grid; flex: 0 0 46px; width: 46px; height: 46px; place-items: center; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--soft); color: var(--obr-muted); font-size: 22px; }
+.selected-thumbnail img { width: 100%; height: 100%; object-fit: contain; }
 .hero-card, .content-card {
   padding: 15px; border: 1px solid var(--border); border-radius: 18px;
   background: var(--surface); box-shadow: var(--shadow); backdrop-filter: blur(10px);
@@ -67,7 +76,7 @@ code { color: var(--obr-muted); font-size: 10px; word-break: break-all; }
 .extensions-title { display: block; font-size: 16px; }
 .extensions-section summary small { display: block; margin-top: 2px; color: var(--obr-muted); font-size: 10px; font-weight: 600; }
 .extension-list { padding: 0 15px 15px; border-top: 1px solid var(--border); }
-.settings-content { display: grid; gap: 8px; padding: 14px 15px 15px; border-top: 1px solid var(--border); }
+.settings-content { display: grid; gap: 8px; margin-top: 12px; }
 .settings-subsection { margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--border); }
 .extension-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 13px; }
 .extension-row > div { min-width: 0; }
@@ -92,6 +101,13 @@ code { color: var(--obr-muted); font-size: 10px; word-break: break-all; }
 .form-grid label { min-width: 0; }
 .form-grid .wide { grid-column: 1 / -1; }
 .field-label { display: block; margin-bottom: 4px; color: var(--obr-muted); font-size: 10px; font-weight: 750; text-transform: uppercase; }
+.numeric-control { min-width: 0; }
+.numeric-heading { display: flex; min-height: 28px; align-items: center; justify-content: space-between; gap: 6px; }
+.numeric-heading .field-label { margin: 0; }
+.numeric-value { max-width: 55%; padding: 2px 6px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--obr-muted); font-size: 11px; font-weight: 750; }
+.numeric-value:hover { border-color: var(--border); background: var(--surface); color: var(--obr-text); }
+.numeric-direct-input { width: 76px; min-height: 28px; padding: 3px 6px; text-align: right; }
+.paired-controls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 9px; }
 .animation-section { padding: 8px 0 0; border-top: 1px solid var(--border); }
 .animation-section summary { display: flex; justify-content: space-between; cursor: pointer; color: var(--obr-text); font-weight: 750; }
 .animation-section summary small { color: var(--obr-muted); font-weight: 600; text-transform: capitalize; }
