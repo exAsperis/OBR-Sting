@@ -28,7 +28,8 @@ function effectScale(effect: ShaderEffectDefinitionV1): number {
   const feather = effect.preset === "beam"
     ? Math.min(0.12, Math.max(0.008, 0.025 * effect.spread))
     : Math.min(0.45, Math.max(0.005, 0.1 * effect.spread));
-  return Math.max(1, geometry.outerRadius / 100 + feather);
+  const axisScale = Math.max(geometry.width, geometry.height) / 100;
+  return Math.max(1, geometry.outerRadius / 100 * axisScale + feather);
 }
 
 function layout(bounds: BoundingBox, scale: number) {
@@ -56,9 +57,16 @@ function uniforms(effect: ShaderEffectDefinitionV1, strength: number, scale: num
     { name: "centerOffset", value: { x: geometry.offsetX / 100 / scale, y: geometry.offsetY / 100 / scale } },
     { name: "innerRadius", value: geometry.innerRadius / 100 / scale },
     { name: "outerRadius", value: geometry.outerRadius / 100 / scale },
+    { name: "effectSize", value: { x: geometry.width / 100, y: geometry.height / 100 } },
+    { name: "effectRotation", value: geometry.rotation * Math.PI / 180 },
   ];
   if (effect.preset === "beam") {
-    values.push({ name: "beamDirection", value: direction });
+    const localDirection = {
+      x: direction.x / (geometry.width / 100),
+      y: direction.y / (geometry.height / 100),
+    };
+    const localDirectionLength = Math.hypot(localDirection.x, localDirection.y) || 1;
+    values.push({ name: "beamDirection", value: { x: localDirection.x / localDirectionLength, y: localDirection.y / localDirectionLength } });
     values.push({ name: "beamWidth", value: effect.beamWidth ?? 38 });
   }
   return values;

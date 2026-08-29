@@ -38,6 +38,8 @@ uniform float spread;
 uniform vec2 centerOffset;
 uniform float innerRadius;
 uniform float outerRadius;
+uniform vec2 effectSize;
+uniform float effectRotation;
 ${extraUniforms}
 
 float animationFactor(float distanceFromCenter) {
@@ -46,6 +48,12 @@ float animationFactor(float distanceFromCenter) {
 
 half4 main(float2 coord) {
   vec2 centered = (coord / size - vec2(0.5)) * 2.0 - centerOffset;
+  float rotationCos = cos(effectRotation);
+  float rotationSin = sin(effectRotation);
+  centered = vec2(
+    rotationCos * centered.x + rotationSin * centered.y,
+    -rotationSin * centered.x + rotationCos * centered.y
+  ) / max(effectSize, vec2(0.05));
   float distanceFromCenter = length(centered);
   ${mask}
   float alpha = clamp(strength * animationFactor(distanceFromCenter) * mask * ${opacity.toFixed(2)}, 0.0, 1.0);

@@ -101,7 +101,12 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     if (!finite(offsetX) || !finite(offsetY) || !finite(innerRadius) || !finite(outerRadius)) return null;
     if (offsetX < -100 || offsetX > 100 || offsetY < -100 || offsetY > 100) return null;
     if (innerRadius < 0 || outerRadius <= innerRadius || outerRadius > 200) return null;
-    geometry = { offsetX, offsetY, innerRadius, outerRadius };
+    const width = value.geometry.width ?? 100;
+    const height = value.geometry.height ?? 100;
+    const rotation = value.geometry.rotation ?? 0;
+    if (!finite(width) || !finite(height) || !finite(rotation)) return null;
+    if (width < 5 || width > 400 || height < 5 || height > 400 || rotation < -180 || rotation > 180) return null;
+    geometry = { offsetX, offsetY, innerRadius, outerRadius, width, height, rotation };
   }
   let animation: ShaderEffectDefinitionV1["animation"];
   if (value.animation !== undefined) {

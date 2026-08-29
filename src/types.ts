@@ -41,6 +41,11 @@ export interface ShaderEffectDefinitionV1 {
     /** Percentage of the normalized target radius. */
     innerRadius: number;
     outerRadius: number;
+    /** Percentage scale of the effect's local horizontal/vertical axes. */
+    width?: number;
+    height?: number;
+    /** Clockwise rotation in degrees; beams treat this as an aim offset. */
+    rotation?: number;
   };
   /** Angular width in degrees for directional beam effects. */
   beamWidth?: number;
