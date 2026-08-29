@@ -6,7 +6,6 @@ export const DEFAULT_GEOMETRY: Record<ShaderPreset, ShaderGeometry> = {
   glow: { offsetX: 0, offsetY: 0, innerRadius: 34, outerRadius: 104 },
   pulse: { offsetX: 0, offsetY: 0, innerRadius: 34, outerRadius: 104 },
   flicker: { offsetX: 0, offsetY: 0, innerRadius: 34, outerRadius: 104 },
-  outline: { offsetX: 0, offsetY: 0, innerRadius: 78, outerRadius: 90 },
   beam: { offsetX: 0, offsetY: 0, innerRadius: 0, outerRadius: 200 },
 };
 

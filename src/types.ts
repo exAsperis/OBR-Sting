@@ -1,7 +1,7 @@
 import type { Item, Player } from "@owlbear-rodeo/sdk";
 
 export type Falloff = "binary" | "linear" | "smoothstep";
-export type ShaderPreset = "glow" | "pulse" | "flicker" | "outline" | "beam";
+export type ShaderPreset = "glow" | "pulse" | "flicker" | "beam";
 export type EffectLifecycle = "continuous" | "enter" | "exit" | "nearest-change";
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };

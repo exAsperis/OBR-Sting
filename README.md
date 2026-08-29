@@ -55,7 +55,7 @@ pnpm run build
 ## Current SDK notes
 
 - Shader effects use experimental local-only Owlbear `ATTACHMENT` Effect items.
-- Attachment effects fill the target's bounds. The built-in glow and outline presets therefore render transparent color overlays within those bounds; renderer behavior on transparent or hidden artwork should be checked in the target Owlbear release.
+- Attachment effects fill the target's bounds. The built-in glow preset therefore renders a transparent color overlay within those bounds; renderer behavior on transparent or hidden artwork should be checked in the target Owlbear release.
 - Item ownership is encapsulated through `createdUserId`, which is the ownership identity exposed on SDK items. GM **Assign Owner** behavior should be verified in multiplayer testing.
 - Hidden emitters are not filtered. A player can only evaluate hidden items that Owlbear exposes to that player's client; the extension does not bypass Owlbear visibility boundaries.
 - Range comparisons use `OBR.scene.grid.getDistance()`, so the current grid measurement and scale remain authoritative.

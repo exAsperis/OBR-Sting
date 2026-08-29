@@ -88,8 +88,9 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     };
   }
   if (value.type !== "shader") return null;
-  const presets: ShaderPreset[] = ["glow", "pulse", "flicker", "outline", "beam"];
-  if (!presets.includes(value.preset as ShaderPreset) || !color(value.color)) return null;
+  const legacyOutline = value.preset === "outline";
+  const presets: ShaderPreset[] = ["glow", "pulse", "flicker", "beam"];
+  if ((!legacyOutline && !presets.includes(value.preset as ShaderPreset)) || !color(value.color)) return null;
   if (!finite(value.maxIntensity) || value.maxIntensity < 0 || value.maxIntensity > 2) return null;
   if (!finite(value.spread) || value.spread <= 0 || value.spread > 4) return null;
   let geometry: ShaderEffectDefinitionV1["geometry"];
@@ -118,10 +119,12 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     enabled: value.enabled,
     target,
     audience,
-    preset: value.preset as ShaderPreset,
+    preset: legacyOutline ? "glow" : value.preset as ShaderPreset,
     color: value.color.toLowerCase(),
-    maxIntensity: value.maxIntensity,
-    spread: value.spread,
+    // Preserve the old outline's approximate opacity and feather width while
+    // migrating it to the unified glow shader.
+    maxIntensity: legacyOutline ? Math.min(2, value.maxIntensity * (0.95 / 0.62)) : value.maxIntensity,
+    spread: legacyOutline ? Math.max(0.05, value.spread * 0.12) : value.spread,
     ...(geometry ? { geometry } : {}),
     ...(beamWidth !== undefined ? { beamWidth } : {}),
     ...(animation ? { animation } : {}),

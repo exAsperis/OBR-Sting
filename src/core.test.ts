@@ -72,6 +72,12 @@ describe("versioned detector parsing", () => {
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [rule("a", [invalid])] })).toBeNull();
   });
 
+  it("migrates legacy outlines to crisp glows", () => {
+    const parsed = parseEffectDefinition({ ...effect(), preset: "outline", maxIntensity: 1, spread: 1.25 });
+    expect(parsed).toMatchObject({ preset: "glow", spread: 0.15 });
+    expect(parsed?.type === "shader" ? parsed.maxIntensity : 0).toBeCloseTo(0.95 / 0.62);
+  });
+
   it("parses Auras and Emanations preset triggers", () => {
     expect(parseEffectDefinition({ id: "ae", type: "emanation", enabled: true, target: { type: "detector" }, audience: { type: "everyone" }, presetName: "Spirits", removeAllOnDeactivate: true })).toMatchObject({
       type: "integration",

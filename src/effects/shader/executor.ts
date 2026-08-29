@@ -25,9 +25,9 @@ function colorVector(hex: string) {
 
 function effectScale(effect: ShaderEffectDefinitionV1): number {
   const geometry = resolveShaderGeometry(effect);
-  const feather = effect.preset === "outline"
-    ? Math.min(0.07, Math.max(0.005, 0.012 * effect.spread))
-    : Math.min(0.45, Math.max(0.02, 0.1 * effect.spread));
+  const feather = effect.preset === "beam"
+    ? Math.min(0.12, Math.max(0.008, 0.025 * effect.spread))
+    : Math.min(0.45, Math.max(0.005, 0.1 * effect.spread));
   return Math.max(1, geometry.outerRadius / 100 + feather);
 }
 

@@ -8,11 +8,11 @@ describe("shader presets", () => {
     }
   });
 
-  it("keeps outline distinct from the soft glow family", () => {
-    expect(SHADERS.outline).toContain("innerEdge");
+  it("lets glow range from a crisp ring to a soft aura", () => {
     expect(SHADERS.glow).toContain("innerFade");
     expect(SHADERS.glow).toContain("centerOffset");
-    expect(SHADERS.outline).not.toBe(SHADERS.glow);
+    expect(SHADERS.glow).toContain("0.005");
+    expect(SHADERS.glow).toContain("0.45");
   });
 
   it("aims the beam with direction and angular width uniforms", () => {

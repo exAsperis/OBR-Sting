@@ -5,17 +5,10 @@ const pulseAnimation = "return mix(1.0 - depth, 1.0, 0.5 + 0.5 * sin(time * rate
 const flickerAnimation = "float noise = fract(sin(floor(time * max(rate, 0.01) * 12.0) * 43758.5453)); return mix(1.0 - depth, 1.0, noise);";
 
 const softAura = `
-  float feather = clamp(0.10 * spread, 0.02, 0.45);
+  float feather = clamp(0.10 * spread, 0.005, 0.45);
   float innerFade = smoothstep(max(0.0, innerRadius - feather), innerRadius, distanceFromCenter);
   float outerFade = 1.0 - smoothstep(max(innerRadius, outerRadius - feather), outerRadius, distanceFromCenter);
   float mask = innerFade * outerFade;
-`;
-
-const crispRing = `
-  float feather = clamp(0.012 * spread, 0.005, 0.07);
-  float innerEdge = smoothstep(max(0.0, innerRadius - feather), innerRadius + feather, distanceFromCenter);
-  float outerEdge = 1.0 - smoothstep(max(innerRadius, outerRadius - feather), outerRadius + feather, distanceFromCenter);
-  float mask = innerEdge * outerEdge;
 `;
 
 function buildShader(mask: string, animation: string, opacity: number, extraUniforms = ""): string {
@@ -48,7 +41,6 @@ half4 main(float2 coord) {
 const glow = buildShader(softAura, staticAnimation, 0.62);
 const pulse = buildShader(softAura, pulseAnimation, 0.72);
 const flicker = buildShader(softAura, flickerAnimation, 0.72);
-const outline = buildShader(crispRing, staticAnimation, 0.95);
 const beamMask = `
   float feather = clamp(0.025 * spread, 0.008, 0.12);
   float radialMask = smoothstep(innerRadius, innerRadius + feather, distanceFromCenter)
@@ -61,4 +53,4 @@ const beamMask = `
 `;
 const beam = buildShader(beamMask, staticAnimation, 0.82, "uniform vec2 beamDirection;\nuniform float beamWidth;");
 
-export const SHADERS: Record<ShaderPreset, string> = { glow, pulse, flicker, outline, beam };
+export const SHADERS: Record<ShaderPreset, string> = { glow, pulse, flicker, beam };
