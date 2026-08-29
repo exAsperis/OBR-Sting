@@ -5,6 +5,7 @@ import { isSameAttachmentFamily } from "../scene/attachments";
 import type { AttachmentGraph, DetectionRuleV1, RuleEvaluation, RuleEvaluationSet } from "../types";
 import { getSceneDistance } from "./distance";
 import { calculateStrength } from "./strength";
+import type { DistanceMethod } from "../settings";
 
 export function indexEmittersBySignal(items: Item[]): Map<string, Item[]> {
   const index = new Map<string, Item[]>();
@@ -28,11 +29,13 @@ export async function evaluateRule(
   signalIndex: Map<string, Item[]>,
   graph: AttachmentGraph,
   scaleMultiplier: number,
+  dpi: number,
+  distanceMethod: DistanceMethod,
 ): Promise<RuleEvaluationSet> {
   const matches = (signalIndex.get(rule.signal) ?? []).filter((item) => !isSameAttachmentFamily(detector, item, graph));
   const candidates: RuleEvaluation[] = [];
   for (const emitter of matches) {
-    const distance = await getSceneDistance(detector.position, emitter.position, scaleMultiplier);
+    const distance = await getSceneDistance(detector.position, emitter.position, scaleMultiplier, dpi, distanceMethod);
     candidates.push({
       detector,
       rule,

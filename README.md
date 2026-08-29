@@ -41,6 +41,10 @@ Only the GM can configure items. Select one scene item and open **Sting…** fro
 4. Choose each effect's target, audience, shader preset, color, intensity, animation, center offset, and inner/outer radius.
 5. Changes save automatically to item metadata after a short validation delay.
 
+Open **Settings** without selecting an item to choose whether Sting measures distance
+using the scene's grid rules or straight-line Euclidean geometry. Settings also contains
+the optional extension integrations.
+
 The background page evaluates rules on every client even while the editor is closed. Derived proximity state and Effect item IDs are never written to the shared scene.
 
 ## Verification

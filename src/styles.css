@@ -67,6 +67,8 @@ code { color: var(--obr-muted); font-size: 10px; word-break: break-all; }
 .extensions-title { display: block; font-size: 16px; }
 .extensions-section summary small { display: block; margin-top: 2px; color: var(--obr-muted); font-size: 10px; font-weight: 600; }
 .extension-list { padding: 0 15px 15px; border-top: 1px solid var(--border); }
+.settings-content { display: grid; gap: 8px; padding: 14px 15px 15px; border-top: 1px solid var(--border); }
+.settings-subsection { margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--border); }
 .extension-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 13px; }
 .extension-row > div { min-width: 0; }
 .extension-row .muted { margin-top: 3px; }

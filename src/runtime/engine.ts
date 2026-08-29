@@ -11,6 +11,7 @@ import { buildAttachmentGraph } from "../scene/attachments";
 import { isAudienceMember, resolveEffectTarget } from "../scene/resolve";
 import { deriveTransition, toRuleSnapshot } from "./lifecycle";
 import type { DebugRuleState, DesiredEffect, RuleSnapshot } from "../types";
+import type { DistanceMethod } from "../settings";
 
 const DEBUG_STORAGE_KEY = "com.ex-asperis.proximity-signals/debug";
 
@@ -23,6 +24,7 @@ export class ProximityEngine {
   private registry = new EffectExecutorRegistry();
   private ruleStates = new Map<string, RuleSnapshot>();
   private lastActiveEffects = new Map<string, DesiredEffect>();
+  private distanceMethod: DistanceMethod = "grid";
 
   constructor() {
     this.registry.register(new ShaderEffectExecutor());
@@ -32,6 +34,7 @@ export class ProximityEngine {
   setItems(items: Item[]): void { this.latestItems = items; this.schedule(); }
   setPlayer(player: Pick<Player, "id" | "role">): void { this.player = player; this.schedule(); }
   setParty(party: Player[]): void { this.party = party; this.schedule(); }
+  setDistanceMethod(method: DistanceMethod): void { this.distanceMethod = method; this.schedule(); }
 
   schedule(): void {
     this.dirty = true;
@@ -57,7 +60,7 @@ export class ProximityEngine {
     if (!this.player) return;
     const graph = buildAttachmentGraph(this.latestItems);
     const signalIndex = indexEmittersBySignal(this.latestItems);
-    const gridScale = await OBR.scene.grid.getScale();
+    const [gridScale, gridDpi] = await Promise.all([OBR.scene.grid.getScale(), OBR.scene.grid.getDpi()]);
     const dispatchByType = new Map<string, EffectDispatchBatch>();
     const debug: DebugRuleState[] = [];
     const nextRuleKeys = new Set<string>();
@@ -73,7 +76,7 @@ export class ProximityEngine {
       const metadata = parseDetectorMetadata(detector.metadata[DETECTOR_KEY]);
       if (!metadata?.enabled) continue;
       for (const rule of metadata.rules.filter((entry) => entry.enabled)) {
-        const result = await evaluateRule(detector, rule, signalIndex, graph, gridScale.parsed.multiplier);
+        const result = await evaluateRule(detector, rule, signalIndex, graph, gridScale.parsed.multiplier, gridDpi, this.distanceMethod);
         const baseRuleKey = `${detector.id.length}:${detector.id}|${rule.id.length}:${rule.id}`;
         const debugEffects: DebugRuleState["effects"] = [];
         for (const evaluation of result.evaluations) {

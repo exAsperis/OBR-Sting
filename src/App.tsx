@@ -1,6 +1,6 @@
 import OBR, { type Item, type Player } from "@owlbear-rodeo/sdk";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DETECTOR_KEY, EMANATION_INTEGRATION_KEY, EMITTER_KEY, EXTENSION_NAME } from "./constants";
+import { DETECTOR_KEY, EMANATION_INTEGRATION_KEY, EMITTER_KEY, EXTENSION_NAME, SETTINGS_KEY } from "./constants";
 import { parseDetectorMetadata, parseEmitterMetadata } from "./metadata/parse";
 import { DEBUG_STORAGE_KEY } from "./runtime/engine";
 import { DEFAULT_GEOMETRY, resolveShaderGeometry } from "./effects/shader/geometry";
@@ -10,6 +10,7 @@ import { normalizeSignal } from "./signals/normalize";
 import type { DebugRuleState, DetectionRuleV1, DetectorMetadataV1, EffectAudienceV1, EffectDefinitionV1, EffectTargetV1, EmitterMetadataV1, ShaderEffectDefinitionV1 } from "./types";
 import { StatusPanel } from "./components/StatusPanel";
 import { useOwlbear } from "./hooks/useOwlbear";
+import { DEFAULT_SCENE_SETTINGS, parseSceneSettings, type SceneSettingsV1 } from "./settings";
 
 const newEffect = (): ShaderEffectDefinitionV1 => ({ id: crypto.randomUUID(), type: "shader", enabled: true, target: { type: "detector" }, audience: { type: "everyone" }, preset: "glow", color: "#55aaff", maxIntensity: 1, spread: 1.25, animation: { mode: "none", rate: 1, depth: 0.35 } });
 const newRule = (): DetectionRuleV1 => ({ id: crypto.randomUUID(), enabled: true, signal: "signal", aggregation: "nearest", range: { outer: 60, inner: 5 }, falloff: "smoothstep", effects: [newEffect()] });
@@ -33,6 +34,8 @@ export default function App() {
   const [showDebug, setShowDebug] = useState(false);
   const [gridUnit, setGridUnit] = useState("");
   const [emanationEnabled, setEmanationEnabled] = useState(() => localStorage.getItem(EMANATION_INTEGRATION_KEY) === "true");
+  const [sceneSettings, setSceneSettings] = useState<SceneSettingsV1>(DEFAULT_SCENE_SETTINGS);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
   const hydratedItemId = useRef<string | null>(null);
   const lastSavedSignature = useRef("");
   const selected = items.find((item) => item.id === selectedId) ?? null;
@@ -58,6 +61,17 @@ export default function App() {
   }, [connection.sceneReady, connection.status, loadSelection]);
 
   useEffect(() => {
+    if (connection.status !== "ready" || !connection.sceneReady) {
+      setSceneSettings(DEFAULT_SCENE_SETTINGS);
+      return;
+    }
+    const applySettings = (metadata: Awaited<ReturnType<typeof OBR.scene.getMetadata>>) => setSceneSettings(parseSceneSettings(metadata[SETTINGS_KEY]));
+    void OBR.scene.getMetadata().then(applySettings);
+    const stopSettings = OBR.scene.onMetadataChange(applySettings);
+    return stopSettings;
+  }, [connection.sceneReady, connection.status]);
+
+  useEffect(() => {
     if (!selected) return;
     const nextEmitter = parseEmitterMetadata(selected.metadata[EMITTER_KEY]) ?? { version: 1 as const, signals: [] };
     const nextDetector = parseDetectorMetadata(selected.metadata[DETECTOR_KEY]) ?? { version: 1 as const, enabled: true, rules: [] };
@@ -81,6 +95,15 @@ export default function App() {
   const updateRule = (index: number, update: (rule: DetectionRuleV1) => DetectionRuleV1) => setDetector((current) => ({ ...current, rules: current.rules.map((rule, i) => i === index ? update(rule) : rule) }));
   const updateEffect = (ruleIndex: number, effectIndex: number, update: (effect: EffectDefinitionV1) => EffectDefinitionV1) => updateRule(ruleIndex, (rule) => ({ ...rule, effects: rule.effects.map((effect, i) => i === effectIndex ? update(effect) : effect) }));
   const toggleEmanation = (enabled: boolean) => { localStorage.setItem(EMANATION_INTEGRATION_KEY, String(enabled)); setEmanationEnabled(enabled); };
+  const updateDistanceMethod = (distanceMethod: SceneSettingsV1["distanceMethod"]) => {
+    const next: SceneSettingsV1 = { version: 1, distanceMethod };
+    setSceneSettings(next);
+    setSettingsError(null);
+    void OBR.scene.setMetadata({ [SETTINGS_KEY]: next }).catch(() => {
+      setSettingsError("Unable to save scene settings.");
+      void OBR.scene.getMetadata().then((metadata) => setSceneSettings(parseSceneSettings(metadata[SETTINGS_KEY])));
+    });
+  };
   const addSignal = () => { const value = normalizeSignal(signalDraft); if (value && !emitter.signals.includes(value)) setEmitter({ version: 1, signals: [...emitter.signals, value] }); setSignalDraft(""); };
 
   useEffect(() => {
@@ -124,17 +147,17 @@ export default function App() {
     {!connection.sceneReady && <div className="notice">Open a scene to configure proximity signals.</div>}
     {connection.sceneReady && connection.role !== "GM" && <div className="notice">The runtime is active. Only the GM can configure scene items.</div>}
     {connection.sceneReady && connection.role === "GM" && !selected && <div className="notice">Select exactly one scene item to configure it.</div>}
+    {connection.sceneReady && <details className="content-card extensions-section settings-section">
+      <summary><span><strong className="extensions-title">Settings</strong><small>{sceneSettings.distanceMethod === "euclidean" ? "Straight-line distance" : "Scene grid distance"}</small></span></summary>
+      <div className="settings-content">
+        <label><Label>Distance calculation</Label><select value={sceneSettings.distanceMethod} disabled={connection.role !== "GM"} onChange={(event) => updateDistanceMethod(event.target.value as SceneSettingsV1["distanceMethod"])}><option value="grid">Scene grid rules</option><option value="euclidean">Straight-line (Euclidean)</option></select></label>
+        <p className="muted">Controls signal range, falloff, and which signal is considered closest.</p>
+        <div className="settings-subsection"><strong>Extensions</strong><div className="extension-row"><div><strong>Auras &amp; Emanations</strong><p className="muted">Trigger named presets through the installed extension.</p></div><label className="toggle"><input type="checkbox" checked={emanationEnabled} disabled={connection.role !== "GM"} onChange={(event) => toggleEmanation(event.target.checked)} /> Enabled</label></div></div>
+        {settingsError && <div className="validation-error" role="alert">{settingsError}</div>}
+      </div>
+    </details>}
     {showDebug ? <DebugView rules={debug} /> : selected && connection.role === "GM" ? <>
       <section className="item-heading"><span className="eyebrow">Selected item</span><h2>{selected.name || "Unnamed item"}</h2><code>{selected.id}</code></section>
-      <details className="content-card extensions-section">
-        <summary><span><strong className="extensions-title">Extensions</strong><small>{emanationEnabled ? "1 enabled" : "None enabled"}</small></span></summary>
-        <div className="extension-list">
-          <div className="extension-row">
-            <div><strong>Auras &amp; Emanations</strong><p className="muted">Trigger named presets through the installed extension.</p></div>
-            <label className="toggle"><input type="checkbox" checked={emanationEnabled} onChange={(event) => toggleEmanation(event.target.checked)} /> Enabled</label>
-          </div>
-        </div>
-      </details>
       <section className="content-card"><h2>Emitter</h2><p className="muted">Advertise arbitrary facts; ranges and responses belong on detectors.</p><div className="chips">{emitter.signals.map((signal) => <button key={signal} className="chip" onClick={() => setEmitter({ version: 1, signals: emitter.signals.filter((value) => value !== signal) })}>{signal}<span>×</span></button>)}</div><div className="input-row"><input list="scene-signals" value={signalDraft} placeholder="Add signal…" onChange={(event) => setSignalDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addSignal(); } }} /><button onClick={addSignal}>Add</button></div><datalist id="scene-signals">{sceneSignals.map((signal) => <option key={signal} value={signal} />)}</datalist></section>
       <section className="content-card"><div className="section-title"><div><h2>Detector</h2><p className="muted">Each rule produces one strength shared by all of its effects.</p></div><label className="toggle"><input type="checkbox" checked={detector.enabled} onChange={(event) => setDetector({ ...detector, enabled: event.target.checked })} /> Enabled</label></div>{detector.rules.map((rule, ruleIndex) => <RuleEditor key={rule.id} rule={rule} index={ruleIndex} unit={gridUnit} items={items} party={party} emanationEnabled={emanationEnabled} onChange={(update) => updateRule(ruleIndex, update)} onEffect={(effectIndex, update) => updateEffect(ruleIndex, effectIndex, update)} onDelete={() => setDetector({ ...detector, rules: detector.rules.filter((_, i) => i !== ruleIndex) })} />)}<button className="wide-button" onClick={() => setDetector({ ...detector, rules: [...detector.rules, newRule()] })}>+ Add detection rule</button></section>
       {saveError && <div className="validation-error" role="alert">{saveError}</div>}<div className="autosave-status" role="status">{autosaveStatus === "saving" ? "Saving…" : autosaveStatus === "error" ? "Not saved" : "Saved automatically"}</div>

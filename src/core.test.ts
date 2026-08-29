@@ -4,10 +4,11 @@ import { buildRuntimeEffectKey } from "./effects/runtimeKey";
 import { parseDetectorMetadata, parseEffectDefinition, parseEmitterMetadata } from "./metadata/parse";
 import { calculateStrength } from "./proximity/strength";
 import { selectRuleEvaluations } from "./proximity/evaluate";
-import { toSceneUnits } from "./proximity/distance";
+import { getSceneDistance, toSceneUnits } from "./proximity/distance";
 import { buildAttachmentGraph, isSameAttachmentFamily, resolveCarrier, resolveParent } from "./scene/attachments";
 import { isAudienceMember, resolveEffectTarget } from "./scene/resolve";
 import { normalizeSignal, normalizeSignals } from "./signals/normalize";
+import { DEFAULT_SCENE_SETTINGS, parseSceneSettings } from "./settings";
 import type { DetectionRuleV1, EffectAudienceV1, EffectDefinitionV1 } from "./types";
 
 const item = (id: string, attachedTo?: string, owner = `${id}-owner`): Item => ({
@@ -65,6 +66,9 @@ describe("versioned detector parsing", () => {
   it("rejects invalid ranges and duplicate stable IDs", () => {
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("a"), range: { inner: 10, outer: 10 } }] })).toBeNull();
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [rule("a"), rule("a")] })).toBeNull();
+  });
+  it("calculates straight-line distance from scene pixels and grid DPI", async () => {
+    await expect(getSceneDistance({ x: 0, y: 0 }, { x: 300, y: 400 }, 5, 100, "euclidean")).resolves.toBe(25);
   });
   it("accepts closest and all aggregation modes", () => {
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [rule("closest")] })?.rules[0].aggregation).toBe("nearest");
@@ -174,6 +178,14 @@ describe("runtime effect identity", () => {
   it("separates all-mode effects by detected emitter", () => {
     expect(buildRuntimeEffectKey("d", "r", "e", "same-target", "shader", "", "", "a"))
       .not.toBe(buildRuntimeEffectKey("d", "r", "e", "same-target", "shader", "", "", "b"));
+  });
+});
+
+describe("scene settings", () => {
+  it("parses supported distance methods and defaults invalid settings", () => {
+    expect(parseSceneSettings({ version: 1, distanceMethod: "euclidean" })).toEqual({ version: 1, distanceMethod: "euclidean" });
+    expect(parseSceneSettings({ version: 1, distanceMethod: "taxicab" })).toEqual(DEFAULT_SCENE_SETTINGS);
+    expect(parseSceneSettings(undefined)).toEqual(DEFAULT_SCENE_SETTINGS);
   });
 });
 
