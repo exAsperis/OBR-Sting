@@ -43,11 +43,13 @@ function layout(bounds: BoundingBox, scale: number) {
 
 function uniforms(effect: ShaderEffectDefinitionV1, strength: number, scale: number, direction: { x: number; y: number }) {
   const geometry = resolveShaderGeometry(effect);
+  const animationModes = { none: 0, pulse: 1, flicker: 2 } as const;
   const values = [
     { name: "signalColor", value: colorVector(effect.color) },
     { name: "strength", value: strength * effect.maxIntensity },
     { name: "rate", value: effect.animation?.rate ?? 1 },
     { name: "depth", value: effect.animation?.depth ?? 0 },
+    { name: "animationMode", value: animationModes[effect.animation?.mode ?? "none"] },
     { name: "spread", value: effect.spread },
     { name: "centerOffset", value: { x: geometry.offsetX / 100 / scale, y: geometry.offsetY / 100 / scale } },
     { name: "innerRadius", value: geometry.innerRadius / 100 / scale },

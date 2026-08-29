@@ -1,8 +1,11 @@
 import type { ShaderPreset } from "../../types";
 
-const staticAnimation = "return 1.0;";
-const pulseAnimation = "return mix(1.0 - depth, 1.0, 0.5 + 0.5 * sin(time * rate * 6.283185));";
-const flickerAnimation = "float noise = fract(sin(floor(time * max(rate, 0.01) * 12.0) * 43758.5453)); return mix(1.0 - depth, 1.0, noise);";
+const configurableAnimation = `
+  if (animationMode < 0.5) return 1.0;
+  if (animationMode < 1.5) return mix(1.0 - depth, 1.0, 0.5 + 0.5 * sin(time * rate * 6.283185));
+  float noise = fract(sin(floor(time * max(rate, 0.01) * 12.0) * 43758.5453));
+  return mix(1.0 - depth, 1.0, noise);
+`;
 
 const softAura = `
   float feather = clamp(0.10 * spread, 0.005, 0.45);
@@ -19,6 +22,7 @@ uniform vec3 signalColor;
 uniform float strength;
 uniform float rate;
 uniform float depth;
+uniform float animationMode;
 uniform float spread;
 uniform vec2 centerOffset;
 uniform float innerRadius;
@@ -38,9 +42,7 @@ half4 main(float2 coord) {
 }`;
 }
 
-const glow = buildShader(softAura, staticAnimation, 0.62);
-const pulse = buildShader(softAura, pulseAnimation, 0.72);
-const flicker = buildShader(softAura, flickerAnimation, 0.72);
+const glow = buildShader(softAura, configurableAnimation, 0.62);
 const beamMask = `
   float feather = clamp(0.025 * spread, 0.008, 0.12);
   float radialMask = smoothstep(innerRadius, innerRadius + feather, distanceFromCenter)
@@ -51,6 +53,6 @@ const beamMask = `
   float coneMask = 1.0 - smoothstep(max(0.0, halfWidth - feather), halfWidth, angularDistance);
   float mask = radialMask * forward * coneMask;
 `;
-const beam = buildShader(beamMask, staticAnimation, 0.82, "uniform vec2 beamDirection;\nuniform float beamWidth;");
+const beam = buildShader(beamMask, configurableAnimation, 0.82, "uniform vec2 beamDirection;\nuniform float beamWidth;");
 
-export const SHADERS: Record<ShaderPreset, string> = { glow, pulse, flicker, beam };
+export const SHADERS: Record<ShaderPreset, string> = { glow, beam };

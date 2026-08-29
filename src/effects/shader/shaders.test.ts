@@ -15,6 +15,14 @@ describe("shader presets", () => {
     expect(SHADERS.glow).toContain("0.45");
   });
 
+  it("supports optional pulse and flicker animation on every shader preset", () => {
+    for (const shader of Object.values(SHADERS)) {
+      expect(shader).toContain("animationMode");
+      expect(shader).toContain("sin(time * rate");
+      expect(shader).toContain("float noise");
+    }
+  });
+
   it("aims the beam with direction and angular width uniforms", () => {
     expect(SHADERS.beam).toContain("beamDirection");
     expect(SHADERS.beam).toContain("beamWidth");

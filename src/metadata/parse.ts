@@ -8,6 +8,7 @@ import type {
   EmitterMetadataV1,
   IntegrationEffectDefinitionV1,
   JsonObject,
+  ShaderAnimationMode,
   ShaderEffectDefinitionV1,
   ShaderPreset,
 } from "../types";
@@ -88,9 +89,9 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     };
   }
   if (value.type !== "shader") return null;
-  const legacyOutline = value.preset === "outline";
-  const presets: ShaderPreset[] = ["glow", "pulse", "flicker", "beam"];
-  if ((!legacyOutline && !presets.includes(value.preset as ShaderPreset)) || !color(value.color)) return null;
+  const legacyPreset = ["outline", "pulse", "flicker"].includes(String(value.preset)) ? String(value.preset) : null;
+  const presets: ShaderPreset[] = ["glow", "beam"];
+  if ((!legacyPreset && !presets.includes(value.preset as ShaderPreset)) || !color(value.color)) return null;
   if (!finite(value.maxIntensity) || value.maxIntensity < 0 || value.maxIntensity > 2) return null;
   if (!finite(value.spread) || value.spread <= 0 || value.spread > 4) return null;
   let geometry: ShaderEffectDefinitionV1["geometry"];
@@ -102,11 +103,16 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     if (innerRadius < 0 || outerRadius <= innerRadius || outerRadius > 200) return null;
     geometry = { offsetX, offsetY, innerRadius, outerRadius };
   }
-  let animation: { rate: number; depth: number } | undefined;
+  let animation: ShaderEffectDefinitionV1["animation"];
   if (value.animation !== undefined) {
     if (!record(value.animation) || !finite(value.animation.rate) || !finite(value.animation.depth)) return null;
     if (value.animation.rate < 0 || value.animation.rate > 10 || value.animation.depth < 0 || value.animation.depth > 1) return null;
-    animation = { rate: value.animation.rate, depth: value.animation.depth };
+    const inferredMode = legacyPreset === "pulse" || legacyPreset === "flicker" ? legacyPreset : "none";
+    const modes: ShaderAnimationMode[] = ["none", "pulse", "flicker"];
+    if (value.animation.mode !== undefined && !modes.includes(value.animation.mode as ShaderAnimationMode)) return null;
+    animation = { mode: value.animation.mode as ShaderAnimationMode ?? inferredMode, rate: value.animation.rate, depth: value.animation.depth };
+  } else if (legacyPreset === "pulse" || legacyPreset === "flicker") {
+    animation = { mode: legacyPreset, rate: 1, depth: 0.35 };
   }
   let beamWidth: number | undefined;
   if (value.beamWidth !== undefined) {
@@ -119,12 +125,16 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     enabled: value.enabled,
     target,
     audience,
-    preset: legacyOutline ? "glow" : value.preset as ShaderPreset,
+    preset: legacyPreset ? "glow" : value.preset as ShaderPreset,
     color: value.color.toLowerCase(),
     // Preserve the old outline's approximate opacity and feather width while
     // migrating it to the unified glow shader.
-    maxIntensity: legacyOutline ? Math.min(2, value.maxIntensity * (0.95 / 0.62)) : value.maxIntensity,
-    spread: legacyOutline ? Math.max(0.05, value.spread * 0.12) : value.spread,
+    maxIntensity: legacyPreset === "outline"
+      ? Math.min(2, value.maxIntensity * (0.95 / 0.62))
+      : legacyPreset === "pulse" || legacyPreset === "flicker"
+        ? Math.min(2, value.maxIntensity * (0.72 / 0.62))
+        : value.maxIntensity,
+    spread: legacyPreset === "outline" ? Math.max(0.05, value.spread * 0.12) : value.spread,
     ...(geometry ? { geometry } : {}),
     ...(beamWidth !== undefined ? { beamWidth } : {}),
     ...(animation ? { animation } : {}),

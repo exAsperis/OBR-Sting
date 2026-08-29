@@ -1,7 +1,8 @@
 import type { Item, Player } from "@owlbear-rodeo/sdk";
 
 export type Falloff = "binary" | "linear" | "smoothstep";
-export type ShaderPreset = "glow" | "pulse" | "flicker" | "beam";
+export type ShaderPreset = "glow" | "beam";
+export type ShaderAnimationMode = "none" | "pulse" | "flicker";
 export type EffectLifecycle = "continuous" | "enter" | "exit" | "nearest-change";
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
@@ -43,7 +44,7 @@ export interface ShaderEffectDefinitionV1 {
   };
   /** Angular width in degrees for directional beam effects. */
   beamWidth?: number;
-  animation?: { rate: number; depth: number };
+  animation?: { mode: ShaderAnimationMode; rate: number; depth: number };
 }
 
 export interface IntegrationEffectDefinitionV1 {

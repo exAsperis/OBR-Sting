@@ -78,6 +78,11 @@ describe("versioned detector parsing", () => {
     expect(parsed?.type === "shader" ? parsed.maxIntensity : 0).toBeCloseTo(0.95 / 0.62);
   });
 
+  it.each(["pulse", "flicker"] as const)("migrates legacy %s presets to glow animations", (preset) => {
+    const parsed = parseEffectDefinition({ ...effect(), preset, animation: { rate: 2, depth: 0.6 } });
+    expect(parsed).toMatchObject({ preset: "glow", animation: { mode: preset, rate: 2, depth: 0.6 } });
+  });
+
   it("parses Auras and Emanations preset triggers", () => {
     expect(parseEffectDefinition({ id: "ae", type: "emanation", enabled: true, target: { type: "detector" }, audience: { type: "everyone" }, presetName: "Spirits", removeAllOnDeactivate: true })).toMatchObject({
       type: "integration",
