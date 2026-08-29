@@ -32,4 +32,11 @@ describe("effects library", () => {
     expect(loadEffectLibrary({ getItem: () => serialized }, "library").entries).toHaveLength(1);
     expect(loadEffectLibrary({ getItem: () => "not json" }, "library").entries).toEqual([]);
   });
+
+  it("round-trips reusable Face effects in the v1 library", () => {
+    const face = { id: "face", type: "mechanical" as const, enabled: true, action: "face" as const, target: { type: "detector" as const }, faceAngle: 45, speed: 180 };
+    const parsed = parseEffectLibrary({ version: 1, entries: [{ id: "turn", name: "Face threat", effect: face }] });
+    expect(parsed.entries[0].effect).toEqual(face);
+    expect(instantiateLibraryEffect(parsed.entries[0])).toMatchObject({ type: "mechanical", action: "face", faceAngle: 45, speed: 180 });
+  });
 });

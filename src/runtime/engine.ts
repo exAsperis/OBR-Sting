@@ -3,6 +3,7 @@ import { DETECTOR_KEY, EXTENSION_ID } from "../constants";
 import { ShaderEffectExecutor } from "../effects/shader/executor";
 import { EffectExecutorRegistry, type EffectDispatchBatch } from "../effects/registry";
 import { IntegrationEffectExecutor } from "../effects/integrations/executor";
+import { MechanicalEffectExecutor } from "../effects/mechanical/executor";
 import { createIntegrationProviderRegistry } from "../effects/integrations/providers";
 import { buildRuntimeEffectKey } from "../effects/runtimeKey";
 import { parseDetectorMetadata } from "../metadata/parse";
@@ -29,6 +30,7 @@ export class ProximityEngine {
   constructor() {
     this.registry.register(new ShaderEffectExecutor());
     this.registry.register(new IntegrationEffectExecutor(createIntegrationProviderRegistry()));
+    this.registry.register(new MechanicalEffectExecutor());
   }
 
   setItems(items: Item[]): void { this.latestItems = items; this.schedule(); }
@@ -91,7 +93,9 @@ export class ProximityEngine {
           this.ruleStates.set(ruleKey, current);
           for (const effect of rule.effects.filter((entry) => entry.enabled)) {
             const target = resolveEffectTarget(effect.target, detector, evaluation.detectedEmitter, graph);
-            const audienceMatch = isAudienceMember(effect.audience, this.player, detector, target, graph);
+            const audienceMatch = effect.type === "mechanical"
+              ? this.player.role === "GM"
+              : isAudienceMember(effect.audience, this.player, detector, target, graph);
             const runtimeKey = target ? buildRuntimeEffectKey(
               detector.id,
               rule.id,
@@ -99,7 +103,7 @@ export class ProximityEngine {
               target.id,
               effect.type,
               effect.type === "integration" ? effect.providerId : "",
-              effect.type === "integration" ? effect.actionId : "",
+              effect.type === "integration" ? effect.actionId : effect.type === "mechanical" ? effect.action : "",
               rule.aggregation === "all" ? emitterId : "",
             ) : null;
             const lifecycle = effect.type === "integration" ? effect.lifecycle : "continuous";
@@ -121,7 +125,7 @@ export class ProximityEngine {
               transition: transition.type,
               targetType: effect.target.type,
               targetName: target?.name ?? null,
-              audience: effect.audience.type,
+              audience: effect.type === "mechanical" ? null : effect.audience.type,
               audienceMatch,
               runtimeKey,
               localItemId: null,
@@ -129,7 +133,7 @@ export class ProximityEngine {
                 providerId: effect.providerId,
                 actionId: effect.actionId,
                 providerStatus: "unchecked",
-              } : {}),
+              } : effect.type === "mechanical" ? { actionId: effect.action } : {}),
             });
           }
         }

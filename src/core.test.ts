@@ -175,6 +175,15 @@ describe("runtime effect identity", () => {
     ];
     expect(new Set(keys).size).toBe(keys.length);
   });
+
+  it("parses Face mechanical effects and rejects invalid configuration", () => {
+    const face = { id: "face", type: "mechanical", enabled: true, action: "face", target: { type: "detector" }, faceAngle: 0, speed: 180 };
+    expect(parseEffectDefinition(face)).toEqual(face);
+    expect(parseEffectDefinition({ ...face, action: "move" })).toBeNull();
+    expect(parseEffectDefinition({ ...face, faceAngle: 360 })).toBeNull();
+    expect(parseEffectDefinition({ ...face, speed: 14 })).toBeNull();
+    expect(parseEffectDefinition({ ...face, speed: 721 })).toBeNull();
+  });
   it("separates all-mode effects by detected emitter", () => {
     expect(buildRuntimeEffectKey("d", "r", "e", "same-target", "shader", "", "", "a"))
       .not.toBe(buildRuntimeEffectKey("d", "r", "e", "same-target", "shader", "", "", "b"));

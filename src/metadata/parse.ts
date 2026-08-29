@@ -8,6 +8,7 @@ import type {
   EmitterMetadataV1,
   IntegrationEffectDefinitionV1,
   JsonObject,
+  MechanicalEffectDefinitionV1,
   ShaderAnimationMode,
   ShaderEffectDefinitionV1,
   ShaderPreset,
@@ -51,8 +52,22 @@ function parseAudience(value: unknown): EffectAudienceV1 | null {
 export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null {
   if (!record(value) || !id(value.id) || typeof value.enabled !== "boolean") return null;
   const target = parseTarget(value.target);
+  if (!target) return null;
+  if (value.type === "mechanical") {
+    if (value.action !== "face" || !finite(value.faceAngle) || !finite(value.speed)) return null;
+    if (value.faceAngle < 0 || value.faceAngle > 359 || value.speed < 15 || value.speed > 720) return null;
+    return {
+      id: value.id,
+      type: "mechanical",
+      enabled: value.enabled,
+      action: "face",
+      target,
+      faceAngle: value.faceAngle,
+      speed: value.speed,
+    } satisfies MechanicalEffectDefinitionV1;
+  }
   const audience = parseAudience(value.audience);
-  if (!target || !audience) return null;
+  if (!audience) return null;
   // Compatibility migration for detector metadata written before the generic provider model.
   if (value.type === "emanation") {
     if (!id(value.presetName) || typeof value.removeAllOnDeactivate !== "boolean") return null;

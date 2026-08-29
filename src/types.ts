@@ -71,7 +71,19 @@ export interface IntegrationEffectDefinitionV1 {
   parameters: JsonObject;
 }
 
-export type EffectDefinitionV1 = ShaderEffectDefinitionV1 | IntegrationEffectDefinitionV1;
+export interface MechanicalEffectDefinitionV1 {
+  id: string;
+  type: "mechanical";
+  enabled: boolean;
+  action: "face";
+  target: EffectTargetV1;
+  /** Artwork-facing direction at zero item rotation, clockwise from north. */
+  faceAngle: number;
+  /** Constant angular velocity in degrees per second. */
+  speed: number;
+}
+
+export type EffectDefinitionV1 = ShaderEffectDefinitionV1 | IntegrationEffectDefinitionV1 | MechanicalEffectDefinitionV1;
 
 export interface DetectionRuleV1 {
   id: string;
@@ -140,7 +152,7 @@ export interface DebugEffectState {
   effectId: string;
   targetType: string;
   targetName: string | null;
-  audience: string;
+  audience: string | null;
   audienceMatch: boolean;
   runtimeKey: string | null;
   localItemId: string | null;
