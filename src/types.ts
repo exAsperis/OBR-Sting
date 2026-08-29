@@ -2,6 +2,10 @@ import type { Item, Player } from "@owlbear-rodeo/sdk";
 
 export type Falloff = "binary" | "linear" | "smoothstep";
 export type ShaderPreset = "glow" | "pulse" | "flicker" | "outline" | "beam";
+export type EffectLifecycle = "continuous" | "enter" | "exit" | "nearest-change";
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+export type JsonObject = { [key: string]: JsonValue };
 
 export type EffectTargetV1 =
   | { type: "detector" }
@@ -42,18 +46,20 @@ export interface ShaderEffectDefinitionV1 {
   animation?: { rate: number; depth: number };
 }
 
-export interface EmanationEffectDefinitionV1 {
+export interface IntegrationEffectDefinitionV1 {
   id: string;
-  type: "emanation";
+  type: "integration";
   enabled: boolean;
+  lifecycle: EffectLifecycle;
   target: EffectTargetV1;
   audience: EffectAudienceV1;
-  presetName: string;
-  /** The external API can only remove every aura on a source. */
-  removeAllOnDeactivate: boolean;
+  providerId: string;
+  providerSchemaVersion: number;
+  actionId: string;
+  parameters: JsonObject;
 }
 
-export type EffectDefinitionV1 = ShaderEffectDefinitionV1 | EmanationEffectDefinitionV1;
+export type EffectDefinitionV1 = ShaderEffectDefinitionV1 | IntegrationEffectDefinitionV1;
 
 export interface DetectionRuleV1 {
   id: string;
@@ -83,12 +89,30 @@ export interface RuleEvaluation {
   strength: number;
 }
 
+export interface RuleSnapshot {
+  active: boolean;
+  strength: number;
+  distance: number | null;
+  detectedEmitterId: string | null;
+}
+
+export type RuleTransition =
+  | { type: "inactive" }
+  | { type: "enter" }
+  | { type: "continuous" }
+  | { type: "nearest-change"; fromEmitterId: string; toEmitterId: string }
+  | { type: "exit" };
+
 export interface EffectExecutionContext extends RuleEvaluation {
   effect: EffectDefinitionV1;
   target: Item | null;
   localPlayer: Pick<Player, "id" | "role">;
   party: Player[];
   graph: AttachmentGraph;
+  current: RuleSnapshot;
+  previous: RuleSnapshot | null;
+  transition: RuleTransition;
+  audienceMatch: boolean;
 }
 
 export interface DesiredEffect extends EffectExecutionContext {
@@ -103,6 +127,13 @@ export interface DebugEffectState {
   audienceMatch: boolean;
   runtimeKey: string | null;
   localItemId: string | null;
+  type: EffectDefinitionV1["type"];
+  lifecycle: EffectLifecycle;
+  transition: RuleTransition["type"];
+  providerId?: string;
+  actionId?: string;
+  providerStatus?: string;
+  executionStatus?: string;
 }
 
 export interface DebugRuleState {

@@ -6,7 +6,8 @@ import type {
   EffectDefinitionV1,
   EffectTargetV1,
   EmitterMetadataV1,
-  EmanationEffectDefinitionV1,
+  IntegrationEffectDefinitionV1,
+  JsonObject,
   ShaderEffectDefinitionV1,
   ShaderPreset,
 } from "../types";
@@ -16,6 +17,9 @@ const record = (value: unknown): value is Record<string, unknown> =>
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const id = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
 const color = (value: unknown): value is string => typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
+const jsonObject = (value: unknown): value is JsonObject => {
+  try { return record(value) && JSON.stringify(value) !== undefined; } catch { return false; }
+};
 
 export function parseEmitterMetadata(value: unknown): EmitterMetadataV1 | null {
   if (!record(value) || value.version !== 1 || !Array.isArray(value.signals)) return null;
@@ -48,17 +52,40 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   const target = parseTarget(value.target);
   const audience = parseAudience(value.audience);
   if (!target || !audience) return null;
+  // Compatibility migration for detector metadata written before the generic provider model.
   if (value.type === "emanation") {
     if (!id(value.presetName) || typeof value.removeAllOnDeactivate !== "boolean") return null;
     return {
       id: value.id,
-      type: "emanation",
+      type: "integration",
       enabled: value.enabled,
+      lifecycle: "continuous",
       target,
       audience,
-      presetName: value.presetName.trim(),
-      removeAllOnDeactivate: value.removeAllOnDeactivate,
-    } satisfies EmanationEffectDefinitionV1;
+      providerId: "auras-emanations",
+      providerSchemaVersion: 1,
+      actionId: "preset-aura",
+      parameters: {
+        presetName: value.presetName.trim(),
+        cleanup: value.removeAllOnDeactivate ? "remove-all-with-warning" : "leave",
+      },
+    } satisfies IntegrationEffectDefinitionV1;
+  }
+  if (value.type === "integration") {
+    if (!id(value.providerId) || !id(value.actionId) || !finite(value.providerSchemaVersion) || value.providerSchemaVersion < 1) return null;
+    if (!["continuous", "enter", "exit", "nearest-change"].includes(String(value.lifecycle)) || !jsonObject(value.parameters)) return null;
+    return {
+      id: value.id,
+      type: "integration",
+      enabled: value.enabled,
+      lifecycle: value.lifecycle as IntegrationEffectDefinitionV1["lifecycle"],
+      target,
+      audience,
+      providerId: value.providerId.trim(),
+      providerSchemaVersion: value.providerSchemaVersion,
+      actionId: value.actionId.trim(),
+      parameters: value.parameters,
+    };
   }
   if (value.type !== "shader") return null;
   const presets: ShaderPreset[] = ["glow", "pulse", "flicker", "outline", "beam"];

@@ -73,7 +73,26 @@ describe("versioned detector parsing", () => {
   });
 
   it("parses Auras and Emanations preset triggers", () => {
-    expect(parseEffectDefinition({ id: "ae", type: "emanation", enabled: true, target: { type: "detector" }, audience: { type: "everyone" }, presetName: "Spirits", removeAllOnDeactivate: true })).toMatchObject({ type: "emanation", presetName: "Spirits", removeAllOnDeactivate: true });
+    expect(parseEffectDefinition({ id: "ae", type: "emanation", enabled: true, target: { type: "detector" }, audience: { type: "everyone" }, presetName: "Spirits", removeAllOnDeactivate: true })).toMatchObject({
+      type: "integration",
+      lifecycle: "continuous",
+      providerId: "auras-emanations",
+      providerSchemaVersion: 1,
+      actionId: "preset-aura",
+      parameters: { presetName: "Spirits", cleanup: "remove-all-with-warning" },
+    });
+  });
+
+  it("parses generic integrations and rejects executable-looking invalid fields", () => {
+    const integration = {
+      id: "sound", type: "integration", enabled: true, lifecycle: "enter",
+      target: { type: "carrier" }, audience: { type: "carrier-owner" },
+      providerId: "soundboard-plus", providerSchemaVersion: 1, actionId: "play-one-shot",
+      parameters: { soundId: "whisper", volume: 0.5 },
+    };
+    expect(parseEffectDefinition(integration)).toMatchObject(integration);
+    expect(parseEffectDefinition({ ...integration, lifecycle: "eval" })).toBeNull();
+    expect(parseEffectDefinition({ ...integration, providerSchemaVersion: 0 })).toBeNull();
   });
 });
 

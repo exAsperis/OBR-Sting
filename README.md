@@ -4,9 +4,20 @@ Proximity sensing effects triggers.
 
 Sting is a generic, declarative proximity rules engine for Owlbear Rodeo. Scene items can emit arbitrary signal tags; detectors respond with one or more audience-aware local shader effects.
 
+## Modular effects and integrations
+
+Each detector rule is evaluated once. Sting derives enter, exit, nearest-change, and
+continuous lifecycle state, then dispatches configured effects through isolated
+executors. Native visual effects and external integrations compose without provider
+logic entering the proximity engine.
+
+Integration providers are trusted TypeScript adapters compiled into Sting. They are not
+user-authored scripts or dynamically loaded plugins. Unknown provider configurations are
+retained and skipped safely so scenes remain forward-compatible.
+
 ## Auras and Emanations integration
 
-Sting can optionally trigger named presets or preset groups from Auras and Emanations through its documented local broadcast API. Enable the integration in Sting, then add an **A&E preset** effect to a detection rule and enter the preset name exactly as it appears in Auras and Emanations.
+Sting's first provider adapter can optionally trigger named presets or preset groups from Auras and Emanations through its documented local broadcast API. Enable the integration in Sting, then add an **A&E integration** effect to a detection rule and enter the preset name exactly as it appears in Auras and Emanations.
 
 Cleanup is opt-in per effect. The external API only exposes `REMOVE_AURAS`, which removes every Auras and Emanations aura from the target. Sting therefore leaves cleanup disabled by default and shows a warning beside the option.
 

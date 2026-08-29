@@ -1,9 +1,19 @@
 import type { DesiredEffect, EffectDefinitionV1 } from "../types";
 
+export interface EffectDispatchBatch {
+  desired: DesiredEffect[];
+  events: DesiredEffect[];
+}
+
+export interface EffectReconcileReport {
+  localIds: Map<string, string>;
+  statuses: Map<string, string>;
+}
+
 export interface EffectExecutor<T extends EffectDefinitionV1 = EffectDefinitionV1> {
   type: T["type"];
   scope: "local" | "shared";
-  reconcile(desired: DesiredEffect[]): Promise<Map<string, string>>;
+  reconcile(batch: EffectDispatchBatch): Promise<EffectReconcileReport>;
   clear(): Promise<void>;
 }
 

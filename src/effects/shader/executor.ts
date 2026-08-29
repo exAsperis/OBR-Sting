@@ -1,7 +1,7 @@
 import OBR, { buildEffect, type BoundingBox, type Effect } from "@owlbear-rodeo/sdk";
 import { LOCAL_EFFECT_KEY } from "../../constants";
 import type { DesiredEffect, ShaderEffectDefinitionV1 } from "../../types";
-import type { EffectExecutor } from "../registry";
+import type { EffectDispatchBatch, EffectExecutor, EffectReconcileReport } from "../registry";
 import { resolveShaderGeometry } from "./geometry";
 import { SHADERS } from "./shaders";
 
@@ -70,7 +70,8 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
   private states = new Map<string, RuntimeState>();
   private initialized = false;
 
-  async reconcile(desired: DesiredEffect[]): Promise<Map<string, string>> {
+  async reconcile(batch: EffectDispatchBatch): Promise<EffectReconcileReport> {
+    const desired = batch.desired;
     if (!this.initialized) {
       const stale = (await OBR.scene.local.getItems()).filter((item) => item.metadata[LOCAL_EFFECT_KEY] !== undefined);
       if (stale.length) await OBR.scene.local.deleteItems(stale.map((item) => item.id));
@@ -138,7 +139,10 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
         existing.layoutHash = nextLayoutHash;
       }
     }
-    return new Map([...this.states].map(([key, state]) => [key, state.localItemId]));
+    return {
+      localIds: new Map([...this.states].map(([key, state]) => [key, state.localItemId])),
+      statuses: new Map([...this.states].map(([key]) => [key, "active"])),
+    };
   }
 
   async clear(): Promise<void> {
