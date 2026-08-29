@@ -11,10 +11,21 @@ interface FaceState {
   desiredRotation: number;
   speed: number;
   lastTime: number;
+  startedAt: number;
   runtimeKey: string;
 }
 
 const COMPLETE_EPSILON = 0.05;
+const MAX_INTERACTION_MS = 15_000;
+
+export function isMechanicalAuthority(context: DesiredEffect): boolean {
+  if (context.localPlayer.role !== "GM") return false;
+  const gmConnections = context.party
+    .filter((player) => player.role === "GM")
+    .map((player) => player.connectionId)
+    .sort();
+  return gmConnections.length === 0 || gmConnections[0] === context.localPlayer.connectionId;
+}
 
 export class MechanicalEffectExecutor implements EffectExecutor<MechanicalEffectDefinitionV1> {
   readonly type = "mechanical" as const;
@@ -22,8 +33,15 @@ export class MechanicalEffectExecutor implements EffectExecutor<MechanicalEffect
   private states = new Map<string, FaceState>();
 
   async reconcile(batch: EffectDispatchBatch): Promise<EffectReconcileReport> {
+    const statuses = new Map<string, string>();
+    for (const context of batch.desired.filter((entry) => entry.effect.type === "mechanical")) {
+      if (context.localPlayer.role !== "GM") statuses.set(context.runtimeKey, "player-inactive");
+      else if (!isMechanicalAuthority(context)) statuses.set(context.runtimeKey, "authority-standby");
+      else if (!context.target || !context.detectedEmitter) statuses.set(context.runtimeKey, "unresolved");
+      else if (context.target.id === context.detectedEmitter.id) statuses.set(context.runtimeKey, "self-skipped");
+    }
     const eligible = batch.desired.filter((context) =>
-      context.localPlayer.role === "GM" &&
+      isMechanicalAuthority(context) &&
       context.effect.type === "mechanical" &&
       context.effect.action === "face" &&
       context.target !== null &&
@@ -34,7 +52,12 @@ export class MechanicalEffectExecutor implements EffectExecutor<MechanicalEffect
     for (const context of eligible) {
       const targetId = context.target!.id;
       const current = winners.get(targetId);
-      if (!current || compareFaceContexts(context, current) < 0) winners.set(targetId, context);
+      if (!current || compareFaceContexts(context, current) < 0) {
+        if (current) statuses.set(current.runtimeKey, "superseded");
+        winners.set(targetId, context);
+      } else {
+        statuses.set(context.runtimeKey, "superseded");
+      }
     }
 
     for (const [targetId, state] of [...this.states]) {
@@ -42,7 +65,6 @@ export class MechanicalEffectExecutor implements EffectExecutor<MechanicalEffect
       this.stopState(targetId, state);
     }
 
-    const statuses = new Map<string, string>();
     for (const [targetId, context] of winners) {
       const effect = context.effect as MechanicalEffectDefinitionV1;
       const desiredRotation = faceBearing(context.target!.position, context.detectedEmitter!.position, effect.faceAngle);
@@ -68,6 +90,7 @@ export class MechanicalEffectExecutor implements EffectExecutor<MechanicalEffect
           desiredRotation,
           speed: effect.speed,
           lastTime: performance.now(),
+          startedAt: performance.now(),
           runtimeKey: context.runtimeKey,
         };
         this.states.set(targetId, state);
@@ -83,6 +106,10 @@ export class MechanicalEffectExecutor implements EffectExecutor<MechanicalEffect
   private tick(targetId: string, time: number): void {
     const state = this.states.get(targetId);
     if (!state) return;
+    if (time - state.startedAt >= MAX_INTERACTION_MS) {
+      this.stopState(targetId, state);
+      return;
+    }
     const elapsedSeconds = Math.max(0, time - state.lastTime) / 1000;
     state.lastTime = time;
     const delta = shortestAngleDelta(state.currentRotation, state.desiredRotation);

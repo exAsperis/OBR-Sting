@@ -8,7 +8,10 @@ OBR.onReady(() => {
   let stopItems: (() => void) | undefined;
   let stopGrid: (() => void) | undefined;
 
-  const refreshPlayer = async () => engine.setPlayer({ id: OBR.player.id, role: await OBR.player.getRole() });
+  const refreshPlayer = async () => {
+    const [role, connectionId] = await Promise.all([OBR.player.getRole(), OBR.player.getConnectionId()]);
+    engine.setPlayer({ id: OBR.player.id, role, connectionId });
+  };
   const refreshParty = async () => engine.setParty(await OBR.party.getPlayers());
   const attachScene = async (ready: boolean) => {
     stopItems?.();

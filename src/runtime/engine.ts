@@ -18,7 +18,7 @@ const DEBUG_STORAGE_KEY = `${EXTENSION_ID}/debug`;
 
 export class ProximityEngine {
   private latestItems: Item[] = [];
-  private player: Pick<Player, "id" | "role"> | null = null;
+  private player: Pick<Player, "id" | "role" | "connectionId"> | null = null;
   private party: Player[] = [];
   private running = false;
   private dirty = false;
@@ -34,7 +34,7 @@ export class ProximityEngine {
   }
 
   setItems(items: Item[]): void { this.latestItems = items; this.schedule(); }
-  setPlayer(player: Pick<Player, "id" | "role">): void { this.player = player; this.schedule(); }
+  setPlayer(player: Pick<Player, "id" | "role" | "connectionId">): void { this.player = player; this.schedule(); }
   setParty(party: Player[]): void { this.party = party; this.schedule(); }
   setDistanceMethod(method: DistanceMethod): void { this.distanceMethod = method; this.schedule(); }
 

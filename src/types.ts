@@ -135,7 +135,7 @@ export type RuleTransition =
 export interface EffectExecutionContext extends RuleEvaluation {
   effect: EffectDefinitionV1;
   target: Item | null;
-  localPlayer: Pick<Player, "id" | "role">;
+  localPlayer: Pick<Player, "id" | "role" | "connectionId">;
   party: Player[];
   graph: AttachmentGraph;
   current: RuleSnapshot;

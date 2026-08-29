@@ -15,9 +15,9 @@ const effect: MechanicalEffectDefinitionV1 = { id: "face", type: "mechanical", e
 function context(target: Item, emitter: Item, distance: number, role: "GM" | "PLAYER" = "GM", ids = ["detector", "rule", "face"]): DesiredEffect {
   return {
     effect: { ...effect, id: ids[2] }, runtimeKey: ids.join("/"), target, detectedEmitter: emitter, distance,
-    detector: item(ids[0], 0, 0), rule: { id: ids[1] }, localPlayer: { id: role.toLowerCase(), role },
+    detector: item(ids[0], 0, 0), rule: { id: ids[1] }, localPlayer: { id: role.toLowerCase(), role, connectionId: `${role}-1` }, party: [],
     audienceMatch: role === "GM",
-  } as DesiredEffect;
+  } as unknown as DesiredEffect;
 }
 
 describe("MechanicalEffectExecutor", () => {
@@ -33,6 +33,20 @@ describe("MechanicalEffectExecutor", () => {
     expect(startItemInteraction).not.toHaveBeenCalled();
   });
 
+  it("elects only the first GM connection when several GM tabs are present", async () => {
+    const target = item("target", 0, 0);
+    const emitter = item("emitter", 10, 0);
+    const losing = context(target, emitter, 10);
+    losing.localPlayer.connectionId = "gm-b";
+    losing.party = [
+      { id: "gm", role: "GM", connectionId: "gm-b" },
+      { id: "gm", role: "GM", connectionId: "gm-a" },
+    ] as DesiredEffect["party"];
+    const report = await new MechanicalEffectExecutor().reconcile({ desired: [losing], events: [] });
+    expect(startItemInteraction).not.toHaveBeenCalled();
+    expect(report.statuses.get(losing.runtimeKey)).toBe("authority-standby");
+  });
+
   it("silently ignores a target that is its own detected emitter", async () => {
     const same = item("same", 0, 0);
     await new MechanicalEffectExecutor().reconcile({ desired: [context(same, same, 0)], events: [] });
@@ -46,7 +60,7 @@ describe("MechanicalEffectExecutor", () => {
     const report = await new MechanicalEffectExecutor().reconcile({ desired: [far, near], events: [] });
     expect(startItemInteraction).toHaveBeenCalledTimes(1);
     expect(report.statuses.get(near.runtimeKey)).toBe("turning");
-    expect(report.statuses.has(far.runtimeKey)).toBe(false);
+    expect(report.statuses.get(far.runtimeKey)).toBe("superseded");
   });
 
   it("fails silently when Owlbear refuses to start an interaction", async () => {
