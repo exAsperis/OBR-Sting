@@ -23,16 +23,15 @@ OBR.onReady(() => {
     stopGrid = OBR.scene.grid.onChange(() => engine.schedule());
   };
 
-  const extensionUrl = new URL("./extension.html?context=1", window.location.href).href;
   const iconUrl = new URL("./icon.svg", window.location.href).href;
   void OBR.contextMenu.create({
     id: CONTEXT_MENU_ID,
     icons: [{
       icon: iconUrl,
-      label: "Sting…",
+      label: "Sting",
       filter: { min: 1, max: 1, roles: ["GM"], permissions: ["UPDATE"] },
     }],
-    embed: { url: extensionUrl, height: 700 },
+    onClick: () => void OBR.action.open(),
   });
 
   const stopReady = OBR.scene.onReadyChange((ready) => void attachScene(ready));
