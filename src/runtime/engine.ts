@@ -1,5 +1,5 @@
 import OBR, { type Item, type Player } from "@owlbear-rodeo/sdk";
-import { DETECTOR_KEY } from "../constants";
+import { DETECTOR_KEY, EXTENSION_ID } from "../constants";
 import { ShaderEffectExecutor } from "../effects/shader/executor";
 import { EffectExecutorRegistry, type EffectDispatchBatch } from "../effects/registry";
 import { IntegrationEffectExecutor } from "../effects/integrations/executor";
@@ -13,7 +13,7 @@ import { deriveTransition, toRuleSnapshot } from "./lifecycle";
 import type { DebugRuleState, DesiredEffect, RuleSnapshot } from "../types";
 import type { DistanceMethod } from "../settings";
 
-const DEBUG_STORAGE_KEY = "com.ex-asperis.proximity-signals/debug";
+const DEBUG_STORAGE_KEY = `${EXTENSION_ID}/debug`;
 
 export class ProximityEngine {
   private latestItems: Item[] = [];

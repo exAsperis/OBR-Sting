@@ -67,7 +67,7 @@ pnpm run build
 
 ## Release identity
 
-- Extension ID: `com.ex-asperis.proximity-signals`
+- Extension ID: `com.ex-asperis.sting`
 - Published author: `ex Asperis`
 - Stable manifest: `public/manifest.json`
 - Versioned manifest: `public/manifest-v0.1.4.json`

@@ -342,7 +342,7 @@ Use the extension's actual reverse-domain manifest ID.
 For example:
 
 ```ts
-const EXTENSION_ID = "com.example.proximity-signals";
+const EXTENSION_ID = "com.ex-asperis.sting";
 
 const EMITTER_KEY =
   `${EXTENSION_ID}/emitter`;

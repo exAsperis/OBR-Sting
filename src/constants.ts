@@ -1,5 +1,5 @@
 /** All metadata keys and Owlbear registrations must derive from this ID. */
-export const EXTENSION_ID = "com.ex-asperis.proximity-signals";
+export const EXTENSION_ID = "com.ex-asperis.sting";
 
 export const EXTENSION_NAME = "Sting";
 
