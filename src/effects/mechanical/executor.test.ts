@@ -1,9 +1,9 @@
 import type { Item } from "@owlbear-rodeo/sdk";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DesiredEffect, MechanicalEffectDefinitionV1 } from "../../types";
 
-const { startItemInteraction } = vi.hoisted(() => ({ startItemInteraction: vi.fn() }));
-vi.mock("@owlbear-rodeo/sdk", () => ({ default: { interaction: { startItemInteraction } } }));
+const { startItemInteraction, updateItems } = vi.hoisted(() => ({ startItemInteraction: vi.fn(), updateItems: vi.fn() }));
+vi.mock("@owlbear-rodeo/sdk", () => ({ default: { interaction: { startItemInteraction }, scene: { items: { updateItems } } } }));
 
 import { MechanicalEffectExecutor } from "./executor";
 
@@ -12,6 +12,8 @@ const item = (id: string, x: number, y: number, rotation = 0): Item => ({
   lastModified: "", lastModifiedUserId: "gm", position: { x, y }, rotation, scale: { x: 1, y: 1 }, metadata: {}, layer: "CHARACTER",
 });
 const effect: MechanicalEffectDefinitionV1 = { id: "face", type: "mechanical", enabled: true, action: "face", target: { type: "detector" }, faceAngle: 0, speed: 180 };
+let updatedRotations: number[] = [];
+let persistedRotations: number[] = [];
 function context(target: Item, emitter: Item, distance: number, role: "GM" | "PLAYER" = "GM", ids = ["detector", "rule", "face"]): DesiredEffect {
   return {
     effect: { ...effect, id: ids[2] }, runtimeKey: ids.join("/"), target, detectedEmitter: emitter, distance,
@@ -22,9 +24,14 @@ function context(target: Item, emitter: Item, distance: number, role: "GM" | "PL
 
 describe("MechanicalEffectExecutor", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.clearAllMocks();
-    startItemInteraction.mockResolvedValue([(recipe: (draft: Item) => void) => { const draft = item("target", 0, 0); recipe(draft); return draft; }, vi.fn()]);
+    updatedRotations = [];
+    persistedRotations = [];
+    startItemInteraction.mockResolvedValue([(recipe: (draft: Item) => void) => { const draft = item("target", 0, 0); recipe(draft); updatedRotations.push(draft.rotation); return draft; }, vi.fn()]);
+    updateItems.mockImplementation(async (_ids: string[], recipe: (drafts: Item[]) => void) => { const draft = item("target", 0, 0); recipe([draft]); persistedRotations.push(draft.rotation); });
   });
+  afterEach(() => vi.useRealTimers());
 
   it("only lets the GM start shared Face interactions", async () => {
     const target = item("target", 0, 0);
@@ -39,12 +46,21 @@ describe("MechanicalEffectExecutor", () => {
     const losing = context(target, emitter, 10);
     losing.localPlayer.connectionId = "gm-b";
     losing.party = [
-      { id: "gm", role: "GM", connectionId: "gm-b" },
       { id: "gm", role: "GM", connectionId: "gm-a" },
     ] as DesiredEffect["party"];
     const report = await new MechanicalEffectExecutor().reconcile({ desired: [losing], events: [] });
     expect(startItemInteraction).not.toHaveBeenCalled();
     expect(report.statuses.get(losing.runtimeKey)).toBe("authority-standby");
+  });
+
+  it("elects the local session when its connection sorts before every other GM", async () => {
+    const target = item("target", 0, 0);
+    const winning = context(target, item("emitter", 10, 0), 10);
+    winning.localPlayer.connectionId = "gm-a";
+    winning.party = [{ id: "gm", role: "GM", connectionId: "gm-b" }] as DesiredEffect["party"];
+    const report = await new MechanicalEffectExecutor().reconcile({ desired: [winning], events: [] });
+    expect(startItemInteraction).toHaveBeenCalledOnce();
+    expect(report.statuses.get(winning.runtimeKey)).toBe("turning");
   });
 
   it("silently ignores a target that is its own detected emitter", async () => {
@@ -68,5 +84,23 @@ describe("MechanicalEffectExecutor", () => {
     const ctx = context(item("target", 0, 0), item("emitter", 10, 0), 10);
     const report = await new MechanicalEffectExecutor().reconcile({ desired: [ctx], events: [] });
     expect(report.statuses.get(ctx.runtimeKey)).toBe("skipped");
+  });
+
+  it("advances rotations from background-safe timer ticks", async () => {
+    const executor = new MechanicalEffectExecutor();
+    await executor.reconcile({ desired: [context(item("target", 0, 0), item("emitter", 10, 0), 10)], events: [] });
+    await vi.advanceTimersByTimeAsync(250);
+    expect(updatedRotations.at(-1)).toBeCloseTo(45, 0);
+    await executor.clear();
+  });
+
+  it("persists the final rotation before ending the temporary interaction", async () => {
+    const stop = vi.fn();
+    startItemInteraction.mockResolvedValueOnce([(recipe: (draft: Item) => void) => { const draft = item("target", 0, 0); recipe(draft); return draft; }, stop]);
+    const executor = new MechanicalEffectExecutor();
+    await executor.reconcile({ desired: [context(item("target", 0, 0), item("emitter", 10, 0), 10)], events: [] });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(persistedRotations.at(-1)).toBe(90);
+    expect(stop).toHaveBeenCalledOnce();
   });
 });
