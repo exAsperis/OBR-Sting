@@ -1,5 +1,5 @@
 import OBR, { type Item } from "@owlbear-rodeo/sdk";
-import type { DesiredEffect, MechanicalEffectDefinitionV1 } from "../../types";
+import type { DesiredEffect, MechanicalEffectDefinitionV1, MechanicalFaceEffectDefinitionV1, MechanicalVisibilityEffectDefinitionV1 } from "../../types";
 import type { EffectDispatchBatch, EffectExecutor, EffectReconcileReport } from "../registry";
 import { isMechanicalAuthority } from "./authority";
 import { advanceFaceRotation, compareFaceContexts, faceBearing, normalizeAngle, shortestAngleDelta } from "./face";
@@ -16,6 +16,14 @@ interface FaceState {
   stopping: boolean;
 }
 
+interface VisibilityState {
+  ownerKey: string;
+  targetId: string;
+  enterVisible: boolean;
+  reverseOnExit: boolean;
+  runtimeKey: string;
+}
+
 const COMPLETE_EPSILON = 0.05;
 const MAX_INTERACTION_MS = 15_000;
 
@@ -23,6 +31,7 @@ export class MechanicalEffectExecutor implements EffectExecutor<MechanicalEffect
   readonly type = "mechanical" as const;
   readonly scope = "shared" as const;
   private states = new Map<string, FaceState>();
+  private visibilityStates = new Map<string, VisibilityState>();
   private tickerWorker: Worker | null = null;
   private tickerTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -32,7 +41,7 @@ export class MechanicalEffectExecutor implements EffectExecutor<MechanicalEffect
       if (context.localPlayer.role !== "GM") statuses.set(context.runtimeKey, "player-inactive");
       else if (!isMechanicalAuthority(context.localPlayer, context.party)) statuses.set(context.runtimeKey, "authority-standby");
       else if (!context.target || !context.detectedEmitter) statuses.set(context.runtimeKey, "unresolved");
-      else if (context.target.id === context.detectedEmitter.id) statuses.set(context.runtimeKey, "self-skipped");
+      else if (context.effect.type === "mechanical" && context.effect.action === "face" && context.target.id === context.detectedEmitter.id) statuses.set(context.runtimeKey, "self-skipped");
     }
     const eligible = batch.desired.filter((context) =>
       isMechanicalAuthority(context.localPlayer, context.party) &&
@@ -60,7 +69,7 @@ export class MechanicalEffectExecutor implements EffectExecutor<MechanicalEffect
     }
 
     for (const [targetId, context] of winners) {
-      const effect = context.effect as MechanicalEffectDefinitionV1;
+      const effect = context.effect as MechanicalFaceEffectDefinitionV1;
       const desiredRotation = faceBearing(context.target!.position, context.detectedEmitter!.position, effect.faceAngle);
       const existing = this.states.get(targetId);
       if (existing) {
@@ -95,7 +104,63 @@ export class MechanicalEffectExecutor implements EffectExecutor<MechanicalEffect
         statuses.set(context.runtimeKey, "skipped");
       }
     }
+    await this.reconcileVisibility(batch.desired, statuses);
     return { localIds: new Map(), statuses };
+  }
+
+  private async reconcileVisibility(desired: DesiredEffect[], statuses: Map<string, string>): Promise<void> {
+    const visibilityContexts = desired.filter((context) => context.effect.type === "mechanical" && context.effect.action === "visibility");
+    if (visibilityContexts.length > 0 && !visibilityContexts.some((context) => isMechanicalAuthority(context.localPlayer, context.party))) {
+      this.visibilityStates.clear();
+      return;
+    }
+    const grouped = new Map<string, DesiredEffect>();
+    for (const context of visibilityContexts) {
+      if (!isMechanicalAuthority(context.localPlayer, context.party) || context.effect.type !== "mechanical" || context.effect.action !== "visibility" || !context.target || !context.detectedEmitter) continue;
+      const groupKey = JSON.stringify([context.detector.id, context.rule.id, context.effect.id, context.target.id]);
+      const current = grouped.get(groupKey);
+      if (!current || compareFaceContexts(context, current) < 0) grouped.set(groupKey, context);
+    }
+    const winners = new Map<string, { groupKey: string; context: DesiredEffect }>();
+    for (const [groupKey, context] of grouped) {
+      const targetId = context.target!.id;
+      const current = winners.get(targetId);
+      if (!current || compareFaceContexts(context, current.context) < 0) {
+        if (current) statuses.set(current.context.runtimeKey, "superseded");
+        winners.set(targetId, { groupKey, context });
+      } else {
+        statuses.set(context.runtimeKey, "superseded");
+      }
+    }
+
+    for (const [targetId, state] of [...this.visibilityStates]) {
+      const winner = winners.get(targetId);
+      if (winner) continue;
+      if (state.reverseOnExit) await this.setVisibility(targetId, !state.enterVisible);
+      this.visibilityStates.delete(targetId);
+    }
+    for (const [targetId, { groupKey, context }] of winners) {
+      const effect = context.effect as MechanicalVisibilityEffectDefinitionV1;
+      const enterVisible = effect.visibility === "shown";
+      const existing = this.visibilityStates.get(targetId);
+      if (!existing || existing.ownerKey !== groupKey || existing.enterVisible !== enterVisible) {
+        await this.setVisibility(targetId, enterVisible);
+        this.visibilityStates.set(targetId, { ownerKey: groupKey, targetId, enterVisible, reverseOnExit: effect.reverseOnExit, runtimeKey: context.runtimeKey });
+        statuses.set(context.runtimeKey, enterVisible ? "shown" : "hidden");
+      } else {
+        existing.reverseOnExit = effect.reverseOnExit;
+        existing.runtimeKey = context.runtimeKey;
+        statuses.set(context.runtimeKey, enterVisible ? "shown" : "hidden");
+      }
+    }
+  }
+
+  private async setVisibility(targetId: string, visible: boolean): Promise<void> {
+    try {
+      await OBR.scene.items.updateItems<Item>([targetId], (items) => {
+        for (const item of items) item.visible = visible;
+      });
+    } catch { /* fail silently like other mechanical mutations */ }
   }
 
   private tick(targetId: string, time: number): void {
@@ -164,6 +229,7 @@ export class MechanicalEffectExecutor implements EffectExecutor<MechanicalEffect
 
   async clear(): Promise<void> {
     for (const [targetId, state] of [...this.states]) await this.commitAndStop(targetId, state);
+    this.visibilityStates.clear();
     this.stopTicker();
   }
 }

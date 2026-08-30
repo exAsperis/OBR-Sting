@@ -39,4 +39,11 @@ describe("effects library", () => {
     expect(parsed.entries[0].effect).toEqual(face);
     expect(instantiateLibraryEffect(parsed.entries[0])).toMatchObject({ type: "mechanical", action: "face", faceAngle: 45, speed: 180 });
   });
+
+  it("round-trips reusable Hide/Show effects in the v1 library", () => {
+    const visibility = { id: "visibility", type: "mechanical" as const, enabled: true, action: "visibility" as const, target: { type: "detector" as const }, visibility: "hidden" as const, reverseOnExit: true };
+    const parsed = parseEffectLibrary({ version: 1, entries: [{ id: "hide", name: "Hide nearby", effect: visibility }] });
+    expect(parsed.entries[0].effect).toEqual(visibility);
+    expect(instantiateLibraryEffect(parsed.entries[0])).toMatchObject({ type: "mechanical", action: "visibility", visibility: "hidden", reverseOnExit: true });
+  });
 });

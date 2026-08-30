@@ -184,6 +184,13 @@ describe("runtime effect identity", () => {
     expect(parseEffectDefinition({ ...face, speed: 14 })).toBeNull();
     expect(parseEffectDefinition({ ...face, speed: 721 })).toBeNull();
   });
+
+  it("parses Hide/Show mechanical effects and rejects invalid configuration", () => {
+    const visibility = { id: "visibility", type: "mechanical", enabled: true, action: "visibility", target: { type: "detector" }, visibility: "hidden", reverseOnExit: true };
+    expect(parseEffectDefinition(visibility)).toEqual(visibility);
+    expect(parseEffectDefinition({ ...visibility, visibility: "transparent" })).toBeNull();
+    expect(parseEffectDefinition({ ...visibility, reverseOnExit: "yes" })).toBeNull();
+  });
   it("separates all-mode effects by detected emitter", () => {
     expect(buildRuntimeEffectKey("d", "r", "e", "same-target", "shader", "", "", "a"))
       .not.toBe(buildRuntimeEffectKey("d", "r", "e", "same-target", "shader", "", "", "b"));

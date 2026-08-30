@@ -54,17 +54,32 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   const target = parseTarget(value.target);
   if (!target) return null;
   if (value.type === "mechanical") {
-    if (value.action !== "face" || !finite(value.faceAngle) || !finite(value.speed)) return null;
-    if (value.faceAngle < 0 || value.faceAngle > 359 || value.speed < 15 || value.speed > 720) return null;
-    return {
-      id: value.id,
-      type: "mechanical",
-      enabled: value.enabled,
-      action: "face",
-      target,
-      faceAngle: value.faceAngle,
-      speed: value.speed,
-    } satisfies MechanicalEffectDefinitionV1;
+    if (value.action === "face") {
+      if (!finite(value.faceAngle) || !finite(value.speed)) return null;
+      if (value.faceAngle < 0 || value.faceAngle > 359 || value.speed < 15 || value.speed > 720) return null;
+      return {
+        id: value.id,
+        type: "mechanical",
+        enabled: value.enabled,
+        action: "face",
+        target,
+        faceAngle: value.faceAngle,
+        speed: value.speed,
+      } satisfies MechanicalEffectDefinitionV1;
+    }
+    if (value.action === "visibility") {
+      if (!["hidden", "shown"].includes(String(value.visibility)) || typeof value.reverseOnExit !== "boolean") return null;
+      return {
+        id: value.id,
+        type: "mechanical",
+        enabled: value.enabled,
+        action: "visibility",
+        target,
+        visibility: value.visibility as "hidden" | "shown",
+        reverseOnExit: value.reverseOnExit,
+      } satisfies MechanicalEffectDefinitionV1;
+    }
+    return null;
   }
   const audience = parseAudience(value.audience);
   if (!audience) return null;

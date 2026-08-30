@@ -128,6 +128,12 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
           .width(effectLayout.width)
           .height(effectLayout.height)
           .position(effectLayout.position)
+          // Keep the local overlay in Owlbear's attachment graph so the native
+          // movement interaction carries it with the target before the scene
+          // item change is committed. Scale and rotation remain world-aligned;
+          // the next reconciliation recalculates their exact layout.
+          .attachedTo(context.target!.id)
+          .disableAttachmentBehavior(["SCALE", "ROTATION"])
           .zIndex(effectZIndex)
           .sksl(SHADERS[effect.preset])
           .uniforms(uniforms(effect, context.strength, scale, direction))

@@ -14,12 +14,18 @@ const item = (id: string, x: number, y: number, rotation = 0): Item => ({
 const effect: MechanicalEffectDefinitionV1 = { id: "face", type: "mechanical", enabled: true, action: "face", target: { type: "detector" }, faceAngle: 0, speed: 180 };
 let updatedRotations: number[] = [];
 let persistedRotations: number[] = [];
+let persistedVisibilities: boolean[] = [];
 function context(target: Item, emitter: Item, distance: number, role: "GM" | "PLAYER" = "GM", ids = ["detector", "rule", "face"]): DesiredEffect {
   return {
     effect: { ...effect, id: ids[2] }, runtimeKey: ids.join("/"), target, detectedEmitter: emitter, distance,
     detector: item(ids[0], 0, 0), rule: { id: ids[1] }, localPlayer: { id: role.toLowerCase(), role, connectionId: `${role}-1` }, party: [],
     audienceMatch: role === "GM",
   } as unknown as DesiredEffect;
+}
+function visibilityContext(target: Item, emitter: Item, distance: number, visibility: "hidden" | "shown" = "hidden", reverseOnExit = true, ids = ["detector", "rule", "visibility"]): DesiredEffect {
+  const result = context(target, emitter, distance, "GM", ids);
+  result.effect = { id: ids[2], type: "mechanical", enabled: true, action: "visibility", target: { type: "detector" }, visibility, reverseOnExit };
+  return result;
 }
 
 describe("MechanicalEffectExecutor", () => {
@@ -28,8 +34,9 @@ describe("MechanicalEffectExecutor", () => {
     vi.clearAllMocks();
     updatedRotations = [];
     persistedRotations = [];
+    persistedVisibilities = [];
     startItemInteraction.mockResolvedValue([(recipe: (draft: Item) => void) => { const draft = item("target", 0, 0); recipe(draft); updatedRotations.push(draft.rotation); return draft; }, vi.fn()]);
-    updateItems.mockImplementation(async (_ids: string[], recipe: (drafts: Item[]) => void) => { const draft = item("target", 0, 0); recipe([draft]); persistedRotations.push(draft.rotation); });
+    updateItems.mockImplementation(async (_ids: string[], recipe: (drafts: Item[]) => void) => { const draft = item("target", 0, 0); recipe([draft]); persistedRotations.push(draft.rotation); persistedVisibilities.push(draft.visible); });
   });
   afterEach(() => vi.useRealTimers());
 
@@ -102,5 +109,35 @@ describe("MechanicalEffectExecutor", () => {
     await vi.advanceTimersByTimeAsync(500);
     expect(persistedRotations.at(-1)).toBe(90);
     expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it("hides on entry and reverses only after the final all-mode emitter exits", async () => {
+    const executor = new MechanicalEffectExecutor();
+    const target = item("target", 0, 0);
+    const near = visibilityContext(target, item("near", 10, 0), 10, "hidden", true, ["detector", "rule", "visibility"]);
+    const far = visibilityContext(target, item("far", 20, 0), 20, "hidden", true, ["detector", "rule", "visibility"]);
+    await executor.reconcile({ desired: [near, far], events: [] });
+    expect(persistedVisibilities).toEqual([false]);
+    await executor.reconcile({ desired: [far], events: [] });
+    expect(persistedVisibilities).toEqual([false]);
+    await executor.reconcile({ desired: [], events: [] });
+    expect(persistedVisibilities).toEqual([false, true]);
+  });
+
+  it("leaves the entry visibility in place when reverse is disabled", async () => {
+    const executor = new MechanicalEffectExecutor();
+    const ctx = visibilityContext(item("target", 0, 0), item("emitter", 10, 0), 10, "shown", false);
+    await executor.reconcile({ desired: [ctx], events: [] });
+    await executor.reconcile({ desired: [], events: [] });
+    expect(persistedVisibilities).toEqual([true]);
+  });
+
+  it("allows a detected emitter to be its own Hide/Show target", async () => {
+    const executor = new MechanicalEffectExecutor();
+    const same = item("same", 0, 0);
+    const ctx = visibilityContext(same, same, 0);
+    const report = await executor.reconcile({ desired: [ctx], events: [] });
+    expect(persistedVisibilities).toEqual([false]);
+    expect(report.statuses.get(ctx.runtimeKey)).toBe("hidden");
   });
 });

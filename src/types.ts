@@ -71,7 +71,7 @@ export interface IntegrationEffectDefinitionV1 {
   parameters: JsonObject;
 }
 
-export interface MechanicalEffectDefinitionV1 {
+export interface MechanicalFaceEffectDefinitionV1 {
   id: string;
   type: "mechanical";
   enabled: boolean;
@@ -82,6 +82,18 @@ export interface MechanicalEffectDefinitionV1 {
   /** Constant angular velocity in degrees per second. */
   speed: number;
 }
+
+export interface MechanicalVisibilityEffectDefinitionV1 {
+  id: string;
+  type: "mechanical";
+  enabled: boolean;
+  action: "visibility";
+  target: EffectTargetV1;
+  visibility: "hidden" | "shown";
+  reverseOnExit: boolean;
+}
+
+export type MechanicalEffectDefinitionV1 = MechanicalFaceEffectDefinitionV1 | MechanicalVisibilityEffectDefinitionV1;
 
 export type EffectDefinitionV1 = ShaderEffectDefinitionV1 | IntegrationEffectDefinitionV1 | MechanicalEffectDefinitionV1;
 
