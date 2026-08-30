@@ -42,7 +42,9 @@ Only the GM can configure items. Select one scene item and open **Sting…** fro
 5. Changes save automatically to item metadata after a short validation delay.
 
 Open **Settings** without selecting an item to choose how Sting measures distance throughout the room:
-using the scene's grid rules or straight-line Euclidean geometry. Settings also contains
+using the scene-configured measurement type by default. A per-scene override can select
+Chessboard, Alternating Diagonal, Euclidean, or Manhattan measurement on square and
+isometric grids, or Hexagon or Euclidean measurement on either hex orientation. Settings also contains
 the optional extension integrations.
 
 The background page evaluates rules on every client even while the editor is closed. Derived proximity state and Effect item IDs are never written to the shared scene.
@@ -63,7 +65,7 @@ pnpm run build
 - Attachment effects fill the target's bounds. The built-in glow preset therefore renders a transparent color overlay within those bounds; renderer behavior on transparent or hidden artwork should be checked in the target Owlbear release.
 - Item ownership is encapsulated through `createdUserId`, which is the ownership identity exposed on SDK items. GM **Assign Owner** behavior should be verified in multiplayer testing.
 - Hidden emitters are not filtered. A player can only evaluate hidden items that Owlbear exposes to that player's client; the extension does not bypass Owlbear visibility boundaries.
-- Range comparisons use `OBR.scene.grid.getDistance()`, so the current grid measurement and scale remain authoritative.
+- Range comparisons default to `OBR.scene.grid.getDistance()`, so the current scene measurement and scale remain authoritative; per-scene overrides use grid-aware square, hex, and axonometric calculations.
 
 ## Release identity
 

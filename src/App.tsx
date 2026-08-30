@@ -1,4 +1,4 @@
-import OBR, { isImage, type Item, type Player } from "@owlbear-rodeo/sdk";
+import OBR, { isImage, type GridType, type Item, type Player } from "@owlbear-rodeo/sdk";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DETECTOR_KEY, EFFECT_LIBRARY_STORAGE_KEY, EMANATION_INTEGRATION_KEY, EMITTER_KEY, EXTENSION_NAME, SETTINGS_KEY } from "./constants";
 import { parseDetectorMetadata, parseEmitterMetadata } from "./metadata/parse";
@@ -11,7 +11,7 @@ import { normalizeSignal } from "./signals/normalize";
 import type { DebugRuleState, DetectionRuleV1, DetectorMetadataV1, EffectAudienceV1, EffectDefinitionV1, EffectTargetV1, EmitterMetadataV1, MechanicalEffectDefinitionV1, ShaderEffectDefinitionV1 } from "./types";
 import { StatusPanel } from "./components/StatusPanel";
 import { useOwlbear } from "./hooks/useOwlbear";
-import { DEFAULT_ROOM_SETTINGS, parseRoomSettings, type RoomSettingsV1 } from "./settings";
+import { DEFAULT_SCENE_SETTINGS, isDistanceMethodValidForGrid, isHexGrid, parseSceneSettings, type SceneSettingsV1 } from "./settings";
 import { SliderNumber } from "./components/SliderNumber";
 
 const newEffect = (): ShaderEffectDefinitionV1 => ({ id: crypto.randomUUID(), type: "shader", enabled: true, target: { type: "detector" }, audience: { type: "everyone" }, preset: "glow", shape: "circle", placement: "above", color: "#55aaff", maxIntensity: 1, spread: 1.25, animation: { mode: "none", rate: 1, depth: 0.35 } });
@@ -46,13 +46,15 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(true);
   const [gridUnit, setGridUnit] = useState("");
   const [emanationEnabled, setEmanationEnabled] = useState(() => localStorage.getItem(EMANATION_INTEGRATION_KEY) === "true");
-  const [roomSettings, setRoomSettings] = useState<RoomSettingsV1>(DEFAULT_ROOM_SETTINGS);
+  const [sceneSettings, setSceneSettings] = useState<SceneSettingsV1>(DEFAULT_SCENE_SETTINGS);
+  const [gridType, setGridType] = useState<GridType>("SQUARE");
   const [effectLibrary, setEffectLibrary] = useState<EffectLibraryV1>(() => loadEffectLibrary(localStorage, EFFECT_LIBRARY_STORAGE_KEY));
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const hydratedItemId = useRef<string | null>(null);
   const lastSavedSignature = useRef("");
   const selectionSignature = useRef("");
   const selected = items.find((item) => item.id === selectedId) ?? null;
+  const displayedDistanceMethod = isDistanceMethodValidForGrid(sceneSettings.distanceMethod, gridType) ? sceneSettings.distanceMethod : "scene";
   const sceneSignals = useMemo(() => [...new Set(items.flatMap((item) => parseEmitterMetadata(item.metadata[EMITTER_KEY])?.signals ?? []))].sort(), [items]);
 
   const loadSelection = useCallback(async (nextItems?: Item[]) => {
@@ -73,24 +75,24 @@ export default function App() {
     if (connection.status !== "ready" || !connection.sceneReady) return;
     void loadSelection();
     void OBR.party.getPlayers().then(setParty);
-    void OBR.scene.grid.getScale().then((scale) => setGridUnit(scale.parsed.unit));
+    void Promise.all([OBR.scene.grid.getScale(), OBR.scene.grid.getType()]).then(([scale, type]) => { setGridUnit(scale.parsed.unit); setGridType(type); });
     const stopItems = OBR.scene.items.onChange((next) => void loadSelection(next));
     const stopPlayer = OBR.player.onChange(() => void loadSelection());
     const stopParty = OBR.party.onChange(setParty);
-    const stopGrid = OBR.scene.grid.onChange(() => void OBR.scene.grid.getScale().then((scale) => setGridUnit(scale.parsed.unit)));
+    const stopGrid = OBR.scene.grid.onChange((grid) => { setGridType(grid.type); void OBR.scene.grid.getScale().then((scale) => setGridUnit(scale.parsed.unit)); });
     return () => { stopItems(); stopPlayer(); stopParty(); stopGrid(); };
   }, [connection.sceneReady, connection.status, loadSelection]);
 
   useEffect(() => {
-    if (connection.status !== "ready") {
-      setRoomSettings(DEFAULT_ROOM_SETTINGS);
+    if (connection.status !== "ready" || !connection.sceneReady) {
+      setSceneSettings(DEFAULT_SCENE_SETTINGS);
       return;
     }
-    const applySettings = (metadata: Awaited<ReturnType<typeof OBR.room.getMetadata>>) => setRoomSettings(parseRoomSettings(metadata[SETTINGS_KEY]));
-    void OBR.room.getMetadata().then(applySettings);
-    const stopSettings = OBR.room.onMetadataChange(applySettings);
+    const applySettings = (metadata: Awaited<ReturnType<typeof OBR.scene.getMetadata>>) => setSceneSettings(parseSceneSettings(metadata[SETTINGS_KEY]));
+    void OBR.scene.getMetadata().then(applySettings);
+    const stopSettings = OBR.scene.onMetadataChange(applySettings);
     return stopSettings;
-  }, [connection.status]);
+  }, [connection.sceneReady, connection.status]);
 
   useEffect(() => {
     if (!selected) return;
@@ -116,13 +118,13 @@ export default function App() {
   const updateRule = (index: number, update: (rule: DetectionRuleV1) => DetectionRuleV1) => setDetector((current) => ({ ...current, rules: current.rules.map((rule, i) => i === index ? update(rule) : rule) }));
   const updateEffect = (ruleIndex: number, effectIndex: number, update: (effect: EffectDefinitionV1) => EffectDefinitionV1) => updateRule(ruleIndex, (rule) => ({ ...rule, effects: rule.effects.map((effect, i) => i === effectIndex ? update(effect) : effect) }));
   const toggleEmanation = (enabled: boolean) => { localStorage.setItem(EMANATION_INTEGRATION_KEY, String(enabled)); setEmanationEnabled(enabled); };
-  const updateDistanceMethod = (distanceMethod: RoomSettingsV1["distanceMethod"]) => {
-    const next: RoomSettingsV1 = { version: 1, distanceMethod };
-    setRoomSettings(next);
+  const updateDistanceMethod = (distanceMethod: SceneSettingsV1["distanceMethod"]) => {
+    const next: SceneSettingsV1 = { version: 1, distanceMethod };
+    setSceneSettings(next);
     setSettingsError(null);
-    void OBR.room.setMetadata({ [SETTINGS_KEY]: next }).catch(() => {
-      setSettingsError("Unable to save room settings.");
-      void OBR.room.getMetadata().then((metadata) => setRoomSettings(parseRoomSettings(metadata[SETTINGS_KEY])));
+    void OBR.scene.setMetadata({ [SETTINGS_KEY]: next }).catch(() => {
+      setSettingsError("Unable to save scene settings.");
+      void OBR.scene.getMetadata().then((metadata) => setSceneSettings(parseSceneSettings(metadata[SETTINGS_KEY])));
     });
   };
   const saveLibrary = (next: EffectLibraryV1) => {
@@ -185,9 +187,9 @@ export default function App() {
     {!connection.sceneReady && <div className="notice">Open a scene to configure proximity signals.</div>}
     {connection.sceneReady && connection.role !== "GM" && <div className="notice">The runtime is active. Only the GM can configure scene items.</div>}
     {connection.sceneReady && connection.role === "GM" && !selected && <div className="notice">Select exactly one scene item to configure it.</div>}
-    {connection.status === "ready" && showSettings && <section className="content-card settings-section"><div className="section-title"><div><h2>Settings</h2><p className="muted">{roomSettings.distanceMethod === "euclidean" ? "Straight-line distance" : "Scene grid distance"}</p></div></div>
+    {connection.status === "ready" && showSettings && <section className="content-card settings-section"><div className="section-title"><div><h2>Settings</h2><p className="muted">Distance settings for this scene</p></div></div>
       <div className="settings-content">
-        <label title="Choose how Sting measures ranges and determines which signal is closest."><Label tooltip="Choose how Sting measures ranges and determines which signal is closest.">Distance calculation</Label><select title="Choose the room-wide distance calculation method." value={roomSettings.distanceMethod} disabled={connection.role !== "GM"} onChange={(event) => updateDistanceMethod(event.target.value as RoomSettingsV1["distanceMethod"])}><option value="grid">Scene grid rules</option><option value="euclidean">Straight-line (Euclidean)</option></select></label>
+        <label title="Choose how Sting measures ranges and determines which signal is closest."><Label tooltip="Choose how Sting measures ranges and determines which signal is closest.">Distance calculation</Label><select title="Choose the distance calculation method for this scene." value={displayedDistanceMethod} disabled={connection.role !== "GM" || !connection.sceneReady} onChange={(event) => updateDistanceMethod(event.target.value as SceneSettingsV1["distanceMethod"])}><option value="scene">Use scene measurement type</option>{isHexGrid(gridType) ? <><option value="hexagon">Hexagon</option><option value="euclidean">Euclidean</option></> : <><option value="chessboard">Chessboard (D&amp;D 5e)</option><option value="alternating">Alternating Diagonal (D&amp;D 3.5e)</option><option value="euclidean">Euclidean</option><option value="manhattan">Manhattan</option></>}</select></label>
         <p className="muted">Controls signal range, falloff, and which signal is considered closest.</p>
         <div className="settings-subsection"><div className="section-title"><strong>Effects Library</strong><span className="library-count">{effectLibrary.entries.length}</span></div>{effectLibrary.entries.length ? <div className="library-list">{effectLibrary.entries.map((entry) => <div className="library-row" key={entry.id}><span><strong>{entry.name}</strong><small>{effectTypeLabel(entry.effect)}</small></span><button className="mini-icon danger" title={`Delete ${entry.name} from the effects library.`} aria-label={`Delete ${entry.name} from the effects library`} onClick={() => saveLibrary({ version: 1, entries: effectLibrary.entries.filter((candidate) => candidate.id !== entry.id) })}><TrashIcon /></button></div>)}</div> : <p className="muted library-empty">Save an effect to reuse it later in this browser.</p>}</div>
         <div className="settings-subsection"><strong>Extensions</strong><div className="extension-row"><div><strong>Auras &amp; Emanations</strong><p className="muted">Trigger named presets through the installed extension.</p></div><label className="toggle" title="Allow Sting rules to execute Auras &amp; Emanations actions."><input type="checkbox" checked={emanationEnabled} disabled={connection.role !== "GM"} onChange={(event) => toggleEmanation(event.target.checked)} /> Enabled</label></div></div>

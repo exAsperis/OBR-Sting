@@ -25,7 +25,7 @@ export class ProximityEngine {
   private registry = new EffectExecutorRegistry();
   private ruleStates = new Map<string, RuleSnapshot>();
   private lastActiveEffects = new Map<string, DesiredEffect>();
-  private distanceMethod: DistanceMethod = "grid";
+  private distanceMethod: DistanceMethod = "scene";
 
   constructor() {
     this.registry.register(new ShaderEffectExecutor());
@@ -62,7 +62,7 @@ export class ProximityEngine {
     if (!this.player) return;
     const graph = buildAttachmentGraph(this.latestItems);
     const signalIndex = indexEmittersBySignal(this.latestItems);
-    const [gridScale, gridDpi] = await Promise.all([OBR.scene.grid.getScale(), OBR.scene.grid.getDpi()]);
+    const [gridScale, gridDpi, gridType, gridMeasurement] = await Promise.all([OBR.scene.grid.getScale(), OBR.scene.grid.getDpi(), OBR.scene.grid.getType(), OBR.scene.grid.getMeasurement()]);
     const dispatchByType = new Map<string, EffectDispatchBatch>();
     const debug: DebugRuleState[] = [];
     const nextRuleKeys = new Set<string>();
@@ -78,7 +78,7 @@ export class ProximityEngine {
       const metadata = parseDetectorMetadata(detector.metadata[DETECTOR_KEY]);
       if (!metadata?.enabled) continue;
       for (const rule of metadata.rules.filter((entry) => entry.enabled)) {
-        const result = await evaluateRule(detector, rule, signalIndex, graph, gridScale.parsed.multiplier, gridDpi, this.distanceMethod);
+        const result = await evaluateRule(detector, rule, signalIndex, graph, gridScale.parsed.multiplier, { dpi: gridDpi, type: gridType, measurement: gridMeasurement }, this.distanceMethod);
         const baseRuleKey = `${detector.id.length}:${detector.id}|${rule.id.length}:${rule.id}`;
         const debugEffects: DebugRuleState["effects"] = [];
         for (const evaluation of result.evaluations) {

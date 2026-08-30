@@ -1,13 +1,14 @@
 import OBR from "@owlbear-rodeo/sdk";
 import { CONTEXT_MENU_ID, EMANATION_INTEGRATION_KEY, SETTINGS_KEY } from "../constants";
 import { ProximityEngine } from "./engine";
-import { parseRoomSettings } from "../settings";
+import { parseSceneSettings } from "../settings";
 import { clearSelectedFacePivots, syncSelectedFacePivots } from "./pivotDebug";
 
 OBR.onReady(() => {
   const engine = new ProximityEngine();
   let stopItems: (() => void) | undefined;
   let stopGrid: (() => void) | undefined;
+  let stopSceneMetadata: (() => void) | undefined;
   let latestItems = [] as Awaited<ReturnType<typeof OBR.scene.items.getItems>>;
 
   const refreshPlayer = async () => {
@@ -19,8 +20,10 @@ OBR.onReady(() => {
   const attachScene = async (ready: boolean) => {
     stopItems?.();
     stopGrid?.();
+    stopSceneMetadata?.();
     stopItems = undefined;
     stopGrid = undefined;
+    stopSceneMetadata = undefined;
     if (!ready) {
       latestItems = [];
       await engine.clear();
@@ -32,8 +35,10 @@ OBR.onReady(() => {
     void syncSelectedFacePivots(latestItems);
     stopItems = OBR.scene.items.onChange((items) => { latestItems = items; engine.setItems(items); void syncSelectedFacePivots(items); });
     stopGrid = OBR.scene.grid.onChange(() => engine.schedule());
+    const applySettings = (metadata: Awaited<ReturnType<typeof OBR.scene.getMetadata>>) => engine.setDistanceMethod(parseSceneSettings(metadata[SETTINGS_KEY]).distanceMethod);
+    applySettings(await OBR.scene.getMetadata());
+    stopSceneMetadata = OBR.scene.onMetadataChange(applySettings);
   };
-  const refreshSettings = async () => engine.setDistanceMethod(parseRoomSettings((await OBR.room.getMetadata())[SETTINGS_KEY]).distanceMethod);
 
   const iconUrl = new URL("./icon.svg", window.location.href).href;
   void OBR.contextMenu.create({
@@ -49,18 +54,17 @@ OBR.onReady(() => {
   const stopReady = OBR.scene.onReadyChange((ready) => void attachScene(ready));
   const stopPlayer = OBR.player.onChange(() => void refreshPlayer());
   const stopParty = OBR.party.onChange((party) => engine.setParty(party));
-  const stopRoomMetadata = OBR.room.onMetadataChange((metadata) => engine.setDistanceMethod(parseRoomSettings(metadata[SETTINGS_KEY]).distanceMethod));
   const integrationChanged = (event: StorageEvent) => { if (event.key === EMANATION_INTEGRATION_KEY) engine.schedule(); };
   window.addEventListener("storage", integrationChanged);
-  void Promise.all([OBR.scene.isReady().then(attachScene), refreshPlayer(), refreshParty(), refreshSettings()]);
+  void Promise.all([OBR.scene.isReady().then(attachScene), refreshPlayer(), refreshParty()]);
 
   window.addEventListener("beforeunload", () => {
     stopItems?.();
     stopGrid?.();
+    stopSceneMetadata?.();
     stopReady();
     stopPlayer();
     stopParty();
-    stopRoomMetadata();
     window.removeEventListener("storage", integrationChanged);
     void OBR.contextMenu.remove(CONTEXT_MENU_ID);
     void engine.clear();

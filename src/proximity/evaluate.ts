@@ -1,4 +1,4 @@
-import type { Item } from "@owlbear-rodeo/sdk";
+import type { GridMeasurement, GridType, Item } from "@owlbear-rodeo/sdk";
 import { EMITTER_KEY } from "../constants";
 import { parseEmitterMetadata } from "../metadata/parse";
 import { isSameAttachmentFamily } from "../scene/attachments";
@@ -29,7 +29,7 @@ export async function evaluateRule(
   signalIndex: Map<string, Item[]>,
   graph: AttachmentGraph,
   scaleMultiplier: number,
-  dpi: number,
+  grid: { dpi: number; type: GridType; measurement: GridMeasurement },
   distanceMethod: DistanceMethod,
 ): Promise<RuleEvaluationSet> {
   const matches = (signalIndex.get(rule.signal) ?? []).filter((item) =>
@@ -37,7 +37,7 @@ export async function evaluateRule(
   );
   const candidates: RuleEvaluation[] = [];
   for (const emitter of matches) {
-    const distance = await getSceneDistance(detector.position, emitter.position, scaleMultiplier, dpi, distanceMethod);
+    const distance = await getSceneDistance(detector.position, emitter.position, scaleMultiplier, grid, distanceMethod);
     candidates.push({
       detector,
       rule,

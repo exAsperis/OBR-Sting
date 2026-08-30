@@ -9,7 +9,7 @@ import { getSceneDistance, toSceneUnits } from "./proximity/distance";
 import { buildAttachmentGraph, isSameAttachmentFamily, resolveCarrier, resolveParent } from "./scene/attachments";
 import { isAudienceMember, resolveEffectTarget } from "./scene/resolve";
 import { normalizeSignal, normalizeSignals } from "./signals/normalize";
-import { DEFAULT_ROOM_SETTINGS, parseRoomSettings } from "./settings";
+import { DEFAULT_SCENE_SETTINGS, parseSceneSettings } from "./settings";
 import type { DetectionRuleV1, EffectAudienceV1, EffectDefinitionV1, ShaderEffectDefinitionV1 } from "./types";
 
 const item = (id: string, attachedTo?: string, owner = `${id}-owner`): Item => ({
@@ -69,7 +69,18 @@ describe("versioned detector parsing", () => {
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [rule("a"), rule("a")] })).toBeNull();
   });
   it("calculates straight-line distance from scene pixels and grid DPI", async () => {
-    await expect(getSceneDistance({ x: 0, y: 0 }, { x: 300, y: 400 }, 5, 100, "euclidean")).resolves.toBe(25);
+    await expect(getSceneDistance({ x: 0, y: 0 }, { x: 300, y: 400 }, 5, { dpi: 100, type: "SQUARE", measurement: "CHEBYSHEV" }, "euclidean")).resolves.toBe(25);
+  });
+  it("supports every square-grid override", async () => {
+    const grid = { dpi: 100, type: "SQUARE" as const, measurement: "CHEBYSHEV" as const };
+    await expect(getSceneDistance({ x: 0, y: 0 }, { x: 300, y: 200 }, 5, grid, "chessboard")).resolves.toBe(15);
+    await expect(getSceneDistance({ x: 0, y: 0 }, { x: 300, y: 200 }, 5, grid, "alternating")).resolves.toBe(20);
+    await expect(getSceneDistance({ x: 0, y: 0 }, { x: 300, y: 200 }, 5, grid, "manhattan")).resolves.toBe(25);
+  });
+  it("counts both hex orientations and projected isometric cells", async () => {
+    await expect(getSceneDistance({ x: 0, y: 0 }, { x: 100, y: 0 }, 5, { dpi: 100, type: "HEX_VERTICAL", measurement: "CHEBYSHEV" }, "hexagon")).resolves.toBe(5);
+    await expect(getSceneDistance({ x: 0, y: 0 }, { x: 0, y: 100 }, 5, { dpi: 100, type: "HEX_HORIZONTAL", measurement: "CHEBYSHEV" }, "hexagon")).resolves.toBe(5);
+    await expect(getSceneDistance({ x: 0, y: 0 }, { x: Math.sqrt(3) * 50, y: 50 }, 5, { dpi: 100, type: "ISOMETRIC", measurement: "CHEBYSHEV" }, "chessboard")).resolves.toBe(5);
   });
   it("accepts closest and all aggregation modes", () => {
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [rule("closest")] })?.rules[0].aggregation).toBe("nearest");
@@ -221,11 +232,12 @@ describe("runtime effect identity", () => {
   });
 });
 
-describe("room settings", () => {
+describe("scene settings", () => {
   it("parses supported distance methods and defaults invalid settings", () => {
-    expect(parseRoomSettings({ version: 1, distanceMethod: "euclidean" })).toEqual({ version: 1, distanceMethod: "euclidean" });
-    expect(parseRoomSettings({ version: 1, distanceMethod: "taxicab" })).toEqual(DEFAULT_ROOM_SETTINGS);
-    expect(parseRoomSettings(undefined)).toEqual(DEFAULT_ROOM_SETTINGS);
+    expect(parseSceneSettings({ version: 1, distanceMethod: "euclidean" })).toEqual({ version: 1, distanceMethod: "euclidean" });
+    expect(parseSceneSettings({ version: 1, distanceMethod: "grid" })).toEqual({ version: 1, distanceMethod: "scene" });
+    expect(parseSceneSettings({ version: 1, distanceMethod: "taxicab" })).toEqual(DEFAULT_SCENE_SETTINGS);
+    expect(parseSceneSettings(undefined)).toEqual(DEFAULT_SCENE_SETTINGS);
   });
 });
 
@@ -257,9 +269,10 @@ describe("rule aggregation", () => {
     const items = [detector, hiddenEmitter, visibleEmitter];
     const signalIndex = indexEmittersBySignal(items);
     const graph = buildAttachmentGraph(items);
-    await expect(evaluateRule(detector, { ...rule("include"), aggregation: "all" }, signalIndex, graph, 5, 100, "euclidean"))
+    const grid = { dpi: 100, type: "SQUARE" as const, measurement: "CHEBYSHEV" as const };
+    await expect(evaluateRule(detector, { ...rule("include"), aggregation: "all" }, signalIndex, graph, 5, grid, "euclidean"))
       .resolves.toMatchObject({ matchingEmitterCount: 2 });
-    await expect(evaluateRule(detector, { ...rule("ignore"), aggregation: "all", ignoreHidden: true }, signalIndex, graph, 5, 100, "euclidean"))
+    await expect(evaluateRule(detector, { ...rule("ignore"), aggregation: "all", ignoreHidden: true }, signalIndex, graph, 5, grid, "euclidean"))
       .resolves.toMatchObject({ matchingEmitterCount: 1, evaluations: [{ detectedEmitter: { id: "visible" } }] });
   });
 });
