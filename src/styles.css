@@ -85,6 +85,10 @@ code { color: var(--obr-muted); font-size: 10px; word-break: break-all; }
 .extension-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 13px; }
 .extension-row > div { min-width: 0; }
 .extension-row .muted { margin-top: 3px; }
+.integration-identity { display: flex; align-items: center; gap: 9px; }
+.integration-identity > div { min-width: 0; }
+.integration-identity img { width: 32px; height: 32px; flex: 0 0 32px; border-radius: 7px; object-fit: contain; }
+.integration-disclaimer { margin: 13px 0 0; padding-top: 10px; border-top: 1px solid var(--border); color: var(--obr-muted); font-size: 10px; line-height: 1.45; }
 .title-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .eyebrow { display: block; color: var(--obr-primary); font-size: 10px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
 .secondary-button { background: color-mix(in srgb, var(--obr-paper) 65%, transparent); color: var(--obr-primary); border-color: color-mix(in srgb, var(--obr-primary) 30%, transparent); }
