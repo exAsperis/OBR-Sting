@@ -243,6 +243,19 @@ describe("attachment graph and targets", () => {
   });
 });
 
+describe("editable metadata names", () => {
+  it("preserves valid rule and effect names", () => {
+    expect(parseEffectDefinition({ ...effect(), name: "Warning glow" })).toMatchObject({ name: "Warning glow" });
+    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("named", [{ ...effect(), name: "Warning glow" }]), name: "Intruder alert" }] }))
+      .toMatchObject({ rules: [{ name: "Intruder alert", effects: [{ name: "Warning glow" }] }] });
+  });
+
+  it("rejects blank or oversized names", () => {
+    expect(parseEffectDefinition({ ...effect(), name: " " })).toBeNull();
+    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("named"), name: "x".repeat(81) }] })).toBeNull();
+  });
+});
+
 describe("runtime effect identity", () => {
   it("cannot collide across rules, effects, targets, or separator characters", () => {
     const keys = [

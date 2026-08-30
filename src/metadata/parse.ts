@@ -53,6 +53,8 @@ function parseAudience(value: unknown): EffectAudienceV1 | null {
 
 export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null {
   if (!record(value) || !id(value.id) || typeof value.enabled !== "boolean") return null;
+  if (value.name !== undefined && (typeof value.name !== "string" || !value.name.trim() || value.name.trim().length > 80)) return null;
+  const named = value.name !== undefined ? { name: (value.name as string).trim() } : {};
   const target = parseTarget(value.target);
   if (!target) return null;
   if (value.type === "mechanical") {
@@ -64,6 +66,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
       if (!finite(pivotX) || !finite(pivotY) || pivotX < -500 || pivotX > 500 || pivotY < -500 || pivotY > 500) return null;
       return {
         id: value.id,
+        ...named,
         type: "mechanical",
         enabled: value.enabled,
         action: "face",
@@ -78,6 +81,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
       if (!["hidden", "shown"].includes(String(value.visibility)) || typeof value.reverseOnExit !== "boolean") return null;
       return {
         id: value.id,
+        ...named,
         type: "mechanical",
         enabled: value.enabled,
         action: "visibility",
@@ -95,6 +99,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     if (!id(value.presetName) || typeof value.removeAllOnDeactivate !== "boolean") return null;
     return {
       id: value.id,
+      ...named,
       type: "integration",
       enabled: value.enabled,
       lifecycle: "continuous",
@@ -114,6 +119,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     if (!["continuous", "enter", "exit", "nearest-change"].includes(String(value.lifecycle)) || !jsonObject(value.parameters)) return null;
     return {
       id: value.id,
+      ...named,
       type: "integration",
       enabled: value.enabled,
       lifecycle: value.lifecycle as IntegrationEffectDefinitionV1["lifecycle"],
@@ -195,6 +201,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   if (value.beamWidthStrengthLink !== undefined && value.beamWidth === undefined) return null;
   return {
     id: value.id,
+    ...named,
     type: "shader",
     enabled: value.enabled,
     target,
@@ -224,6 +231,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
 
 export function parseDetectionRule(value: unknown): DetectionRuleV1 | null {
   if (!record(value) || !id(value.id) || typeof value.enabled !== "boolean") return null;
+  if (value.name !== undefined && (typeof value.name !== "string" || !value.name.trim() || value.name.trim().length > 80)) return null;
   const signal = typeof value.signal === "string" ? normalizeSignal(value.signal) : "";
   if (!signal || !["nearest", "all"].includes(String(value.aggregation)) || !["binary", "linear", "smoothstep", "logarithmic"].includes(String(value.falloff))) return null;
   if (value.ignoreHidden !== undefined && typeof value.ignoreHidden !== "boolean") return null;
@@ -239,6 +247,7 @@ export function parseDetectionRule(value: unknown): DetectionRuleV1 | null {
   if (new Set(effects.map((effect) => effect.id)).size !== effects.length) return null;
   return {
     id: value.id,
+    ...(value.name !== undefined ? { name: (value.name as string).trim() } : {}),
     enabled: value.enabled,
     signal,
     range: { outer: value.range.outer, inner: value.range.inner },

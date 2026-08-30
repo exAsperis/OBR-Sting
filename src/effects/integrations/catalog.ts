@@ -26,7 +26,7 @@ export interface IntegrationProviderCatalogEntry {
 export const INTEGRATION_CATALOG: readonly IntegrationProviderCatalogEntry[] = [{
   id: "auras-emanations",
   displayName: "Auras & Emanations",
-  iconUrl: "./icon-reticle.svg",
+  iconUrl: "https://owlbear-emanation.pages.dev/logo.png",
   schemaVersion: 1,
   actions: [{
     id: "preset-aura",

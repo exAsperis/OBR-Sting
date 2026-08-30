@@ -29,6 +29,7 @@ export type EffectAudienceV1 =
 
 export interface ShaderEffectDefinitionV1 {
   id: string;
+  name?: string;
   type: "shader";
   enabled: boolean;
   target: EffectTargetV1;
@@ -82,6 +83,7 @@ export interface ShaderEffectDefinitionV1 {
 
 export interface IntegrationEffectDefinitionV1 {
   id: string;
+  name?: string;
   type: "integration";
   enabled: boolean;
   lifecycle: EffectLifecycle;
@@ -95,6 +97,7 @@ export interface IntegrationEffectDefinitionV1 {
 
 export interface MechanicalFaceEffectDefinitionV1 {
   id: string;
+  name?: string;
   type: "mechanical";
   enabled: boolean;
   action: "face";
@@ -110,6 +113,7 @@ export interface MechanicalFaceEffectDefinitionV1 {
 
 export interface MechanicalVisibilityEffectDefinitionV1 {
   id: string;
+  name?: string;
   type: "mechanical";
   enabled: boolean;
   action: "visibility";
@@ -124,6 +128,7 @@ export type EffectDefinitionV1 = ShaderEffectDefinitionV1 | IntegrationEffectDef
 
 export interface DetectionRuleV1 {
   id: string;
+  name?: string;
   enabled: boolean;
   signal: string;
   range: { outer: number; inner: number };
