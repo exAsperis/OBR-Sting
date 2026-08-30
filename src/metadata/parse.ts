@@ -12,6 +12,7 @@ import type {
   ShaderAnimationMode,
   ShaderEffectDefinitionV1,
   ShaderPreset,
+  ShaderShape,
 } from "../types";
 
 const record = (value: unknown): value is Record<string, unknown> =>
@@ -122,6 +123,8 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   const legacyPreset = ["outline", "pulse", "flicker"].includes(String(value.preset)) ? String(value.preset) : null;
   const presets: ShaderPreset[] = ["glow", "beam"];
   if ((!legacyPreset && !presets.includes(value.preset as ShaderPreset)) || !color(value.color)) return null;
+  const shapes: ShaderShape[] = ["circle", "square"];
+  if (value.shape !== undefined && !shapes.includes(value.shape as ShaderShape)) return null;
   if (!finite(value.maxIntensity) || value.maxIntensity < 0 || value.maxIntensity > 2) return null;
   if (!finite(value.spread) || value.spread <= 0 || value.spread > 4) return null;
   let geometry: ShaderEffectDefinitionV1["geometry"];
@@ -169,6 +172,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     target,
     audience,
     preset: legacyPreset ? "glow" : value.preset as ShaderPreset,
+    shape: value.shape as ShaderShape ?? "circle",
     color: value.color.toLowerCase(),
     // Preserve the old outline's approximate opacity and feather width while
     // migrating it to the unified glow shader.
@@ -188,6 +192,7 @@ export function parseDetectionRule(value: unknown): DetectionRuleV1 | null {
   if (!record(value) || !id(value.id) || typeof value.enabled !== "boolean") return null;
   const signal = typeof value.signal === "string" ? normalizeSignal(value.signal) : "";
   if (!signal || !["nearest", "all"].includes(String(value.aggregation)) || !["binary", "linear", "smoothstep"].includes(String(value.falloff))) return null;
+  if (value.ignoreHidden !== undefined && typeof value.ignoreHidden !== "boolean") return null;
   if (!record(value.range) || !finite(value.range.outer) || !finite(value.range.inner)) return null;
   if (value.range.outer <= 0 || value.range.inner < 0 || value.range.inner >= value.range.outer) return null;
   if (!Array.isArray(value.effects)) return null;
@@ -204,6 +209,7 @@ export function parseDetectionRule(value: unknown): DetectionRuleV1 | null {
     signal,
     range: { outer: value.range.outer, inner: value.range.inner },
     aggregation: value.aggregation as DetectionRuleV1["aggregation"],
+    ignoreHidden: value.ignoreHidden ?? false,
     falloff: value.falloff as DetectionRuleV1["falloff"],
     effects,
   };

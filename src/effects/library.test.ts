@@ -8,6 +8,7 @@ const glow = {
   target: { type: "detector" as const },
   audience: { type: "everyone" as const },
   preset: "glow" as const,
+  shape: "circle" as const,
   color: "#55aaff",
   maxIntensity: 1,
   spread: 1,

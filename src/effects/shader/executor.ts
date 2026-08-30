@@ -55,6 +55,7 @@ function uniforms(effect: ShaderEffectDefinitionV1, strength: number, scale: num
     { name: "radialDirection", value: effect.animation?.radialDirection === "inward" ? -1 : 1 },
     { name: "waveWidth", value: effect.animation?.waveWidth ?? 0.22 },
     { name: "spread", value: effect.spread },
+    { name: "shapeMode", value: effect.shape === "square" ? 1 : 0 },
     { name: "centerOffset", value: { x: geometry.offsetX / 100 / scale, y: geometry.offsetY / 100 / scale } },
     { name: "innerRadius", value: geometry.innerRadius / 100 / scale },
     { name: "outerRadius", value: geometry.outerRadius / 100 / scale },
@@ -74,7 +75,7 @@ function uniforms(effect: ShaderEffectDefinitionV1, strength: number, scale: num
 }
 
 function configHash(effect: ShaderEffectDefinitionV1): string {
-  return JSON.stringify([effect.preset, effect.color, effect.maxIntensity, effect.spread, effect.geometry, effect.beamWidth, effect.animation]);
+  return JSON.stringify([effect.preset, effect.shape, effect.color, effect.maxIntensity, effect.spread, effect.geometry, effect.beamWidth, effect.animation]);
 }
 
 export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefinitionV1> {

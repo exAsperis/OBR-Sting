@@ -32,7 +32,9 @@ export async function evaluateRule(
   dpi: number,
   distanceMethod: DistanceMethod,
 ): Promise<RuleEvaluationSet> {
-  const matches = (signalIndex.get(rule.signal) ?? []).filter((item) => !isSameAttachmentFamily(detector, item, graph));
+  const matches = (signalIndex.get(rule.signal) ?? []).filter((item) =>
+    !isSameAttachmentFamily(detector, item, graph) && (!rule.ignoreHidden || item.visible)
+  );
   const candidates: RuleEvaluation[] = [];
   for (const emitter of matches) {
     const distance = await getSceneDistance(detector.position, emitter.position, scaleMultiplier, dpi, distanceMethod);

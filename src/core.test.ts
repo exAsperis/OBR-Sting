@@ -1,15 +1,16 @@
 import type { Item } from "@owlbear-rodeo/sdk";
 import { describe, expect, it } from "vitest";
+import { EMITTER_KEY } from "./constants";
 import { buildRuntimeEffectKey } from "./effects/runtimeKey";
 import { parseDetectorMetadata, parseEffectDefinition, parseEmitterMetadata } from "./metadata/parse";
 import { calculateStrength } from "./proximity/strength";
-import { selectRuleEvaluations } from "./proximity/evaluate";
+import { evaluateRule, indexEmittersBySignal, selectRuleEvaluations } from "./proximity/evaluate";
 import { getSceneDistance, toSceneUnits } from "./proximity/distance";
 import { buildAttachmentGraph, isSameAttachmentFamily, resolveCarrier, resolveParent } from "./scene/attachments";
 import { isAudienceMember, resolveEffectTarget } from "./scene/resolve";
 import { normalizeSignal, normalizeSignals } from "./signals/normalize";
 import { DEFAULT_ROOM_SETTINGS, parseRoomSettings } from "./settings";
-import type { DetectionRuleV1, EffectAudienceV1, EffectDefinitionV1 } from "./types";
+import type { DetectionRuleV1, EffectAudienceV1, EffectDefinitionV1, ShaderEffectDefinitionV1 } from "./types";
 
 const item = (id: string, attachedTo?: string, owner = `${id}-owner`): Item => ({
   id, type: "IMAGE", name: id, visible: true, locked: false, createdUserId: owner,
@@ -18,13 +19,13 @@ const item = (id: string, attachedTo?: string, owner = `${id}-owner`): Item => (
   ...(attachedTo ? { attachedTo } : {}),
 });
 
-const effect = (id = "effect-1"): EffectDefinitionV1 => ({
+const effect = (id = "effect-1"): ShaderEffectDefinitionV1 => ({
   id, type: "shader", enabled: true, target: { type: "detector" }, audience: { type: "everyone" },
-  preset: "glow", color: "#55aaff", maxIntensity: 1, spread: 1,
+  preset: "glow", shape: "circle", color: "#55aaff", maxIntensity: 1, spread: 1,
 });
 
 const rule = (id: string, effects: EffectDefinitionV1[] = []): DetectionRuleV1 => ({
-  id, enabled: true, signal: "orc", range: { outer: 60, inner: 5 }, aggregation: "nearest", falloff: "smoothstep", effects,
+  id, enabled: true, signal: "orc", range: { outer: 60, inner: 5 }, aggregation: "nearest", ignoreHidden: false, falloff: "smoothstep", effects,
 });
 
 describe("signal normalization", () => {
@@ -75,11 +76,24 @@ describe("versioned detector parsing", () => {
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("all"), aggregation: "all" }] })?.rules[0].aggregation).toBe("all");
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("bad"), aggregation: "count" }] })).toBeNull();
   });
+  it("defaults legacy rules to detecting hidden emitters and validates ignoreHidden", () => {
+    const { ignoreHidden: _ignoreHidden, ...legacy } = rule("legacy");
+    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [legacy] })?.rules[0].ignoreHidden).toBe(false);
+    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("ignore"), ignoreHidden: true }] })?.rules[0].ignoreHidden).toBe(true);
+    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("bad"), ignoreHidden: "yes" }] })).toBeNull();
+  });
   it("parses valid shader geometry and rejects inverted radii", () => {
     const configured = { ...effect(), geometry: { offsetX: 20, offsetY: -15, innerRadius: 30, outerRadius: 120 } };
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [rule("a", [configured])] })?.rules[0].effects[0]).toMatchObject(configured);
     const invalid = { ...effect(), geometry: { offsetX: 0, offsetY: 0, innerRadius: 80, outerRadius: 40 } };
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [rule("a", [invalid])] })).toBeNull();
+  });
+
+  it("parses shader shapes, defaults legacy effects to circle, and rejects unknown shapes", () => {
+    expect(parseEffectDefinition({ ...effect(), shape: "square" })).toMatchObject({ type: "shader", shape: "square" });
+    const { shape: _shape, ...legacy } = effect();
+    expect(parseEffectDefinition(legacy)).toMatchObject({ type: "shader", shape: "circle" });
+    expect(parseEffectDefinition({ ...effect(), shape: "triangle" })).toBeNull();
   });
 
   it("migrates legacy outlines to crisp glows", () => {
@@ -225,5 +239,17 @@ describe("rule aggregation", () => {
     const allRule = { ...rule("all"), aggregation: "all" as const };
     const selected = selectRuleEvaluations(allRule, [evaluation("far", 70, 0), evaluation("middle", 30, 0.5), evaluation("near", 10, 0.9)]);
     expect(selected.map((entry) => entry.detectedEmitter?.id)).toEqual(["near", "middle"]);
+  });
+
+  it("excludes hidden emitters only when the rule requests it", async () => {
+    const hiddenEmitter = { ...item("hidden"), visible: false, metadata: { [EMITTER_KEY]: { version: 1, signals: ["orc"] } } };
+    const visibleEmitter = { ...item("visible"), position: { x: 10, y: 0 }, metadata: { [EMITTER_KEY]: { version: 1, signals: ["orc"] } } };
+    const items = [detector, hiddenEmitter, visibleEmitter];
+    const signalIndex = indexEmittersBySignal(items);
+    const graph = buildAttachmentGraph(items);
+    await expect(evaluateRule(detector, { ...rule("include"), aggregation: "all" }, signalIndex, graph, 5, 100, "euclidean"))
+      .resolves.toMatchObject({ matchingEmitterCount: 2 });
+    await expect(evaluateRule(detector, { ...rule("ignore"), aggregation: "all", ignoreHidden: true }, signalIndex, graph, 5, 100, "euclidean"))
+      .resolves.toMatchObject({ matchingEmitterCount: 1, evaluations: [{ detectedEmitter: { id: "visible" } }] });
   });
 });

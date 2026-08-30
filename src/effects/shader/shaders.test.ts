@@ -26,6 +26,8 @@ describe("shader presets", () => {
       expect(shader).toContain("radialDirection");
       expect(shader).toContain("waveWidth");
       expect(shader).toContain("distanceFromCenter - innerRadius");
+      expect(shader).toContain("shapeMode");
+      expect(shader).toContain("squareDistance");
     }
   });
 

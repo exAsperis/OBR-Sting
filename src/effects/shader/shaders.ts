@@ -37,6 +37,7 @@ uniform float animationMode;
 uniform float radialDirection;
 uniform float waveWidth;
 uniform float spread;
+uniform float shapeMode;
 uniform vec2 centerOffset;
 uniform float innerRadius;
 uniform float outerRadius;
@@ -56,7 +57,9 @@ half4 main(float2 coord) {
     rotationCos * centered.x + rotationSin * centered.y,
     -rotationSin * centered.x + rotationCos * centered.y
   ) / max(effectSize, vec2(0.05));
-  float distanceFromCenter = length(centered);
+  float circleDistance = length(centered);
+  float squareDistance = max(abs(centered.x), abs(centered.y));
+  float distanceFromCenter = mix(circleDistance, squareDistance, step(0.5, shapeMode));
   ${mask}
   float alpha = clamp(strength * animationFactor(distanceFromCenter) * mask * ${opacity.toFixed(2)}, 0.0, 1.0);
   return half4(half3(signalColor) * alpha, alpha);

@@ -2,6 +2,7 @@ import type { Item, Player } from "@owlbear-rodeo/sdk";
 
 export type Falloff = "binary" | "linear" | "smoothstep";
 export type ShaderPreset = "glow" | "beam";
+export type ShaderShape = "circle" | "square";
 export type ShaderAnimationMode = "none" | "pulse" | "flicker" | "radial-pulse";
 export type EffectLifecycle = "continuous" | "enter" | "exit" | "nearest-change";
 export type JsonPrimitive = string | number | boolean | null;
@@ -31,6 +32,7 @@ export interface ShaderEffectDefinitionV1 {
   target: EffectTargetV1;
   audience: EffectAudienceV1;
   preset: ShaderPreset;
+  shape: ShaderShape;
   color: string;
   maxIntensity: number;
   spread: number;
@@ -103,6 +105,7 @@ export interface DetectionRuleV1 {
   signal: string;
   range: { outer: number; inner: number };
   aggregation: "nearest" | "all";
+  ignoreHidden: boolean;
   falloff: Falloff;
   effects: EffectDefinitionV1[];
 }
