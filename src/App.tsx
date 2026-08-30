@@ -8,7 +8,7 @@ import { createIntegrationEffect, INTEGRATION_CATALOG } from "./effects/integrat
 import { IntegrationEffectEditor } from "./effects/integrations/ui/IntegrationEffectEditor";
 import { instantiateLibraryEffect, loadEffectLibrary, type EffectLibraryEntryV1, type EffectLibraryV1 } from "./effects/library";
 import { instantiateLibraryRule, loadRuleLibrary, type RuleLibraryEntryV1, type RuleLibraryV1 } from "./rules/library";
-import { normalizeSignal } from "./signals/normalize";
+import { normalizeSignal, parseEmitterSignal } from "./signals/normalize";
 import type { DebugRuleState, DetectionRuleV1, DetectorMetadataV1, DynamicValueRange, EffectAudienceV1, EffectDefinitionV1, EffectTargetV1, EmitterMetadataV1, MechanicalEffectDefinitionV1, ShaderDynamicField, ShaderEffectDefinitionV1, StrengthLinkDirection } from "./types";
 import { StatusPanel } from "./components/StatusPanel";
 import { useOwlbear } from "./hooks/useOwlbear";
@@ -44,7 +44,7 @@ export default function App() {
   const [items, setItems] = useState<Item[]>([]);
   const [party, setParty] = useState<Player[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [emitter, setEmitter] = useState<EmitterMetadataV1>({ version: 1, signals: [] });
+  const [emitter, setEmitter] = useState<EmitterMetadataV1>({ version: 1, enabled: true, signals: [] });
   const [detector, setDetector] = useState<DetectorMetadataV1>({ version: 1, enabled: true, rules: [] });
   const [signalDraft, setSignalDraft] = useState("");
   const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -106,7 +106,7 @@ export default function App() {
 
   useEffect(() => {
     if (!selected) return;
-    const nextEmitter = parseEmitterMetadata(selected.metadata[EMITTER_KEY]) ?? { version: 1 as const, signals: [] };
+    const nextEmitter = parseEmitterMetadata(selected.metadata[EMITTER_KEY]) ?? { version: 1 as const, enabled: true, signals: [] };
     const nextDetector = parseDetectorMetadata(selected.metadata[DETECTOR_KEY]) ?? { version: 1 as const, enabled: true, rules: [] };
     setEmitter(nextEmitter);
     setDetector(nextDetector);
@@ -171,7 +171,16 @@ export default function App() {
     const entry: RuleLibraryEntryV1 = { id: crypto.randomUUID(), name: name.slice(0, 80), rule: structuredClone(normalized) };
     saveRuleLibrary({ version: 1, entries: [...ruleLibrary.entries, entry] });
   };
-  const addSignal = () => { const value = normalizeSignal(signalDraft); if (value && !emitter.signals.includes(value)) setEmitter({ version: 1, signals: [...emitter.signals, value] }); setSignalDraft(""); };
+  const addSignal = () => {
+    const parsed = parseEmitterSignal(signalDraft);
+    if (!parsed) {
+      setSaveError("Use a signal name optionally followed by a positive range, such as light[20].");
+      return;
+    }
+    if (!emitter.signals.includes(parsed.tag)) setEmitter({ ...emitter, signals: [...emitter.signals, parsed.tag] });
+    setSignalDraft("");
+    setSaveError(null);
+  };
 
   useEffect(() => {
     if (!selected || connection.role !== "GM" || hydratedItemId.current !== selected.id) return;
@@ -181,7 +190,7 @@ export default function App() {
       setAutosaveStatus("error");
       return;
     }
-    const normalizedEmitter = parseEmitterMetadata(emitter) ?? { version: 1 as const, signals: [] };
+    const normalizedEmitter = parseEmitterMetadata(emitter) ?? { version: 1 as const, enabled: true, signals: [] };
     const normalizedDetectorValue = normalizedDetector ?? { version: 1 as const, enabled: detector.enabled, rules: [] };
     const signature = configurationSignature(normalizedEmitter, normalizedDetectorValue);
     if (signature === lastSavedSignature.current) return;
@@ -227,7 +236,7 @@ export default function App() {
     </section>}
     {showDebug ? <DebugView rules={debug} /> : selected && !showSettings && connection.role === "GM" ? <>
       <section className="item-heading"><div className="selected-thumbnail">{isImage(selected) && selected.image.mime.startsWith("image/") ? <img src={selected.image.url} alt="" /> : <span aria-hidden="true">◇</span>}</div><div><span className="eyebrow">Selected item</span><h2>{selected.name || "Unnamed item"}</h2><code>{selected.id}</code></div></section>
-      <section className="content-card"><h2 title="Add text tags to this item that can be detected by detector items.">Emitter</h2><div className="chips">{emitter.signals.map((signal) => <button title={`Remove the ${signal} signal from this item.`} key={signal} className="chip" onClick={() => confirmDelete(`Remove the “${signal}” signal from this item?`, () => setEmitter({ version: 1, signals: emitter.signals.filter((value) => value !== signal) }))}>{signal}<span>×</span></button>)}</div><div className="input-row"><SignalCombobox value={signalDraft} options={sceneSignals} onChange={setSignalDraft} onEnter={addSignal} /><button title="Add this signal to the selected item." onClick={addSignal}>Add</button></div></section>
+      <section className="content-card"><div className="section-title"><h2 title="Add detectable signal tags. End a tag with a range such as [20] to cap it in scene units.">Emitter</h2><label className="toggle" title="Enable or disable every signal emitted by this item."><input type="checkbox" aria-label="Enable emitter" checked={emitter.enabled} onChange={(event) => setEmitter({ ...emitter, enabled: event.target.checked })} /></label></div><div className="chips">{emitter.signals.map((signal) => <button title={`Remove the ${signal} signal from this item.`} key={signal} className="chip" onClick={() => setEmitter({ ...emitter, signals: emitter.signals.filter((value) => value !== signal) })}>{signal}<span>×</span></button>)}</div><div className="input-row"><SignalCombobox value={signalDraft} options={sceneSignals} onChange={setSignalDraft} onEnter={addSignal} /><button title="Add this signal to the selected item." onClick={addSignal}>Add</button></div></section>
       <section className="content-card"><div className="section-title"><h2 title="Add detection rules that respond when matching emitter tags are within range.">Detector</h2><label className="toggle" title="Enable or disable every detection rule on this item."><input type="checkbox" aria-label="Enable detector" checked={detector.enabled} onChange={(event) => setDetector({ ...detector, enabled: event.target.checked })} /></label></div>{detector.rules.map((rule, ruleIndex) => <RuleEditor key={rule.id} rule={rule} index={ruleIndex} unit={gridUnit} items={items} party={party} emanationEnabled={emanationEnabled} library={effectLibrary.entries} onSaveRule={() => saveRuleToLibrary(rule)} onSaveEffect={saveEffectToLibrary} onChange={(update) => updateRule(ruleIndex, update)} onEffect={(effectIndex, update) => updateEffect(ruleIndex, effectIndex, update)} onDelete={() => confirmDelete(`Delete Rule ${ruleIndex + 1} and all of its effects?`, () => setDetector({ ...detector, rules: detector.rules.filter((_, i) => i !== ruleIndex) }))} />)}<div className="rule-add-actions"><button className="wide-button" title="Add another detection rule to this item." onClick={() => setDetector({ ...detector, rules: [...detector.rules, newRule()] })}>+ Add detection rule</button><button className={`mini-icon${ruleLibraryOpen ? " active" : ""}`} title={ruleLibrary.entries.length ? "Add a saved rule from your browser-local library." : "Your browser-local rules library is empty."} aria-label="Add rule from the rules library" disabled={!ruleLibrary.entries.length} onClick={() => setRuleLibraryOpen((value) => !value)}><BookIcon /></button></div>{ruleLibraryOpen && <div className="library-picker">{ruleLibrary.entries.map((entry) => <button key={entry.id} title={`Add ${entry.name} and all of its effects.`} onClick={() => { setDetector((current) => ({ ...current, rules: [...current.rules, instantiateLibraryRule(entry)] })); setRuleLibraryOpen(false); }}><span>{entry.name}</span><small>{entry.rule.signal} · {entry.rule.effects.length} effect{entry.rule.effects.length === 1 ? "" : "s"}</small></button>)}</div>}</section>
       {saveError && <div className="validation-error" role="alert">{saveError}</div>}<div className="autosave-status" role="status">{autosaveStatus === "saving" ? "Saving…" : autosaveStatus === "error" ? "Not saved" : "Saved automatically"}</div>
     </> : null}

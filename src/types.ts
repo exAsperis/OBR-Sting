@@ -143,7 +143,7 @@ export interface DetectionRuleV1 {
   effects: EffectDefinitionV1[];
 }
 
-export interface EmitterMetadataV1 { version: 1; signals: string[] }
+export interface EmitterMetadataV1 { version: 1; enabled: boolean; signals: string[] }
 export interface DetectorMetadataV1 { version: 1; enabled: boolean; rules: DetectionRuleV1[] }
 
 export interface AttachmentGraph {

@@ -6,14 +6,27 @@ import type { AttachmentGraph, DetectionRuleV1, RuleEvaluation, RuleEvaluationSe
 import { getSceneDistance } from "./distance";
 import { calculateStrength } from "./strength";
 import type { DistanceMethod } from "../settings";
+import { parseEmitterSignal } from "../signals/normalize";
 
-export function indexEmittersBySignal(items: Item[]): Map<string, Item[]> {
-  const index = new Map<string, Item[]>();
+export interface IndexedEmitter { item: Item; range?: number }
+
+export function indexEmittersBySignal(items: Item[]): Map<string, IndexedEmitter[]> {
+  const grouped = new Map<string, Map<string, IndexedEmitter>>();
   for (const item of items) {
     const metadata = parseEmitterMetadata(item.metadata[EMITTER_KEY]);
-    for (const signal of metadata?.signals ?? []) index.set(signal, [...(index.get(signal) ?? []), item]);
+    if (!metadata?.enabled) continue;
+    for (const tag of metadata?.signals ?? []) {
+      const parsed = parseEmitterSignal(tag);
+      if (!parsed) continue;
+      const emitters = grouped.get(parsed.signal) ?? new Map<string, IndexedEmitter>();
+      const existing = emitters.get(item.id);
+      if (!existing || existing.range !== undefined && (parsed.range === undefined || parsed.range > existing.range)) {
+        emitters.set(item.id, { item, ...(parsed.range !== undefined ? { range: parsed.range } : {}) });
+      }
+      grouped.set(parsed.signal, emitters);
+    }
   }
-  return index;
+  return new Map([...grouped].map(([signal, emitters]) => [signal, [...emitters.values()]]));
 }
 
 export function selectRuleEvaluations(rule: DetectionRuleV1, candidates: RuleEvaluation[]): RuleEvaluation[] {
@@ -26,31 +39,32 @@ export function selectRuleEvaluations(rule: DetectionRuleV1, candidates: RuleEva
 export async function evaluateRule(
   detector: Item,
   rule: DetectionRuleV1,
-  signalIndex: Map<string, Item[]>,
+  signalIndex: Map<string, IndexedEmitter[]>,
   graph: AttachmentGraph,
   scaleMultiplier: number,
   grid: { dpi: number; type: GridType; measurement: GridMeasurement },
   distanceMethod: DistanceMethod,
 ): Promise<RuleEvaluationSet> {
-  const matches = (signalIndex.get(rule.signal) ?? []).filter((item) =>
+  const matches = (signalIndex.get(rule.signal) ?? []).filter(({ item }) =>
     !isSameAttachmentFamily(detector, item, graph) && (!rule.ignoreHidden || item.visible)
   );
-  const candidates: RuleEvaluation[] = [];
-  for (const emitter of matches) {
-    const distance = await getSceneDistance(detector.position, emitter.position, scaleMultiplier, grid, distanceMethod);
-    candidates.push({
+  const inRange = (await Promise.all(matches.map(async ({ item: emitter, range }) => ({
+    emitter,
+    range,
+    distance: await getSceneDistance(detector.position, emitter.position, scaleMultiplier, grid, distanceMethod),
+  })))).filter(({ distance, range }) => range === undefined || distance <= range);
+  const candidates: RuleEvaluation[] = inRange.map(({ emitter, distance }) => ({
       detector,
       rule,
-      matchingEmitterCount: matches.length,
+      matchingEmitterCount: inRange.length,
       detectedEmitter: emitter,
       distance,
       strength: calculateStrength(distance, rule.range.outer, rule.range.inner, rule.falloff),
-    });
-  }
+    }));
   const selected = selectRuleEvaluations(rule, candidates);
-  if (rule.aggregation === "all") return { matchingEmitterCount: matches.length, evaluations: selected };
+  if (rule.aggregation === "all") return { matchingEmitterCount: inRange.length, evaluations: selected };
   return {
-    matchingEmitterCount: matches.length,
+    matchingEmitterCount: inRange.length,
     evaluations: [selected[0] ?? {
       detector,
       rule,

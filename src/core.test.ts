@@ -8,7 +8,7 @@ import { evaluateRule, indexEmittersBySignal, selectRuleEvaluations } from "./pr
 import { getSceneDistance, toSceneUnits } from "./proximity/distance";
 import { buildAttachmentGraph, isSameAttachmentFamily, resolveCarrier, resolveParent } from "./scene/attachments";
 import { isAudienceMember, isShaderAudienceMember, resolveEffectTarget } from "./scene/resolve";
-import { normalizeSignal, normalizeSignals } from "./signals/normalize";
+import { normalizeSignal, normalizeSignals, parseEmitterSignal } from "./signals/normalize";
 import { DEFAULT_SCENE_SETTINGS, parseSceneSettings } from "./settings";
 import type { DetectionRuleV1, EffectAudienceV1, EffectDefinitionV1, ShaderEffectDefinitionV1 } from "./types";
 
@@ -31,7 +31,21 @@ const rule = (id: string, effects: EffectDefinitionV1[] = []): DetectionRuleV1 =
 describe("signal normalization", () => {
   it.each([[" Orc ", "orc"], ["ORC", "orc"], ["Red   Hand", "red-hand"], [" faction:RED_hand ", "faction:red_hand"]])("normalizes %s", (input, expected) => expect(normalizeSignal(input)).toBe(expected));
   it("removes duplicates and empty signals", () => expect(normalizeSignals([" Orc ", "ORC", " "])).toEqual(["orc"]));
-  it("parses normalized emitter metadata", () => expect(parseEmitterMetadata({ version: 1, signals: [" Orc ", "ORC"] })).toEqual({ version: 1, signals: ["orc"] }));
+  it("parses normalized emitter metadata and defaults legacy emitters to enabled", () => expect(parseEmitterMetadata({ version: 1, signals: [" Orc ", "ORC"] })).toEqual({ version: 1, enabled: true, signals: ["orc"] }));
+  it.each([
+    ["light", { signal: "light", tag: "light" }],
+    [" LIGHT [ 20 ] ", { signal: "light", range: 20, tag: "light[20]" }],
+    ["light[2.50]", { signal: "light", range: 2.5, tag: "light[2.5]" }],
+    ["light[.5]", { signal: "light", range: 0.5, tag: "light[0.5]" }],
+  ])("parses emitter signal %s", (input, expected) => expect(parseEmitterSignal(input)).toEqual(expected));
+  it.each(["light[0]", "light[-1]", "light[]", "light[abc]", "light[Infinity]", "light[20", "light]20["])("rejects invalid emitter range %s", (input) => expect(parseEmitterSignal(input)).toBeNull());
+  it("preserves distinct ranged variants and removes exact canonical duplicates", () => {
+    expect(normalizeSignals(["light[20]", "LIGHT[20.0]", "light[60]", "light"])).toEqual(["light[20]", "light[60]", "light"]);
+  });
+  it("round trips canonical ranged emitter metadata", () => {
+    expect(parseEmitterMetadata({ version: 1, enabled: false, signals: [" LIGHT [ 20.0 ] ", "light[60]"] })).toEqual({ version: 1, enabled: false, signals: ["light[20]", "light[60]"] });
+  });
+  it("rejects invalid emitter enabled values", () => expect(parseEmitterMetadata({ version: 1, enabled: "yes", signals: ["light"] })).toBeNull());
 });
 
 describe("strength", () => {
@@ -349,5 +363,37 @@ describe("rule aggregation", () => {
       .resolves.toMatchObject({ matchingEmitterCount: 2 });
     await expect(evaluateRule(detector, { ...rule("ignore"), aggregation: "all", ignoreHidden: true }, signalIndex, graph, 5, grid, "euclidean"))
       .resolves.toMatchObject({ matchingEmitterCount: 1, evaluations: [{ detectedEmitter: { id: "visible" } }] });
+  });
+
+  it("indexes ranged tags by base signal and keeps each emitter's widest cap", () => {
+    const capped = { ...item("capped"), metadata: { [EMITTER_KEY]: { version: 1, signals: ["light[20]", "light[60]"] } } };
+    const unlimited = { ...item("unlimited"), metadata: { [EMITTER_KEY]: { version: 1, signals: ["light[10]", "light"] } } };
+    const index = indexEmittersBySignal([capped, unlimited]);
+    expect(index.has("light[20]")).toBe(false);
+    expect(index.get("light")).toEqual([
+      { item: capped, range: 60 },
+      { item: unlimited },
+    ]);
+  });
+
+  it("does not index disabled emitters", () => {
+    const disabled = { ...item("disabled"), metadata: { [EMITTER_KEY]: { version: 1, enabled: false, signals: ["light"] } } };
+    expect(indexEmittersBySignal([disabled]).has("light")).toBe(false);
+  });
+
+  it("includes the emitter cap boundary and excludes emitters beyond it", async () => {
+    const atBoundary = { ...item("boundary"), position: { x: 400, y: 0 }, metadata: { [EMITTER_KEY]: { version: 1, signals: ["light[20]"] } } };
+    const beyond = { ...item("beyond"), position: { x: 401, y: 0 }, metadata: { [EMITTER_KEY]: { version: 1, signals: ["light[20]"] } } };
+    const items = [detector, atBoundary, beyond];
+    const result = await evaluateRule(detector, { ...rule("caps"), signal: "light", aggregation: "all" }, indexEmittersBySignal(items), buildAttachmentGraph(items), 5, { dpi: 100, type: "SQUARE", measurement: "CHEBYSHEV" }, "euclidean");
+    expect(result.matchingEmitterCount).toBe(1);
+    expect(result.evaluations.map((entry) => entry.detectedEmitter?.id)).toEqual(["boundary"]);
+  });
+
+  it("uses the detector range for strength after the emitter cap admits a match", async () => {
+    const emitter = { ...item("capped"), position: { x: 500, y: 0 }, metadata: { [EMITTER_KEY]: { version: 1, signals: ["light[50]"] } } };
+    const items = [detector, emitter];
+    const result = await evaluateRule(detector, { ...rule("short-detector"), signal: "light", range: { inner: 5, outer: 20 } }, indexEmittersBySignal(items), buildAttachmentGraph(items), 5, { dpi: 100, type: "SQUARE", measurement: "CHEBYSHEV" }, "euclidean");
+    expect(result).toMatchObject({ matchingEmitterCount: 1, evaluations: [{ distance: 25, strength: 0, detectedEmitter: { id: "capped" } }] });
   });
 });

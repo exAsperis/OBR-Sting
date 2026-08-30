@@ -29,8 +29,9 @@ const jsonObject = (value: unknown): value is JsonObject => {
 
 export function parseEmitterMetadata(value: unknown): EmitterMetadataV1 | null {
   if (!record(value) || value.version !== 1 || !Array.isArray(value.signals)) return null;
+  if (value.enabled !== undefined && typeof value.enabled !== "boolean") return null;
   const signals = normalizeSignals(value.signals.filter((entry): entry is string => typeof entry === "string"));
-  return { version: 1, signals };
+  return { version: 1, enabled: value.enabled ?? true, signals };
 }
 
 function parseTarget(value: unknown): EffectTargetV1 | null {

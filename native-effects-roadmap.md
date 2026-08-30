@@ -24,7 +24,7 @@ little sparks, motes, smoke wisps, or runes drift toward or away from the emitte
 ### Reticle / brackets: 
 draw targeting brackets around the target. Strength could control opacity, bracket size, or lock-on animation. Great for sci-fi sensors or magical identification.
 
-### Responsive offset
+### ☑️ Responsive offset
 slightly displace a glow, shadow, or halo toward or away fromthe emitter. Subtle, but it makes the object seem to “pull” toward the detected thing or provides an interactive drop shadow.
 
 ## Viewport effects

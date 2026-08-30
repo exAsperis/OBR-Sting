@@ -68,6 +68,7 @@ code { color: var(--obr-muted); font-size: 10px; word-break: break-all; }
   background: var(--surface); box-shadow: var(--shadow); backdrop-filter: blur(10px);
 }
 .content-card { margin-top: 10px; }
+.content-card:has(.signal-combobox input[aria-expanded="true"]) { position: relative; z-index: 20; }
 .content-card > .muted { margin-top: 5px; }
 .extensions-section { padding: 0; overflow: hidden; }
 .extensions-section summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 15px; cursor: pointer; list-style: none; user-select: none; }
