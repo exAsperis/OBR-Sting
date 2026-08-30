@@ -5,13 +5,13 @@
   "description": "Proximity sensing effects triggers",
   "author": "ex Asperis",
   "homepage_url": "https://github.com/exAsperis/OBR-Sting",
-  "icon": "https://exasperis.github.io/OBR-Sting/icon.svg?v=0.1.4",
+  "icon": "https://sting.ex-asperis.com/icon.svg?v=0.1.4",
   "action": {
     "title": "Sting",
-    "icon": "https://exasperis.github.io/OBR-Sting/icon.svg?v=0.1.4",
-    "popover": "https://exasperis.github.io/OBR-Sting/extension.html?v=0.1.4",
+    "icon": "https://sting.ex-asperis.com/icon.svg?v=0.1.4",
+    "popover": "https://sting.ex-asperis.com/extension.html?v=0.1.4",
     "width": 440,
     "height": 700
   },
-  "background_url": "https://exasperis.github.io/OBR-Sting/background.html?v=0.1.4"
+  "background_url": "https://sting.ex-asperis.com/background.html?v=0.1.4"
 }
