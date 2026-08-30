@@ -65,7 +65,8 @@ describe("versioned detector parsing", () => {
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [rule("rule", effects)] })?.rules[0].effects).toHaveLength(count);
   });
   it("rejects invalid ranges and duplicate stable IDs", () => {
-    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("a"), range: { inner: 10, outer: 10 } }] })).toBeNull();
+    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("a"), range: { inner: 10, outer: 10 } }] })).not.toBeNull();
+    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("a"), range: { inner: 11, outer: 10 } }] })).toBeNull();
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [rule("a"), rule("a")] })).toBeNull();
   });
   it("calculates logarithmic falloff with a steep initial drop and a long tail", () => {
@@ -164,6 +165,19 @@ describe("versioned detector parsing", () => {
     expect(parseEffectDefinition({ ...linked, spreadStrengthLink: "middle" })).toBeNull();
     expect(parseEffectDefinition({ ...linked, beamWidthStrengthLink: "middle" })).toBeNull();
     expect(parseEffectDefinition({ ...linked, geometry: { ...linked.geometry, widthStrengthLink: "middle" } })).toBeNull();
+  });
+  it("parses crossed responsive endpoints and migrates legacy REV ranges", () => {
+    const baseGeometry = { offsetX: 0, offsetY: 0, responsiveOffset: 20, innerRadius: 20, outerRadius: 100 };
+    expect(parseEffectDefinition({ ...effect(), geometry: { ...baseGeometry, responsiveOffsetRange: { minimum: 60, maximum: -20 } } }))
+      .toMatchObject({ dynamicRanges: { responsiveOffset: { minimum: 60, maximum: -20 } } });
+    expect(parseEffectDefinition({ ...effect(), geometry: { ...baseGeometry, responsiveOffsetRange: { min: -20, max: 60, reversed: true } } }))
+      .toMatchObject({ dynamicRanges: { responsiveOffset: { minimum: 60, maximum: -20 } } });
+  });
+  it("parses generic dynamic shader ranges and rejects invalid endpoints", () => {
+    const configured = { ...effect(), dynamicRanges: { intensity: { minimum: 0.25, maximum: 1.5 }, innerRadius: { minimum: 80, maximum: 20 }, outerRadius: { minimum: 90, maximum: 160, enabled: false } } };
+    expect(parseEffectDefinition(configured)).toMatchObject(configured);
+    expect(parseEffectDefinition({ ...configured, dynamicRanges: { intensity: { minimum: -1, maximum: 1 } } })).toBeNull();
+    expect(parseEffectDefinition({ ...configured, dynamicRanges: { unknown: { minimum: 0, maximum: 1 } } })).toBeNull();
   });
   it("parses shader gradient, intensity, and GM audience options", () => {
     const configured = { ...effect(), colorGradient: { minColor: "#112233" }, intensityStrengthLinked: false, alwaysIncludeGm: true };

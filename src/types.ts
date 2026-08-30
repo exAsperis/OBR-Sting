@@ -6,6 +6,8 @@ export type ShaderShape = "circle" | "square";
 export type ShaderPlacement = "above" | "below";
 export type ShaderAnimationMode = "none" | "pulse" | "flicker" | "radial-pulse";
 export type StrengthLinkDirection = "min" | "max";
+export type ShaderDynamicField = "intensity" | "softness" | "innerRadius" | "outerRadius" | "beamWidth" | "width" | "height" | "offsetX" | "offsetY" | "responsiveOffset" | "rotation" | "animationRate" | "animationDepth" | "waveWidth";
+export interface DynamicValueRange { minimum: number; maximum: number; enabled?: boolean }
 export type EffectLifecycle = "continuous" | "enter" | "exit" | "nearest-change";
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
@@ -45,10 +47,13 @@ export interface ShaderEffectDefinitionV1 {
   alwaysIncludeGm?: boolean;
   spread: number;
   spreadStrengthLink?: StrengthLinkDirection;
+  dynamicRanges?: Partial<Record<ShaderDynamicField, DynamicValueRange>>;
   geometry?: {
     /** Percentage of the target half-width/height. */
     offsetX: number;
     offsetY: number;
+    /** Signed percentage offset along the detected-emitter direction; positive is toward. */
+    responsiveOffset?: number;
     offsetXStrengthLink?: StrengthLinkDirection;
     offsetYStrengthLink?: StrengthLinkDirection;
     /** Percentage of the normalized target radius. */
@@ -185,6 +190,8 @@ export interface EffectExecutionContext extends RuleEvaluation {
   previous: RuleSnapshot | null;
   transition: RuleTransition;
   audienceMatch: boolean;
+  /** Active detections used to derive aggregate directional shader behavior. */
+  responsiveEmitters?: Item[];
 }
 
 export interface DesiredEffect extends EffectExecutionContext {

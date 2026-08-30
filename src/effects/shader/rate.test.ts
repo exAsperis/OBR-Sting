@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ShaderEffectDefinitionV1 } from "../../types";
-import { resolveEffectIntensity, resolveSignalColor, resolveStrengthLinkedRate, resolveStrengthLinkedShaderValues, resolveStrengthLinkedValue, shaderConfigHash, shaderUniforms } from "./executor";
+import { averageDetectionDirections, resolveEffectIntensity, resolveSignalColor, resolveStrengthLinkedRate, resolveStrengthLinkedShaderValues, resolveStrengthLinkedValue, shaderConfigHash, shaderUniforms } from "./executor";
 
 describe("signal-linked animation rate", () => {
   it("keeps an unlinked rate constant", () => {
@@ -61,6 +61,75 @@ describe("signal-linked shader geometry", () => {
     const geometry = resolveStrengthLinkedShaderValues(conflicting, 0).geometry;
     expect(geometry.outerRadius).toBeGreaterThanOrEqual(geometry.innerRadius + 1);
     expect(geometry.outerRadius).toBeLessThanOrEqual(200);
+  });
+
+  it("interpolates responsive offset between dynamic endpoints", () => {
+    const responsive = { ...effect, preset: "glow" as const, geometry: { ...effect.geometry!, responsiveOffset: 0 }, dynamicRanges: { responsiveOffset: { minimum: -20, maximum: 60 } } };
+    expect(resolveStrengthLinkedShaderValues(responsive, 0).geometry.responsiveOffset).toBe(-20);
+    expect(resolveStrengthLinkedShaderValues(responsive, 0.5).geometry.responsiveOffset).toBe(20);
+    expect(resolveStrengthLinkedShaderValues(responsive, 1).geometry.responsiveOffset).toBe(60);
+    const crossed = { ...responsive, dynamicRanges: { responsiveOffset: { minimum: 60, maximum: -20 } } };
+    expect(resolveStrengthLinkedShaderValues(crossed, 0).geometry.responsiveOffset).toBe(60);
+    expect(resolveStrengthLinkedShaderValues(crossed, 1).geometry.responsiveOffset).toBe(-20);
+    const disabled = { ...responsive, geometry: { ...responsive.geometry, responsiveOffset: 35 }, dynamicRanges: { responsiveOffset: { minimum: -20, maximum: 60, enabled: false } } };
+    expect(resolveStrengthLinkedShaderValues(disabled, 0).geometry.responsiveOffset).toBe(35);
+    expect(resolveStrengthLinkedShaderValues(disabled, 1).geometry.responsiveOffset).toBe(35);
+  });
+
+  it("compounds responsive and fixed offsets in the glow center uniform", () => {
+    const responsive = { ...effect, preset: "glow" as const, geometry: { ...effect.geometry!, offsetX: 10, offsetY: -5, responsiveOffset: 40 } };
+    const center = shaderUniforms(responsive, 1, 2, { x: 1, y: 0 }, undefined, { x: 0.6, y: 0.8 })
+      .find((uniform) => uniform.name === "centerOffset")?.value;
+    expect(center).toEqual({ x: 0.17, y: 0.135 });
+  });
+});
+
+describe("responsive detection direction", () => {
+  it("averages unit direction vectors without combining signal strength", () => {
+    const direction = averageDetectionDirections({ x: 0, y: 0 }, [{ x: 10, y: 0 }, { x: 0, y: 4 }]);
+    expect(direction).toEqual({ x: 0.5, y: 0.5 });
+  });
+
+  it("cancels opposing detections", () => {
+    expect(averageDetectionDirections({ x: 0, y: 0 }, [{ x: 10, y: 0 }, { x: -2, y: 0 }])).toEqual({ x: 0, y: 0 });
+  });
+
+  it("keeps aligned detections at full directional magnitude", () => {
+    expect(averageDetectionDirections({ x: 0, y: 0 }, [{ x: 2, y: 0 }, { x: 20, y: 0 }])).toEqual({ x: 1, y: 0 });
+  });
+});
+
+describe("generic shader dynamic ranges", () => {
+  const base: ShaderEffectDefinitionV1 = {
+    id: "dynamic", type: "shader", enabled: true, target: { type: "detector" }, audience: { type: "everyone" },
+    preset: "glow", shape: "circle", placement: "above", color: "#55aaff", maxIntensity: 1, spread: 1,
+    geometry: { offsetX: 0, offsetY: 0, innerRadius: 34, outerRadius: 118 },
+  };
+  it("interpolates newly dynamic glow radii and preserves their ordering", () => {
+    const dynamic = {
+      ...base,
+      preset: "glow" as const,
+      dynamicRanges: { innerRadius: { minimum: 10, maximum: 90 }, outerRadius: { minimum: 150, maximum: 70 } },
+    };
+    expect(resolveStrengthLinkedShaderValues(dynamic, 0).geometry).toMatchObject({ innerRadius: 10, outerRadius: 150 });
+    const full = resolveStrengthLinkedShaderValues(dynamic, 1).geometry;
+    expect(full.outerRadius).toBe(full.innerRadius + 1);
+  });
+
+  it("interpolates intensity, softness, and animation fields", () => {
+    const dynamic = {
+      ...base,
+      animation: { mode: "pulse" as const, rate: 1, depth: 0.2 },
+      dynamicRanges: {
+        intensity: { minimum: 0.5, maximum: 1.5 }, softness: { minimum: 0.5, maximum: 2.5 },
+        animationRate: { minimum: 2, maximum: 6 }, animationDepth: { minimum: 0.1, maximum: 0.9 },
+      },
+    };
+    expect(resolveEffectIntensity(dynamic, 0.5)).toBe(1);
+    expect(resolveStrengthLinkedShaderValues(dynamic, 0.5).spread).toBe(1.5);
+    const uniforms = shaderUniforms(dynamic, 0.5, 1, { x: 1, y: 0 });
+    expect(uniforms.find((entry) => entry.name === "rate")?.value).toBe(4);
+    expect(uniforms.find((entry) => entry.name === "depth")?.value).toBe(0.5);
   });
 });
 

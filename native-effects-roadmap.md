@@ -22,9 +22,9 @@ a rotating sweep around the detector with a blip appearing at the actual bearing
 little sparks, motes, smoke wisps, or runes drift toward or away from the emitter direction. More decorative, but uniquely directional.
 
 ### Reticle / brackets: 
-draw targeting brackets around the detected emitter. Strength could control opacity, bracket size, or lock-on animation. Great for sci-fi sensors or magical identification.
+draw targeting brackets around the target. Strength could control opacity, bracket size, or lock-on animation. Great for sci-fi sensors or magical identification.
 
-### Parallax offset / lean: 
+### Responsive offset
 slightly displace a glow, shadow, or halo toward or away fromthe emitter. Subtle, but it makes the object seem to “pull” toward the detected thing or provides an interactive drop shadow.
 
 ## Viewport effects

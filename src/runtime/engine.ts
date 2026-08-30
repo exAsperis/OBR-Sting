@@ -79,6 +79,8 @@ export class ProximityEngine {
       if (!metadata?.enabled) continue;
       for (const rule of metadata.rules.filter((entry) => entry.enabled)) {
         const result = await evaluateRule(detector, rule, signalIndex, graph, gridScale.parsed.multiplier, { dpi: gridDpi, type: gridType, measurement: gridMeasurement }, this.distanceMethod);
+        const activeEvaluations = result.evaluations.filter((evaluation) => evaluation.strength > 0 && evaluation.detectedEmitter);
+        const responsiveEmitters = activeEvaluations.map((evaluation) => evaluation.detectedEmitter!);
         const baseRuleKey = `${detector.id.length}:${detector.id}|${rule.id.length}:${rule.id}`;
         const debugEffects: DebugRuleState["effects"] = [];
         for (const evaluation of result.evaluations) {
@@ -113,7 +115,7 @@ export class ProximityEngine {
             // Native effects retain per-client audience filtering here.
             const dispatchMatch = effect.type === "integration" || audienceMatch;
             if (target && dispatchMatch && runtimeKey) {
-              const desired: DesiredEffect = { ...evaluation, effect, target, localPlayer: this.player, party: this.party, graph, runtimeKey, current, previous, transition, audienceMatch };
+              const desired: DesiredEffect = { ...evaluation, effect, target, localPlayer: this.player, party: this.party, graph, runtimeKey, current, previous, transition, audienceMatch, responsiveEmitters };
               seenEffectKeys.add(runtimeKey);
               if (lifecycle === "continuous" && current.active) batchFor(effect.type).desired.push(desired);
               if (lifecycle !== "continuous" && transition.type === lifecycle) batchFor(effect.type).events.push(desired);
@@ -139,7 +141,6 @@ export class ProximityEngine {
             });
           }
         }
-        const activeEvaluations = result.evaluations.filter((evaluation) => evaluation.strength > 0 && evaluation.detectedEmitter);
         debug.push({
           detectorId: detector.id,
           detectorName: detector.name,

@@ -1,6 +1,6 @@
 import OBR, { buildEffect, type BoundingBox, type Effect } from "@owlbear-rodeo/sdk";
 import { LOCAL_EFFECT_KEY } from "../../constants";
-import type { DesiredEffect, ShaderEffectDefinitionV1, StrengthLinkDirection } from "../../types";
+import type { DesiredEffect, ShaderDynamicField, ShaderEffectDefinitionV1, StrengthLinkDirection } from "../../types";
 import type { EffectDispatchBatch, EffectExecutor, EffectReconcileReport } from "../registry";
 import { resolveShaderGeometry } from "./geometry";
 import { SHADERS } from "./shaders";
@@ -27,6 +27,16 @@ export function resolveStrengthLinkedRate(rate: number, link: StrengthLinkDirect
   return resolveStrengthLinkedValue(rate, link, strength, 0, 10);
 }
 
+export function resolveDynamicValue(effect: ShaderEffectDefinitionV1, field: ShaderDynamicField, value: number, strength: number, legacyLink?: StrengthLinkDirection, min = 0, max = 1): number {
+  const range = effect.dynamicRanges?.[field];
+  if (range) {
+    if (range.enabled === false) return value;
+    const clampedStrength = Math.max(0, Math.min(1, strength));
+    return range.minimum + (range.maximum - range.minimum) * clampedStrength;
+  }
+  return resolveStrengthLinkedValue(value, legacyLink, strength, min, max);
+}
+
 function colorVector(hex: string) {
   return {
     x: Number.parseInt(hex.slice(1, 3), 16) / 255,
@@ -39,20 +49,21 @@ export function resolveStrengthLinkedShaderValues(effect: ShaderEffectDefinition
   const configured = resolveShaderGeometry(effect);
   const geometry = {
     ...configured,
-    offsetX: resolveStrengthLinkedValue(configured.offsetX, configured.offsetXStrengthLink, strength, -100, 100),
-    offsetY: resolveStrengthLinkedValue(configured.offsetY, configured.offsetYStrengthLink, strength, -100, 100),
-    width: resolveStrengthLinkedValue(configured.width, configured.widthStrengthLink, strength, 5, 400),
-    height: resolveStrengthLinkedValue(configured.height, configured.heightStrengthLink, strength, 5, 400),
-    rotation: resolveStrengthLinkedValue(configured.rotation, configured.rotationStrengthLink, strength, -180, 180),
-    innerRadius: resolveStrengthLinkedValue(configured.innerRadius, configured.innerRadiusStrengthLink, strength, 0, Math.max(0, configured.outerRadius - 1)),
-    outerRadius: resolveStrengthLinkedValue(configured.outerRadius, configured.outerRadiusStrengthLink, strength, configured.innerRadius + 1, 200),
+    offsetX: resolveDynamicValue(effect, "offsetX", configured.offsetX, strength, configured.offsetXStrengthLink, -100, 100),
+    offsetY: resolveDynamicValue(effect, "offsetY", configured.offsetY, strength, configured.offsetYStrengthLink, -100, 100),
+    responsiveOffset: resolveDynamicValue(effect, "responsiveOffset", configured.responsiveOffset, strength, undefined, -100, 100),
+    width: resolveDynamicValue(effect, "width", configured.width, strength, configured.widthStrengthLink, 5, 400),
+    height: resolveDynamicValue(effect, "height", configured.height, strength, configured.heightStrengthLink, 5, 400),
+    rotation: resolveDynamicValue(effect, "rotation", configured.rotation, strength, configured.rotationStrengthLink, -180, 180),
+    innerRadius: resolveDynamicValue(effect, "innerRadius", configured.innerRadius, strength, configured.innerRadiusStrengthLink, 0, Math.max(0, configured.outerRadius - 1)),
+    outerRadius: resolveDynamicValue(effect, "outerRadius", configured.outerRadius, strength, configured.outerRadiusStrengthLink, configured.innerRadius + 1, 200),
   };
   geometry.outerRadius = Math.min(200, Math.max(geometry.innerRadius + 1, geometry.outerRadius));
   geometry.innerRadius = Math.min(geometry.innerRadius, geometry.outerRadius - 1);
   return {
     geometry,
-    spread: resolveStrengthLinkedValue(effect.spread, effect.spreadStrengthLink, strength, 0.05, 4),
-    beamWidth: resolveStrengthLinkedValue(effect.beamWidth ?? 38, effect.beamWidthStrengthLink, strength, 5, 120),
+    spread: resolveDynamicValue(effect, "softness", effect.spread, strength, effect.spreadStrengthLink, 0.05, 4),
+    beamWidth: resolveDynamicValue(effect, "beamWidth", effect.beamWidth ?? 38, strength, effect.beamWidthStrengthLink, 5, 120),
   };
 }
 
@@ -65,6 +76,7 @@ export function resolveSignalColor(effect: ShaderEffectDefinitionV1, strength: n
 }
 
 export function resolveEffectIntensity(effect: ShaderEffectDefinitionV1, strength: number): number {
+  if (effect.dynamicRanges?.intensity) return resolveDynamicValue(effect, "intensity", effect.maxIntensity, strength, undefined, 0, 2);
   return (effect.intensityStrengthLinked ?? true) ? strength * effect.maxIntensity : effect.maxIntensity;
 }
 
@@ -74,7 +86,7 @@ function effectScale(effect: ShaderEffectDefinitionV1, resolved: ReturnType<type
     ? Math.min(0.12, Math.max(0.008, 0.025 * resolved.spread))
     : Math.min(0.45, Math.max(0.005, 0.1 * resolved.spread));
   const axisScale = Math.max(geometry.width, geometry.height) / 100;
-  const offsetScale = Math.max(Math.abs(geometry.offsetX), Math.abs(geometry.offsetY)) / 100;
+  const offsetScale = (Math.max(Math.abs(geometry.offsetX), Math.abs(geometry.offsetY)) + Math.abs(geometry.responsiveOffset)) / 100;
   return Math.max(1, geometry.outerRadius / 100 * axisScale + offsetScale + feather);
 }
 
@@ -88,20 +100,23 @@ function layout(bounds: BoundingBox, scale: number) {
   };
 }
 
-export function shaderUniforms(effect: ShaderEffectDefinitionV1, strength: number, scale: number, direction: { x: number; y: number }, resolved = resolveStrengthLinkedShaderValues(effect, strength)) {
+export function shaderUniforms(effect: ShaderEffectDefinitionV1, strength: number, scale: number, direction: { x: number; y: number }, resolved = resolveStrengthLinkedShaderValues(effect, strength), responsiveDirection = direction) {
   const { geometry } = resolved;
   const animationModes = { none: 0, pulse: 1, flicker: 2, "radial-pulse": 3 } as const;
   const values = [
     { name: "signalColor", value: resolveSignalColor(effect, strength) },
     { name: "strength", value: resolveEffectIntensity(effect, strength) },
-    { name: "rate", value: resolveStrengthLinkedRate(effect.animation?.rate ?? 1, effect.animation?.rateStrengthLink, strength) },
-    { name: "depth", value: resolveStrengthLinkedValue(effect.animation?.depth ?? 0, effect.animation?.depthStrengthLink, strength, 0, 1) },
+    { name: "rate", value: resolveDynamicValue(effect, "animationRate", effect.animation?.rate ?? 1, strength, effect.animation?.rateStrengthLink, 0, 10) },
+    { name: "depth", value: resolveDynamicValue(effect, "animationDepth", effect.animation?.depth ?? 0, strength, effect.animation?.depthStrengthLink, 0, 1) },
     { name: "animationMode", value: animationModes[effect.animation?.mode ?? "none"] },
     { name: "radialDirection", value: effect.animation?.radialDirection === "inward" ? -1 : 1 },
-    { name: "waveWidth", value: resolveStrengthLinkedValue(effect.animation?.waveWidth ?? 0.22, effect.animation?.waveWidthStrengthLink, strength, 0.05, 1) },
+    { name: "waveWidth", value: resolveDynamicValue(effect, "waveWidth", effect.animation?.waveWidth ?? 0.22, strength, effect.animation?.waveWidthStrengthLink, 0.05, 1) },
     { name: "spread", value: resolved.spread },
     { name: "shapeMode", value: effect.shape === "square" ? 1 : 0 },
-    { name: "centerOffset", value: { x: geometry.offsetX / 100 / scale, y: geometry.offsetY / 100 / scale } },
+    { name: "centerOffset", value: {
+      x: (geometry.offsetX + (effect.preset === "glow" ? responsiveDirection.x * geometry.responsiveOffset : 0)) / 100 / scale,
+      y: (geometry.offsetY + (effect.preset === "glow" ? responsiveDirection.y * geometry.responsiveOffset : 0)) / 100 / scale,
+    } },
     { name: "innerRadius", value: geometry.innerRadius / 100 / scale },
     { name: "outerRadius", value: geometry.outerRadius / 100 / scale },
     { name: "effectSize", value: { x: geometry.width / 100, y: geometry.height / 100 } },
@@ -120,13 +135,25 @@ export function shaderUniforms(effect: ShaderEffectDefinitionV1, strength: numbe
 }
 
 export function shaderConfigHash(effect: ShaderEffectDefinitionV1): string {
-  return JSON.stringify([effect.preset, effect.shape, effect.placement, effect.color, effect.colorGradient, effect.maxIntensity, effect.intensityStrengthLinked, effect.spread, effect.spreadStrengthLink, effect.geometry, effect.beamWidth, effect.beamWidthStrengthLink, effect.animation]);
+  return JSON.stringify([effect.preset, effect.shape, effect.placement, effect.color, effect.colorGradient, effect.maxIntensity, effect.intensityStrengthLinked, effect.spread, effect.spreadStrengthLink, effect.dynamicRanges, effect.geometry, effect.beamWidth, effect.beamWidthStrengthLink, effect.animation]);
 }
 
 export function shaderZIndexForTarget(targetZIndex: number, runtimeKey: string, placement: ShaderEffectDefinitionV1["placement"]): number {
   const tieBreak = (stableEffectZIndex(runtimeKey) - 1_000_000) / 1_000_000;
   const offset = 0.5 + tieBreak * 0.49;
   return targetZIndex + (placement === "above" ? offset : -offset);
+}
+
+export function averageDetectionDirections(origin: { x: number; y: number }, detections: Array<{ x: number; y: number }>): { x: number; y: number } {
+  if (!detections.length) return { x: 0, y: 0 };
+  const sum = detections.reduce((vector, detection) => {
+    const x = detection.x - origin.x;
+    const y = detection.y - origin.y;
+    const length = Math.hypot(x, y);
+    if (length > 0) { vector.x += x / length; vector.y += y / length; }
+    return vector;
+  }, { x: 0, y: 0 });
+  return { x: sum.x / detections.length, y: sum.y / detections.length };
 }
 
 export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefinitionV1> {
@@ -160,12 +187,15 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
       };
       const directionLength = Math.hypot(directionVector.x, directionVector.y) || 1;
       const direction = { x: directionVector.x / directionLength, y: directionVector.y / directionLength };
+      const responsiveBounds = await Promise.all((context.responsiveEmitters ?? (context.detectedEmitter ? [context.detectedEmitter] : []))
+        .map((emitter) => OBR.scene.items.getItemBounds([emitter.id])));
+      const responsiveDirection = averageDetectionDirections(bounds.center, responsiveBounds.map((entry) => entry.center));
       const resolved = resolveStrengthLinkedShaderValues(effect, context.strength);
       const scale = effectScale(effect, resolved);
       const effectLayout = layout(bounds, scale);
       const effectZIndex = shaderZIndexForTarget(context.target!.zIndex, context.runtimeKey, effect.placement);
       const effectLayer = context.target!.layer;
-      const nextLayoutHash = JSON.stringify([effectLayout, direction]);
+      const nextLayoutHash = JSON.stringify([effectLayout, direction, responsiveDirection]);
       const hash = shaderConfigHash(effect);
       let existing = this.states.get(context.runtimeKey);
       // Owlbear does not reliably recompile SkSL when an existing Effect item's
@@ -190,7 +220,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
           .disableAttachmentBehavior(["SCALE", "ROTATION"])
           .zIndex(effectZIndex)
           .sksl(SHADERS[effect.preset])
-          .uniforms(shaderUniforms(effect, context.strength, scale, direction, resolved))
+          .uniforms(shaderUniforms(effect, context.strength, scale, direction, resolved, responsiveDirection))
           .blendMode("SRC_OVER")
           .locked(true)
           .disableHit(true)
@@ -208,7 +238,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
             item.position = effectLayout.position;
             item.zIndex = effectZIndex;
             item.layer = effectLayer;
-            item.uniforms = shaderUniforms(effect, context.strength, scale, direction, resolved);
+            item.uniforms = shaderUniforms(effect, context.strength, scale, direction, resolved, responsiveDirection);
           }
         });
         existing.strength = context.strength;

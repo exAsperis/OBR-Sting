@@ -31,4 +31,16 @@ describe("SliderNumber", () => {
     fireEvent.blur(input);
     expect(onChange).toHaveBeenCalledWith(13);
   });
+
+  it("can replace the slider with a direct editor", () => {
+    const onChange = vi.fn();
+    render(<SliderNumber label="Responsive offset" value={20} min={-100} max={100} step={1} editReplacesSlider onChange={onChange} suffix="%" />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit Responsive offset: 20" }));
+    expect(screen.queryByRole("slider", { name: "Responsive offset" })).toBeNull();
+    const input = screen.getByRole("spinbutton", { name: "Edit Responsive offset" });
+    fireEvent.change(input, { target: { value: "35" } });
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledWith(35);
+    expect(screen.getByRole("slider", { name: "Responsive offset" })).toBeTruthy();
+  });
 });

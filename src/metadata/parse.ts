@@ -10,6 +10,8 @@ import type {
   JsonObject,
   MechanicalEffectDefinitionV1,
   ShaderAnimationMode,
+  ShaderDynamicField,
+  DynamicValueRange,
   ShaderEffectDefinitionV1,
   ShaderPreset,
   ShaderPlacement,
@@ -146,6 +148,22 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   if (value.alwaysIncludeGm !== undefined && typeof value.alwaysIncludeGm !== "boolean") return null;
   if (!finite(value.spread) || value.spread <= 0 || value.spread > 4) return null;
   if (value.spreadStrengthLink !== undefined && !["min", "max"].includes(String(value.spreadStrengthLink))) return null;
+  const dynamicBounds: Record<ShaderDynamicField, [number, number]> = {
+    intensity: [0, 2], softness: [0.05, 4], innerRadius: [0, 199], outerRadius: [1, 200], beamWidth: [5, 120],
+    width: [5, 400], height: [5, 400], offsetX: [-100, 100], offsetY: [-100, 100], responsiveOffset: [-100, 100],
+    rotation: [-180, 180], animationRate: [0, 10], animationDepth: [0, 1], waveWidth: [0.05, 1],
+  };
+  const dynamicRanges: Partial<Record<ShaderDynamicField, DynamicValueRange>> = {};
+  if (value.dynamicRanges !== undefined) {
+    if (!record(value.dynamicRanges)) return null;
+    for (const [field, candidate] of Object.entries(value.dynamicRanges)) {
+      if (!(field in dynamicBounds) || !record(candidate) || !finite(candidate.minimum) || !finite(candidate.maximum)) return null;
+      const [minimum, maximum] = dynamicBounds[field as ShaderDynamicField];
+      if (candidate.minimum < minimum || candidate.minimum > maximum || candidate.maximum < minimum || candidate.maximum > maximum) return null;
+      if (candidate.enabled !== undefined && typeof candidate.enabled !== "boolean") return null;
+      dynamicRanges[field as ShaderDynamicField] = { minimum: candidate.minimum, maximum: candidate.maximum, ...(candidate.enabled === false ? { enabled: false } : {}) };
+    }
+  }
   let geometry: ShaderEffectDefinitionV1["geometry"];
   if (value.geometry !== undefined) {
     if (!record(value.geometry)) return null;
@@ -156,13 +174,30 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     if (innerRadius < 0 || outerRadius <= innerRadius || outerRadius > 200) return null;
     const width = geometryValue.width ?? 100;
     const height = geometryValue.height ?? 100;
+    const responsiveOffset = geometryValue.responsiveOffset ?? 0;
     const rotation = geometryValue.rotation ?? 0;
-    if (!finite(width) || !finite(height) || !finite(rotation)) return null;
-    if (width < 5 || width > 400 || height < 5 || height > 400 || rotation < -180 || rotation > 180) return null;
+    if (!finite(width) || !finite(height) || !finite(responsiveOffset) || !finite(rotation)) return null;
+    if (width < 5 || width > 400 || height < 5 || height > 400 || responsiveOffset < -100 || responsiveOffset > 100 || rotation < -180 || rotation > 180) return null;
+    let responsiveOffsetRange: DynamicValueRange | undefined;
+    if (geometryValue.responsiveOffsetRange !== undefined) {
+      if (!record(geometryValue.responsiveOffsetRange)) return null;
+      const range = geometryValue.responsiveOffsetRange;
+      if (finite(range.minimum) && finite(range.maximum)) {
+        if (range.minimum < -100 || range.minimum > 100 || range.maximum < -100 || range.maximum > 100) return null;
+        responsiveOffsetRange = { minimum: range.minimum, maximum: range.maximum };
+      } else {
+        // Migrate the experimental sorted endpoints plus REV representation.
+        if (!finite(range.min) || !finite(range.max) || range.min < -100 || range.max > 100 || range.min > range.max) return null;
+        if (range.reversed !== undefined && typeof range.reversed !== "boolean") return null;
+        responsiveOffsetRange = range.reversed ? { minimum: range.max, maximum: range.min } : { minimum: range.min, maximum: range.max };
+      }
+    }
+    if (geometryValue.responsiveOffsetDynamic !== undefined && typeof geometryValue.responsiveOffsetDynamic !== "boolean") return null;
+    if (!dynamicRanges.responsiveOffset && responsiveOffsetRange) dynamicRanges.responsiveOffset = { ...responsiveOffsetRange, ...(geometryValue.responsiveOffsetDynamic === false ? { enabled: false } : {}) };
     const linkFields = ["offsetXStrengthLink", "offsetYStrengthLink", "innerRadiusStrengthLink", "outerRadiusStrengthLink", "widthStrengthLink", "heightStrengthLink", "rotationStrengthLink"] as const;
     for (const field of linkFields) if (geometryValue[field] !== undefined && !["min", "max"].includes(String(geometryValue[field]))) return null;
     geometry = {
-      offsetX, offsetY, innerRadius, outerRadius, width, height, rotation,
+      offsetX, offsetY, responsiveOffset, innerRadius, outerRadius, width, height, rotation,
       ...Object.fromEntries(linkFields.filter((field) => geometryValue[field] !== undefined).map((field) => [field, geometryValue[field]])),
     };
   }
@@ -222,6 +257,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     ...(value.alwaysIncludeGm !== undefined ? { alwaysIncludeGm: value.alwaysIncludeGm } : {}),
     spread: legacyPreset === "outline" ? Math.max(0.05, value.spread * 0.12) : value.spread,
     ...(value.spreadStrengthLink !== undefined ? { spreadStrengthLink: value.spreadStrengthLink as "min" | "max" } : {}),
+    ...(Object.keys(dynamicRanges).length ? { dynamicRanges } : {}),
     ...(geometry ? { geometry } : {}),
     ...(beamWidth !== undefined ? { beamWidth } : {}),
     ...(value.beamWidthStrengthLink !== undefined ? { beamWidthStrengthLink: value.beamWidthStrengthLink as "min" | "max" } : {}),
@@ -236,7 +272,7 @@ export function parseDetectionRule(value: unknown): DetectionRuleV1 | null {
   if (!signal || !["nearest", "all"].includes(String(value.aggregation)) || !["binary", "linear", "smoothstep", "logarithmic"].includes(String(value.falloff))) return null;
   if (value.ignoreHidden !== undefined && typeof value.ignoreHidden !== "boolean") return null;
   if (!record(value.range) || !finite(value.range.outer) || !finite(value.range.inner)) return null;
-  if (value.range.outer <= 0 || value.range.inner < 0 || value.range.inner >= value.range.outer) return null;
+  if (value.range.outer <= 0 || value.range.inner < 0 || value.range.inner > value.range.outer) return null;
   if (!Array.isArray(value.effects)) return null;
   const effects: EffectDefinitionV1[] = [];
   for (const candidate of value.effects) {

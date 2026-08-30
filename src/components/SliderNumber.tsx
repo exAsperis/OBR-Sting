@@ -13,6 +13,7 @@ interface SliderNumberProps {
   suffix?: string;
   className?: string;
   tooltip?: string;
+  editReplacesSlider?: boolean;
 }
 
 function stepDecimals(step: number): number {
@@ -20,7 +21,7 @@ function stepDecimals(step: number): number {
   return text.includes(".") ? text.length - text.indexOf(".") - 1 : 0;
 }
 
-export function SliderNumber({ label, labelContent, value, min, max, step, inputStep = step, onChange, decimals = stepDecimals(inputStep), suffix = "", className, tooltip }: SliderNumberProps) {
+export function SliderNumber({ label, labelContent, value, min, max, step, inputStep = step, onChange, decimals = stepDecimals(inputStep), suffix = "", className, tooltip, editReplacesSlider = false }: SliderNumberProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value));
   const sliderMax = max ?? Math.max(200, Math.ceil(value / 50) * 50);
@@ -38,10 +39,12 @@ export function SliderNumber({ label, labelContent, value, min, max, step, input
   };
 
   return <div className={`numeric-control${className ? ` ${className}` : ""}`} title={tooltip}>
-    <div className="numeric-heading">{labelContent ?? <span className="field-label">{label}</span>}{editing
+    <div className="numeric-heading">{labelContent ?? <span className="field-label">{label}</span>}{editing && !editReplacesSlider
       ? <input className="numeric-direct-input" type="number" min={min} max={max} step={inputStep} value={draft} autoFocus onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(event.target.value)} onBlur={commit} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") { event.preventDefault(); setDraft(String(value)); setEditing(false); } }} aria-label={`Edit ${label}`} />
       : <button className="numeric-value" type="button" onClick={() => setEditing(true)} aria-label={`Edit ${label}: ${value}`}>{value.toFixed(decimals)}{suffix}</button>}
     </div>
-    <input type="range" min={min} max={sliderMax} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} aria-label={label} />
+    {editing && editReplacesSlider
+      ? <input className="range-direct-input" type="number" min={min} max={max} step={inputStep} value={draft} autoFocus onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(event.target.value)} onBlur={commit} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") { event.preventDefault(); setDraft(String(value)); setEditing(false); } }} aria-label={`Edit ${label}`} />
+      : <input type="range" min={min} max={sliderMax} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} aria-label={label} />}
   </div>;
 }
