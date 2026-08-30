@@ -2,15 +2,18 @@ import OBR from "@owlbear-rodeo/sdk";
 import { CONTEXT_MENU_ID, EMANATION_INTEGRATION_KEY, SETTINGS_KEY } from "../constants";
 import { ProximityEngine } from "./engine";
 import { parseRoomSettings } from "../settings";
+import { clearSelectedFacePivots, syncSelectedFacePivots } from "./pivotDebug";
 
 OBR.onReady(() => {
   const engine = new ProximityEngine();
   let stopItems: (() => void) | undefined;
   let stopGrid: (() => void) | undefined;
+  let latestItems = [] as Awaited<ReturnType<typeof OBR.scene.items.getItems>>;
 
   const refreshPlayer = async () => {
     const [role, connectionId] = await Promise.all([OBR.player.getRole(), OBR.player.getConnectionId()]);
     engine.setPlayer({ id: OBR.player.id, role, connectionId });
+    void syncSelectedFacePivots(latestItems);
   };
   const refreshParty = async () => engine.setParty(await OBR.party.getPlayers());
   const attachScene = async (ready: boolean) => {
@@ -19,11 +22,15 @@ OBR.onReady(() => {
     stopItems = undefined;
     stopGrid = undefined;
     if (!ready) {
+      latestItems = [];
       await engine.clear();
+      await clearSelectedFacePivots();
       return;
     }
-    engine.setItems(await OBR.scene.items.getItems());
-    stopItems = OBR.scene.items.onChange((items) => engine.setItems(items));
+    latestItems = await OBR.scene.items.getItems();
+    engine.setItems(latestItems);
+    void syncSelectedFacePivots(latestItems);
+    stopItems = OBR.scene.items.onChange((items) => { latestItems = items; engine.setItems(items); void syncSelectedFacePivots(items); });
     stopGrid = OBR.scene.grid.onChange(() => engine.schedule());
   };
   const refreshSettings = async () => engine.setDistanceMethod(parseRoomSettings((await OBR.room.getMetadata())[SETTINGS_KEY]).distanceMethod);
@@ -57,5 +64,6 @@ OBR.onReady(() => {
     window.removeEventListener("storage", integrationChanged);
     void OBR.contextMenu.remove(CONTEXT_MENU_ID);
     void engine.clear();
+    void clearSelectedFacePivots();
   }, { once: true });
 });

@@ -2,8 +2,17 @@ import type { Item } from "@owlbear-rodeo/sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DesiredEffect, MechanicalEffectDefinitionV1 } from "../../types";
 
-const { startItemInteraction, updateItems } = vi.hoisted(() => ({ startItemInteraction: vi.fn(), updateItems: vi.fn() }));
-vi.mock("@owlbear-rodeo/sdk", () => ({ default: { interaction: { startItemInteraction }, scene: { items: { updateItems } } } }));
+const { startItemInteraction, updateItems, getItemBounds, addLocalItems, deleteLocalItems } = vi.hoisted(() => ({ startItemInteraction: vi.fn(), updateItems: vi.fn(), getItemBounds: vi.fn(), addLocalItems: vi.fn(), deleteLocalItems: vi.fn() }));
+vi.mock("@owlbear-rodeo/sdk", () => ({
+  buildLine: () => {
+    const line: Record<string, unknown> = { id: crypto.randomUUID(), type: "LINE" };
+    const builder: Record<string, unknown> = {};
+    for (const method of ["name", "startPosition", "endPosition", "strokeColor", "strokeWidth", "locked", "disableHit", "disableAutoZIndex", "zIndex", "layer", "metadata"]) builder[method] = (value: unknown) => { line[method] = value; return builder; };
+    builder.build = () => line;
+    return builder;
+  },
+  default: { interaction: { startItemInteraction }, scene: { items: { updateItems, getItemBounds }, local: { addItems: addLocalItems, deleteItems: deleteLocalItems } } },
+}));
 
 import { MechanicalEffectExecutor } from "./executor";
 
@@ -11,8 +20,9 @@ const item = (id: string, x: number, y: number, rotation = 0): Item => ({
   id, type: "IMAGE", name: id, visible: true, locked: false, createdUserId: "gm", zIndex: 0,
   lastModified: "", lastModifiedUserId: "gm", position: { x, y }, rotation, scale: { x: 1, y: 1 }, metadata: {}, layer: "CHARACTER",
 });
-const effect: MechanicalEffectDefinitionV1 = { id: "face", type: "mechanical", enabled: true, action: "face", target: { type: "detector" }, faceAngle: 0, speed: 180 };
+const effect: MechanicalEffectDefinitionV1 = { id: "face", type: "mechanical", enabled: true, action: "face", target: { type: "detector" }, faceAngle: 0, pivotX: 0, pivotY: 0, speed: 180 };
 let updatedRotations: number[] = [];
+let updatedPositions: Array<{ x: number; y: number }> = [];
 let persistedRotations: number[] = [];
 let persistedVisibilities: boolean[] = [];
 function context(target: Item, emitter: Item, distance: number, role: "GM" | "PLAYER" = "GM", ids = ["detector", "rule", "face"]): DesiredEffect {
@@ -33,9 +43,11 @@ describe("MechanicalEffectExecutor", () => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     updatedRotations = [];
+    updatedPositions = [];
     persistedRotations = [];
     persistedVisibilities = [];
-    startItemInteraction.mockResolvedValue([(recipe: (draft: Item) => void) => { const draft = item("target", 0, 0); recipe(draft); updatedRotations.push(draft.rotation); return draft; }, vi.fn()]);
+    getItemBounds.mockResolvedValue({ center: { x: 0, y: 0 }, width: 100, height: 100 });
+    startItemInteraction.mockResolvedValue([(recipe: (draft: Item) => void) => { const draft = item("target", 0, 0); recipe(draft); updatedRotations.push(draft.rotation); updatedPositions.push({ ...draft.position }); return draft; }, vi.fn()]);
     updateItems.mockImplementation(async (_ids: string[], recipe: (drafts: Item[]) => void) => { const draft = item("target", 0, 0); recipe([draft]); persistedRotations.push(draft.rotation); persistedVisibilities.push(draft.visible); });
   });
   afterEach(() => vi.useRealTimers());
@@ -76,6 +88,19 @@ describe("MechanicalEffectExecutor", () => {
     expect(startItemInteraction).not.toHaveBeenCalled();
   });
 
+  it("shows a local crosshair at the resolved pivot and removes it when Face becomes inactive", async () => {
+    const executor = new MechanicalEffectExecutor();
+    const ctx = context(item("target", 0, 0), item("emitter", 10, 0), 10);
+    ctx.effect = { ...effect, pivotX: 200 };
+    await executor.reconcile({ desired: [ctx], events: [] });
+    expect(addLocalItems).toHaveBeenCalledOnce();
+    const lines = addLocalItems.mock.calls[0][0] as Array<Record<string, { x: number; y: number }>>;
+    expect(lines[0].startPosition).toEqual({ x: 88, y: 0 });
+    expect(lines[0].endPosition).toEqual({ x: 112, y: 0 });
+    await executor.reconcile({ desired: [], events: [] });
+    expect(deleteLocalItems).toHaveBeenCalledOnce();
+  });
+
   it("chooses the closest emitter when all-mode contexts share a target", async () => {
     const target = item("target", 0, 0);
     const near = context(target, item("near", 10, 0), 10, "GM", ["detector", "rule", "near-effect"]);
@@ -99,6 +124,17 @@ describe("MechanicalEffectExecutor", () => {
     await vi.advanceTimersByTimeAsync(250);
     expect(updatedRotations.at(-1)).toBeCloseTo(45, 0);
     await executor.clear();
+  });
+
+  it("moves Owlbear's native item origin around the configured pivot", async () => {
+    const executor = new MechanicalEffectExecutor();
+    const ctx = context(item("target", 0, 0), item("emitter", 200, 0), 10);
+    ctx.effect = { ...effect, pivotX: 200 };
+    await executor.reconcile({ desired: [ctx], events: [] });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(updatedRotations.at(-1)).toBe(90);
+    expect(updatedPositions.at(-1)?.x).toBeCloseTo(100);
+    expect(updatedPositions.at(-1)?.y).toBeCloseTo(-100);
   });
 
   it("persists the final rotation before ending the temporary interaction", async () => {

@@ -9,6 +9,7 @@ const glow = {
   audience: { type: "everyone" as const },
   preset: "glow" as const,
   shape: "circle" as const,
+  placement: "above" as const,
   color: "#55aaff",
   maxIntensity: 1,
   spread: 1,
@@ -35,10 +36,10 @@ describe("effects library", () => {
   });
 
   it("round-trips reusable Face effects in the v1 library", () => {
-    const face = { id: "face", type: "mechanical" as const, enabled: true, action: "face" as const, target: { type: "detector" as const }, faceAngle: 45, speed: 180 };
+    const face = { id: "face", type: "mechanical" as const, enabled: true, action: "face" as const, target: { type: "detector" as const }, faceAngle: 45, pivotX: 150, pivotY: -50, speed: 180 };
     const parsed = parseEffectLibrary({ version: 1, entries: [{ id: "turn", name: "Face threat", effect: face }] });
     expect(parsed.entries[0].effect).toEqual(face);
-    expect(instantiateLibraryEffect(parsed.entries[0])).toMatchObject({ type: "mechanical", action: "face", faceAngle: 45, speed: 180 });
+    expect(instantiateLibraryEffect(parsed.entries[0])).toMatchObject({ type: "mechanical", action: "face", faceAngle: 45, pivotX: 150, pivotY: -50, speed: 180 });
   });
 
   it("round-trips reusable Hide/Show effects in the v1 library", () => {

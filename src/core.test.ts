@@ -21,7 +21,7 @@ const item = (id: string, attachedTo?: string, owner = `${id}-owner`): Item => (
 
 const effect = (id = "effect-1"): ShaderEffectDefinitionV1 => ({
   id, type: "shader", enabled: true, target: { type: "detector" }, audience: { type: "everyone" },
-  preset: "glow", shape: "circle", color: "#55aaff", maxIntensity: 1, spread: 1,
+  preset: "glow", shape: "circle", placement: "above", color: "#55aaff", maxIntensity: 1, spread: 1,
 });
 
 const rule = (id: string, effects: EffectDefinitionV1[] = []): DetectionRuleV1 => ({
@@ -94,6 +94,13 @@ describe("versioned detector parsing", () => {
     const { shape: _shape, ...legacy } = effect();
     expect(parseEffectDefinition(legacy)).toMatchObject({ type: "shader", shape: "circle" });
     expect(parseEffectDefinition({ ...effect(), shape: "triangle" })).toBeNull();
+  });
+
+  it("parses shader placement, defaults legacy effects above, and rejects unknown placement", () => {
+    expect(parseEffectDefinition({ ...effect(), placement: "below" })).toMatchObject({ type: "shader", placement: "below" });
+    const { placement: _placement, ...legacy } = effect();
+    expect(parseEffectDefinition(legacy)).toMatchObject({ type: "shader", placement: "above" });
+    expect(parseEffectDefinition({ ...effect(), placement: "inside" })).toBeNull();
   });
 
   it("migrates legacy outlines to crisp glows", () => {
@@ -191,12 +198,15 @@ describe("runtime effect identity", () => {
   });
 
   it("parses Face mechanical effects and rejects invalid configuration", () => {
-    const face = { id: "face", type: "mechanical", enabled: true, action: "face", target: { type: "detector" }, faceAngle: 0, speed: 180 };
+    const face = { id: "face", type: "mechanical", enabled: true, action: "face", target: { type: "detector" }, faceAngle: 0, pivotX: 0, pivotY: 0, speed: 180 };
     expect(parseEffectDefinition(face)).toEqual(face);
+    const { pivotX: _pivotX, pivotY: _pivotY, ...legacyFace } = face;
+    expect(parseEffectDefinition(legacyFace)).toEqual(face);
     expect(parseEffectDefinition({ ...face, action: "move" })).toBeNull();
     expect(parseEffectDefinition({ ...face, faceAngle: 360 })).toBeNull();
     expect(parseEffectDefinition({ ...face, speed: 14 })).toBeNull();
     expect(parseEffectDefinition({ ...face, speed: 721 })).toBeNull();
+    expect(parseEffectDefinition({ ...face, pivotX: 501 })).toBeNull();
   });
 
   it("parses Hide/Show mechanical effects and rejects invalid configuration", () => {

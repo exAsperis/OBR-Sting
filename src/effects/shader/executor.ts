@@ -75,7 +75,13 @@ function uniforms(effect: ShaderEffectDefinitionV1, strength: number, scale: num
 }
 
 function configHash(effect: ShaderEffectDefinitionV1): string {
-  return JSON.stringify([effect.preset, effect.shape, effect.color, effect.maxIntensity, effect.spread, effect.geometry, effect.beamWidth, effect.animation]);
+  return JSON.stringify([effect.preset, effect.shape, effect.placement, effect.color, effect.maxIntensity, effect.spread, effect.geometry, effect.beamWidth, effect.animation]);
+}
+
+export function shaderZIndexForTarget(targetZIndex: number, runtimeKey: string, placement: ShaderEffectDefinitionV1["placement"]): number {
+  const tieBreak = (stableEffectZIndex(runtimeKey) - 1_000_000) / 1_000_000;
+  const offset = 0.5 + tieBreak * 0.49;
+  return targetZIndex + (placement === "above" ? offset : -offset);
 }
 
 export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefinitionV1> {
@@ -111,7 +117,8 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
       const direction = { x: directionVector.x / directionLength, y: directionVector.y / directionLength };
       const scale = effectScale(effect);
       const effectLayout = layout(bounds, scale);
-      const effectZIndex = stableEffectZIndex(context.runtimeKey);
+      const effectZIndex = shaderZIndexForTarget(context.target!.zIndex, context.runtimeKey, effect.placement);
+      const effectLayer = context.target!.layer;
       const nextLayoutHash = JSON.stringify([effectLayout, direction]);
       const hash = configHash(effect);
       let existing = this.states.get(context.runtimeKey);
@@ -142,7 +149,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
           .locked(true)
           .disableHit(true)
           .disableAutoZIndex(true)
-          .layer("ATTACHMENT")
+          .layer(effectLayer)
           .metadata({ [LOCAL_EFFECT_KEY]: { runtimeKey: context.runtimeKey } })
           .build();
         await OBR.scene.local.addItems([item]);
@@ -154,6 +161,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
             item.height = effectLayout.height;
             item.position = effectLayout.position;
             item.zIndex = effectZIndex;
+            item.layer = effectLayer;
             item.uniforms = uniforms(effect, context.strength, scale, direction);
           }
         });

@@ -12,6 +12,7 @@ import type {
   ShaderAnimationMode,
   ShaderEffectDefinitionV1,
   ShaderPreset,
+  ShaderPlacement,
   ShaderShape,
 } from "../types";
 
@@ -58,6 +59,9 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     if (value.action === "face") {
       if (!finite(value.faceAngle) || !finite(value.speed)) return null;
       if (value.faceAngle < 0 || value.faceAngle > 359 || value.speed < 15 || value.speed > 720) return null;
+      const pivotX = value.pivotX ?? 0;
+      const pivotY = value.pivotY ?? 0;
+      if (!finite(pivotX) || !finite(pivotY) || pivotX < -500 || pivotX > 500 || pivotY < -500 || pivotY > 500) return null;
       return {
         id: value.id,
         type: "mechanical",
@@ -65,6 +69,8 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
         action: "face",
         target,
         faceAngle: value.faceAngle,
+        pivotX,
+        pivotY,
         speed: value.speed,
       } satisfies MechanicalEffectDefinitionV1;
     }
@@ -125,6 +131,8 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   if ((!legacyPreset && !presets.includes(value.preset as ShaderPreset)) || !color(value.color)) return null;
   const shapes: ShaderShape[] = ["circle", "square"];
   if (value.shape !== undefined && !shapes.includes(value.shape as ShaderShape)) return null;
+  const placements: ShaderPlacement[] = ["above", "below"];
+  if (value.placement !== undefined && !placements.includes(value.placement as ShaderPlacement)) return null;
   if (!finite(value.maxIntensity) || value.maxIntensity < 0 || value.maxIntensity > 2) return null;
   if (!finite(value.spread) || value.spread <= 0 || value.spread > 4) return null;
   let geometry: ShaderEffectDefinitionV1["geometry"];
@@ -173,6 +181,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     audience,
     preset: legacyPreset ? "glow" : value.preset as ShaderPreset,
     shape: value.shape as ShaderShape ?? "circle",
+    placement: value.placement as ShaderPlacement ?? "above",
     color: value.color.toLowerCase(),
     // Preserve the old outline's approximate opacity and feather width while
     // migrating it to the unified glow shader.

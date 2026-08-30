@@ -9,4 +9,5 @@ export const SETTINGS_KEY = `${EXTENSION_ID}/settings`;
 export const EFFECT_LIBRARY_STORAGE_KEY = `${EXTENSION_ID}/effect-library`;
 export const CONTEXT_MENU_ID = `${EXTENSION_ID}/configure`;
 export const LOCAL_EFFECT_KEY = `${EXTENSION_ID}/runtime-effect`;
+export const PIVOT_DEBUG_KEY = `${EXTENSION_ID}/pivot-debug`;
 export const EMANATION_INTEGRATION_KEY = `${EXTENSION_ID}/emanation-enabled`;

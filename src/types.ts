@@ -3,6 +3,7 @@ import type { Item, Player } from "@owlbear-rodeo/sdk";
 export type Falloff = "binary" | "linear" | "smoothstep";
 export type ShaderPreset = "glow" | "beam";
 export type ShaderShape = "circle" | "square";
+export type ShaderPlacement = "above" | "below";
 export type ShaderAnimationMode = "none" | "pulse" | "flicker" | "radial-pulse";
 export type EffectLifecycle = "continuous" | "enter" | "exit" | "nearest-change";
 export type JsonPrimitive = string | number | boolean | null;
@@ -33,6 +34,7 @@ export interface ShaderEffectDefinitionV1 {
   audience: EffectAudienceV1;
   preset: ShaderPreset;
   shape: ShaderShape;
+  placement: ShaderPlacement;
   color: string;
   maxIntensity: number;
   spread: number;
@@ -81,6 +83,9 @@ export interface MechanicalFaceEffectDefinitionV1 {
   target: EffectTargetV1;
   /** Artwork-facing direction at zero item rotation, clockwise from north. */
   faceAngle: number;
+  /** Pivot offset from the item's bounds center, as a percentage of half-width/height. */
+  pivotX: number;
+  pivotY: number;
   /** Constant angular velocity in degrees per second. */
   speed: number;
 }

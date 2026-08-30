@@ -21,4 +21,14 @@ describe("SliderNumber", () => {
     fireEvent.blur(input);
     expect(onChange).toHaveBeenCalledWith(2.7);
   });
+
+  it("allows manual precision finer than the slider step", () => {
+    const onChange = vi.fn();
+    render(<SliderNumber label="Pivot X" value={0} min={-500} max={500} step={5} inputStep={1} onChange={onChange} suffix="%" />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit Pivot X: 0" }));
+    const input = screen.getByRole("spinbutton", { name: "Edit Pivot X" });
+    fireEvent.change(input, { target: { value: "13" } });
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledWith(13);
+  });
 });

@@ -1,13 +1,19 @@
-import OBR, { type Item } from "@owlbear-rodeo/sdk";
+import OBR, { buildLine, type Item } from "@owlbear-rodeo/sdk";
+import { PIVOT_DEBUG_KEY } from "../../constants";
 import type { DesiredEffect, MechanicalEffectDefinitionV1, MechanicalFaceEffectDefinitionV1, MechanicalVisibilityEffectDefinitionV1 } from "../../types";
 import type { EffectDispatchBatch, EffectExecutor, EffectReconcileReport } from "../registry";
 import { isMechanicalAuthority } from "./authority";
-import { advanceFaceRotation, compareFaceContexts, faceBearing, normalizeAngle, shortestAngleDelta } from "./face";
+import { advanceFaceRotation, compareFaceContexts, faceBearing, localPivotFromOrigin, normalizeAngle, positionForFixedPivot, resolvePivot, shortestAngleDelta, unrotatedItemSize } from "./face";
 
 interface FaceState {
   update: (recipe: (item: Item) => void) => Item;
   stop: () => void;
   currentRotation: number;
+  localPivot: { x: number; y: number };
+  currentPosition: { x: number; y: number };
+  pivot: { x: number; y: number };
+  pivotX: number;
+  pivotY: number;
   desiredRotation: number;
   speed: number;
   lastTime: number;
@@ -24,6 +30,12 @@ interface VisibilityState {
   runtimeKey: string;
 }
 
+interface PivotMarkerState {
+  ids: [string, string];
+  pivot: { x: number; y: number };
+  halfSize: number;
+}
+
 const COMPLETE_EPSILON = 0.05;
 const MAX_INTERACTION_MS = 15_000;
 
@@ -32,6 +44,7 @@ export class MechanicalEffectExecutor implements EffectExecutor<MechanicalEffect
   readonly scope = "shared" as const;
   private states = new Map<string, FaceState>();
   private visibilityStates = new Map<string, VisibilityState>();
+  private pivotMarkers = new Map<string, PivotMarkerState>();
   private tickerWorker: Worker | null = null;
   private tickerTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -67,18 +80,30 @@ export class MechanicalEffectExecutor implements EffectExecutor<MechanicalEffect
       if (winners.has(targetId)) continue;
       await this.commitAndStop(targetId, state);
     }
+    for (const targetId of [...this.pivotMarkers.keys()]) if (!winners.has(targetId)) await this.removePivotMarker(targetId);
 
     for (const [targetId, context] of winners) {
       const effect = context.effect as MechanicalFaceEffectDefinitionV1;
-      const desiredRotation = faceBearing(context.target!.position, context.detectedEmitter!.position, effect.faceAngle);
-      const existing = this.states.get(targetId);
+      let existing = this.states.get(targetId);
+      if (existing && (existing.pivotX !== effect.pivotX || existing.pivotY !== effect.pivotY)) {
+        await this.commitAndStop(targetId, existing);
+        existing = undefined;
+      }
       if (existing) {
-        existing.desiredRotation = desiredRotation;
+        if (!this.pivotMarkers.has(targetId)) await this.ensurePivotMarker(targetId, existing.pivot, 12);
+        existing.desiredRotation = faceBearing(existing.pivot, context.detectedEmitter!.position, effect.faceAngle);
         existing.speed = effect.speed;
         existing.runtimeKey = context.runtimeKey;
         statuses.set(context.runtimeKey, "tracking");
         continue;
       }
+      let bounds;
+      try { bounds = await OBR.scene.items.getItemBounds([targetId]); }
+      catch { statuses.set(context.runtimeKey, "skipped"); continue; }
+      const size = unrotatedItemSize(context.target!, bounds);
+      const pivot = resolvePivot(bounds.center, size, context.target!.rotation, effect.pivotX, effect.pivotY);
+      await this.ensurePivotMarker(targetId, pivot, Math.max(8, Math.min(24, Math.min(size.width, size.height) * 0.12)));
+      const desiredRotation = faceBearing(pivot, context.detectedEmitter!.position, effect.faceAngle);
       if (Math.abs(shortestAngleDelta(context.target!.rotation, desiredRotation)) <= COMPLETE_EPSILON) {
         statuses.set(context.runtimeKey, "facing");
         continue;
@@ -89,6 +114,11 @@ export class MechanicalEffectExecutor implements EffectExecutor<MechanicalEffect
           update: update as FaceState["update"],
           stop,
           currentRotation: normalizeAngle(context.target!.rotation),
+          localPivot: localPivotFromOrigin(context.target!.position, pivot, context.target!.rotation),
+          currentPosition: { ...context.target!.position },
+          pivot,
+          pivotX: effect.pivotX,
+          pivotY: effect.pivotY,
           desiredRotation,
           speed: effect.speed,
           lastTime: performance.now(),
@@ -163,6 +193,37 @@ export class MechanicalEffectExecutor implements EffectExecutor<MechanicalEffect
     } catch { /* fail silently like other mechanical mutations */ }
   }
 
+  private async ensurePivotMarker(targetId: string, pivot: { x: number; y: number }, halfSize: number): Promise<void> {
+    const existing = this.pivotMarkers.get(targetId);
+    if (existing && existing.pivot.x === pivot.x && existing.pivot.y === pivot.y && existing.halfSize === halfSize) return;
+    if (existing) await this.removePivotMarker(targetId);
+    try {
+      const common = (axis: "horizontal" | "vertical") => buildLine()
+        .name(`Sting Face pivot ${axis}`)
+        .startPosition(axis === "horizontal" ? { x: pivot.x - halfSize, y: pivot.y } : { x: pivot.x, y: pivot.y - halfSize })
+        .endPosition(axis === "horizontal" ? { x: pivot.x + halfSize, y: pivot.y } : { x: pivot.x, y: pivot.y + halfSize })
+        .strokeColor("#ff3366")
+        .strokeWidth(3)
+        .locked(true)
+        .disableHit(true)
+        .disableAutoZIndex(true)
+        .zIndex(2_000_000)
+        .layer("POINTER")
+        .metadata({ [PIVOT_DEBUG_KEY]: { targetId, source: "runtime" } })
+        .build();
+      const lines = [common("horizontal"), common("vertical")];
+      await OBR.scene.local.addItems(lines);
+      this.pivotMarkers.set(targetId, { ids: [lines[0].id, lines[1].id], pivot: { ...pivot }, halfSize });
+    } catch { /* debugging feedback must not interrupt the effect */ }
+  }
+
+  private async removePivotMarker(targetId: string): Promise<void> {
+    const marker = this.pivotMarkers.get(targetId);
+    if (!marker) return;
+    try { await OBR.scene.local.deleteItems(marker.ids); } catch { /* fail silently */ }
+    this.pivotMarkers.delete(targetId);
+  }
+
   private tick(targetId: string, time: number): void {
     const state = this.states.get(targetId);
     if (!state) return;
@@ -174,15 +235,17 @@ export class MechanicalEffectExecutor implements EffectExecutor<MechanicalEffect
     state.lastTime = time;
     const delta = shortestAngleDelta(state.currentRotation, state.desiredRotation);
     state.currentRotation = advanceFaceRotation(state.currentRotation, state.desiredRotation, state.speed, elapsedSeconds);
+    state.currentPosition = positionForFixedPivot(state.pivot, state.localPivot, state.currentRotation);
     try {
-      state.update((item) => { item.rotation = state.currentRotation; });
+      state.update((item) => { item.rotation = state.currentRotation; item.position = state.currentPosition; });
     } catch {
       void this.commitAndStop(targetId, state);
       return;
     }
     if (Math.abs(delta) <= COMPLETE_EPSILON || Math.abs(shortestAngleDelta(state.currentRotation, state.desiredRotation)) <= COMPLETE_EPSILON) {
       state.currentRotation = state.desiredRotation;
-      try { state.update((item) => { item.rotation = state.desiredRotation; }); } catch { /* fail silently */ }
+      state.currentPosition = positionForFixedPivot(state.pivot, state.localPivot, state.desiredRotation);
+      try { state.update((item) => { item.rotation = state.desiredRotation; item.position = state.currentPosition; }); } catch { /* fail silently */ }
       void this.commitAndStop(targetId, state);
       return;
     }
@@ -193,7 +256,7 @@ export class MechanicalEffectExecutor implements EffectExecutor<MechanicalEffect
     state.stopping = true;
     try {
       await OBR.scene.items.updateItems<Item>([targetId], (items) => {
-        for (const item of items) item.rotation = state.currentRotation;
+        for (const item of items) { item.rotation = state.currentRotation; item.position = state.currentPosition; }
       });
     } catch { /* preserve best-effort silent failure behavior */ }
     try { state.stop(); } catch { /* fail silently */ }
@@ -230,6 +293,7 @@ export class MechanicalEffectExecutor implements EffectExecutor<MechanicalEffect
   async clear(): Promise<void> {
     for (const [targetId, state] of [...this.states]) await this.commitAndStop(targetId, state);
     this.visibilityStates.clear();
+    for (const targetId of [...this.pivotMarkers.keys()]) await this.removePivotMarker(targetId);
     this.stopTicker();
   }
 }
