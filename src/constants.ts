@@ -12,3 +12,5 @@ export const CONTEXT_MENU_ID = `${EXTENSION_ID}/configure`;
 export const LOCAL_EFFECT_KEY = `${EXTENSION_ID}/runtime-effect`;
 export const PIVOT_DEBUG_KEY = `${EXTENSION_ID}/pivot-debug`;
 export const EMANATION_INTEGRATION_KEY = `${EXTENSION_ID}/emanation-enabled`;
+export const RUMBLE_INTEGRATION_KEY = `${EXTENSION_ID}/rumble-enabled`;
+export const EMITTER_LABEL_DEBUG_KEY = `${EXTENSION_ID}/emitter-label-debug`;

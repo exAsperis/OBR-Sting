@@ -13,6 +13,7 @@ export interface IntegrationActionCatalogEntry {
   allowedAudiences: readonly EffectAudienceV1["type"][];
   parameters: readonly ParameterField[];
   defaults: JsonObject;
+  warning?: string;
 }
 
 export interface IntegrationProviderCatalogEntry {
@@ -45,6 +46,27 @@ export const INTEGRATION_CATALOG: readonly IntegrationProviderCatalogEntry[] = [
         warning: "A&E can only remove every aura from the target, including auras not created by Sting.",
       },
     ],
+  }],
+}, {
+  id: "rumble",
+  displayName: "Rumble!",
+  iconUrl: "https://battle-system.com/owlbear/rumble-docs/logo.png",
+  schemaVersion: 1,
+  actions: [{
+    id: "send-message",
+    displayName: "Send Message",
+    allowedLifecycles: ["enter", "exit", "nearest-change"],
+    allowedAudiences: ["everyone", "gm", "players", "detector-owner", "carrier-owner", "target-owner", "specific-users"],
+    defaults: { message: "A signal was detected." },
+    parameters: [{ type: "text", key: "message", label: "Message" }],
+    warning: "Message text is stored in shared detector metadata. Direct delivery does not make the configured text secret.",
+  }, {
+    id: "roll-dice",
+    displayName: "Roll Dice",
+    allowedLifecycles: ["enter", "exit", "nearest-change"],
+    allowedAudiences: ["everyone"],
+    defaults: { notation: "1d20" },
+    parameters: [{ type: "text", key: "notation", label: "Dice notation" }],
   }],
 }];
 

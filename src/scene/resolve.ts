@@ -39,6 +39,27 @@ export function isAudienceMember(
   }
 }
 
+/** Resolve an integration audience to stable Owlbear user IDs. */
+export function resolveAudienceUserIds(
+  audience: EffectAudienceV1,
+  party: Pick<Player, "id" | "role">[],
+  detector: Item,
+  target: Item | null,
+  graph: AttachmentGraph,
+): string[] {
+  let ids: Array<string | null>;
+  switch (audience.type) {
+    case "everyone": ids = party.map((player) => player.id); break;
+    case "gm": ids = party.filter((player) => player.role === "GM").map((player) => player.id); break;
+    case "players": ids = party.filter((player) => player.role === "PLAYER").map((player) => player.id); break;
+    case "detector-owner": ids = [resolveItemOwnerId(detector)]; break;
+    case "carrier-owner": ids = [resolveItemOwnerId(resolveCarrier(detector, graph))]; break;
+    case "target-owner": ids = [resolveItemOwnerId(target)]; break;
+    case "specific-users": ids = audience.userIds; break;
+  }
+  return [...new Set(ids.filter((id): id is string => Boolean(id)))];
+}
+
 export function isShaderAudienceMember(
   audience: EffectAudienceV1,
   alwaysIncludeGm: boolean,

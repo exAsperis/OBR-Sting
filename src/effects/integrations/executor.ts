@@ -1,6 +1,7 @@
 import type { DesiredEffect, IntegrationEffectDefinitionV1 } from "../../types";
 import type { EffectDispatchBatch, EffectExecutor, EffectReconcileReport } from "../registry";
 import type { IntegrationProviderRegistry } from "./registry";
+import { isSharedEffectAuthority } from "../mechanical/authority";
 
 export class IntegrationEffectExecutor implements EffectExecutor<IntegrationEffectDefinitionV1> {
   readonly type = "integration" as const;
@@ -28,7 +29,7 @@ export class IntegrationEffectExecutor implements EffectExecutor<IntegrationEffe
         const effect = entry.effect as IntegrationEffectDefinitionV1;
         const action = provider.actions.find((candidate) => candidate.id === effect.actionId);
         const authorized = action?.execution === "single-authority"
-          ? entry.localPlayer.role === "GM"
+          ? isSharedEffectAuthority(entry.localPlayer, entry.party)
           : entry.audienceMatch;
         if (!authorized) {
           statuses.set(entry.runtimeKey, "not-execution-client");

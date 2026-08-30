@@ -1,6 +1,6 @@
 import OBR, { isImage, type GridType, type Item, type Player } from "@owlbear-rodeo/sdk";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DETECTOR_KEY, EFFECT_LIBRARY_STORAGE_KEY, EMANATION_INTEGRATION_KEY, EMITTER_KEY, EXTENSION_NAME, RULE_LIBRARY_STORAGE_KEY, SETTINGS_KEY } from "./constants";
+import { DETECTOR_KEY, EFFECT_LIBRARY_STORAGE_KEY, EMANATION_INTEGRATION_KEY, EMITTER_KEY, EXTENSION_NAME, RULE_LIBRARY_STORAGE_KEY, RUMBLE_INTEGRATION_KEY, SETTINGS_KEY } from "./constants";
 import { parseDetectionRule, parseDetectorMetadata, parseEmitterMetadata } from "./metadata/parse";
 import { DEBUG_STORAGE_KEY } from "./runtime/engine";
 import { DEFAULT_GEOMETRY, resolveShaderGeometry } from "./effects/shader/geometry";
@@ -20,6 +20,7 @@ import { ToggleOptionLabel } from "./components/ToggleOptionLabel";
 import { CaretIcon, GearsIcon, SaveToBookIcon, TrashIcon } from "./components/EditorIcons";
 import { SignalCombobox } from "./components/SignalCombobox";
 import { EditableTitle } from "./components/EditableTitle";
+import { clearEmitterLabels, labelAllEmitters } from "./runtime/emitterLabels";
 
 const newEffect = (): ShaderEffectDefinitionV1 => ({ id: crypto.randomUUID(), type: "shader", enabled: true, target: { type: "detector" }, audience: { type: "everyone" }, preset: "glow", shape: "circle", placement: "above", color: "#55aaff", maxIntensity: 1, spread: 1.25, animation: { mode: "none", rate: 1, depth: 0.35 } });
 const newFaceEffect = (): MechanicalEffectDefinitionV1 => ({ id: crypto.randomUUID(), type: "mechanical", enabled: true, action: "face", target: { type: "detector" }, faceAngle: 0, pivotX: 0, pivotY: 0, speed: 180 });
@@ -50,10 +51,13 @@ export default function App() {
   const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [debug, setDebug] = useState<DebugRuleState[]>([]);
+  const [emitterLabelsVisible, setEmitterLabelsVisible] = useState(false);
+  const [emitterLabelCount, setEmitterLabelCount] = useState(0);
   const [showDebug, setShowDebug] = useState(false);
   const [showSettings, setShowSettings] = useState(true);
   const [gridUnit, setGridUnit] = useState("");
   const [emanationEnabled, setEmanationEnabled] = useState(() => localStorage.getItem(EMANATION_INTEGRATION_KEY) === "true");
+  const [rumbleEnabled, setRumbleEnabled] = useState(false);
   const [sceneSettings, setSceneSettings] = useState<SceneSettingsV1>(DEFAULT_SCENE_SETTINGS);
   const [gridType, setGridType] = useState<GridType>("SQUARE");
   const [effectLibrary, setEffectLibrary] = useState<EffectLibraryV1>(() => loadEffectLibrary(localStorage, EFFECT_LIBRARY_STORAGE_KEY));
@@ -98,7 +102,10 @@ export default function App() {
       setSceneSettings(DEFAULT_SCENE_SETTINGS);
       return;
     }
-    const applySettings = (metadata: Awaited<ReturnType<typeof OBR.scene.getMetadata>>) => setSceneSettings(parseSceneSettings(metadata[SETTINGS_KEY]));
+    const applySettings = (metadata: Awaited<ReturnType<typeof OBR.scene.getMetadata>>) => {
+      setSceneSettings(parseSceneSettings(metadata[SETTINGS_KEY]));
+      setRumbleEnabled(metadata[RUMBLE_INTEGRATION_KEY] === true);
+    };
     void OBR.scene.getMetadata().then(applySettings);
     const stopSettings = OBR.scene.onMetadataChange(applySettings);
     return stopSettings;
@@ -125,9 +132,33 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [showDebug]);
 
+  useEffect(() => {
+    if (connection.sceneReady) return;
+    setEmitterLabelsVisible(false);
+    setEmitterLabelCount(0);
+    void clearEmitterLabels();
+  }, [connection.sceneReady]);
+
+  useEffect(() => () => { void clearEmitterLabels(); }, []);
+
   const updateRule = (index: number, update: (rule: DetectionRuleV1) => DetectionRuleV1) => setDetector((current) => ({ ...current, rules: current.rules.map((rule, i) => i === index ? update(rule) : rule) }));
   const updateEffect = (ruleIndex: number, effectIndex: number, update: (effect: EffectDefinitionV1) => EffectDefinitionV1) => updateRule(ruleIndex, (rule) => ({ ...rule, effects: rule.effects.map((effect, i) => i === effectIndex ? update(effect) : effect) }));
   const toggleEmanation = (enabled: boolean) => { localStorage.setItem(EMANATION_INTEGRATION_KEY, String(enabled)); setEmanationEnabled(enabled); };
+  const toggleRumble = (enabled: boolean) => {
+    setRumbleEnabled(enabled);
+    setSettingsError(null);
+    void OBR.scene.setMetadata({ [RUMBLE_INTEGRATION_KEY]: enabled }).catch(() => {
+      setSettingsError("Unable to save the Rumble! integration setting.");
+      void OBR.scene.getMetadata().then((metadata) => setRumbleEnabled(metadata[RUMBLE_INTEGRATION_KEY] === true));
+    });
+  };
+  const toggleEmitterLabels = () => {
+    if (emitterLabelsVisible) {
+      void clearEmitterLabels().then(() => { setEmitterLabelsVisible(false); setEmitterLabelCount(0); });
+      return;
+    }
+    void labelAllEmitters(items).then((count) => { setEmitterLabelsVisible(count > 0); setEmitterLabelCount(count); });
+  };
   const updateDistanceMethod = (distanceMethod: SceneSettingsV1["distanceMethod"]) => {
     const next: SceneSettingsV1 = { version: 1, distanceMethod };
     setSceneSettings(next);
@@ -230,11 +261,11 @@ export default function App() {
         <p className="muted">Controls signal range, falloff, and which signal is considered closest.</p>
         <div className="settings-subsection"><div className="section-title"><strong>Rules Library</strong><span className="library-count">{ruleLibrary.entries.length}</span></div>{ruleLibrary.entries.length ? <div className="library-list">{ruleLibrary.entries.map((entry) => <div className="library-row" key={entry.id}><span><strong>{entry.name}</strong><small>{entry.rule.signal} · {entry.rule.effects.length} effect{entry.rule.effects.length === 1 ? "" : "s"}</small></span><button className="mini-icon danger" title={`Delete ${entry.name} from the rules library.`} aria-label={`Delete ${entry.name} from the rules library`} onClick={() => confirmDelete(`Delete “${entry.name}” from the rules library?`, () => saveRuleLibrary({ version: 1, entries: ruleLibrary.entries.filter((candidate) => candidate.id !== entry.id) }))}><TrashIcon /></button></div>)}</div> : <p className="muted library-empty">Save a rule with all of its effects to reuse it later in this browser.</p>}</div>
         <div className="settings-subsection"><div className="section-title"><strong>Effects Library</strong><span className="library-count">{effectLibrary.entries.length}</span></div>{effectLibrary.entries.length ? <div className="library-list">{effectLibrary.entries.map((entry) => <div className="library-row" key={entry.id}><span><strong>{entry.name}</strong><small>{effectTypeLabel(entry.effect)}</small></span><button className="mini-icon danger" title={`Delete ${entry.name} from the effects library.`} aria-label={`Delete ${entry.name} from the effects library`} onClick={() => confirmDelete(`Delete “${entry.name}” from the effects library?`, () => saveEffectLibrary({ version: 1, entries: effectLibrary.entries.filter((candidate) => candidate.id !== entry.id) }))}><TrashIcon /></button></div>)}</div> : <p className="muted library-empty">Save an effect to reuse it later in this browser.</p>}</div>
-        <div className="settings-subsection"><strong>Extensions</strong><div className="extension-row"><div><strong>Auras &amp; Emanations</strong><p className="muted">Trigger named presets through the installed extension.</p></div><label className="toggle" title="Allow Sting rules to execute Auras &amp; Emanations actions."><input type="checkbox" aria-label="Allow Auras & Emanations integration" checked={emanationEnabled} disabled={connection.role !== "GM"} onChange={(event) => toggleEmanation(event.target.checked)} /></label></div></div>
+        <div className="settings-subsection"><strong>Extensions</strong><div className="extension-row"><div><strong>Auras &amp; Emanations</strong><p className="muted">Trigger named presets through the installed extension.</p></div><label className="toggle" title="Allow Sting rules to execute Auras &amp; Emanations actions."><input type="checkbox" aria-label="Allow Auras & Emanations integration" checked={emanationEnabled} disabled={connection.role !== "GM"} onChange={(event) => toggleEmanation(event.target.checked)} /></label></div><div className="extension-row"><div><strong>Rumble!</strong><p className="muted">Send chat messages and party-visible dice rolls through Rumble!.</p></div><label className="toggle" title="Allow Sting rules to execute Rumble! actions for this scene."><input type="checkbox" aria-label="Allow Rumble integration" checked={rumbleEnabled} disabled={connection.role !== "GM" || !connection.sceneReady} onChange={(event) => toggleRumble(event.target.checked)} /></label></div></div>
         {settingsError && <div className="validation-error" role="alert">{settingsError}</div>}
       </div>
     </section>}
-    {showDebug ? <DebugView rules={debug} /> : selected && !showSettings && connection.role === "GM" ? <>
+    {showDebug ? <><div className="debug-emitter-labels"><button className="wide-button" disabled={!connection.sceneReady} onClick={toggleEmitterLabels}>{emitterLabelsVisible ? "Clear emitter labels" : "Label all emitters"}</button>{emitterLabelsVisible && <p className="muted" role="status">Showing {emitterLabelCount} local emitter label{emitterLabelCount === 1 ? "" : "s"}.</p>}</div><DebugView rules={debug} /></> : selected && !showSettings && connection.role === "GM" ? <>
       <section className="item-heading"><div className="selected-thumbnail">{isImage(selected) && selected.image.mime.startsWith("image/") ? <img src={selected.image.url} alt="" /> : <span aria-hidden="true">◇</span>}</div><div><span className="eyebrow">Selected item</span><h2>{selected.name || "Unnamed item"}</h2><code>{selected.id}</code></div></section>
       <section className="content-card"><div className="section-title"><h2 title="Add detectable signal tags. End a tag with a range such as [20] to cap it in scene units.">Emitter</h2><label className="toggle" title="Enable or disable every signal emitted by this item."><input type="checkbox" aria-label="Enable emitter" checked={emitter.enabled} onChange={(event) => setEmitter({ ...emitter, enabled: event.target.checked })} /></label></div><div className="chips">{emitter.signals.map((signal) => <button title={`Remove the ${signal} signal from this item.`} key={signal} className="chip" onClick={() => setEmitter({ ...emitter, signals: emitter.signals.filter((value) => value !== signal) })}>{signal}<span>×</span></button>)}</div><div className="input-row"><SignalCombobox value={signalDraft} options={sceneSignals} onChange={setSignalDraft} onEnter={addSignal} /><button title="Add this signal to the selected item." onClick={addSignal}>Add</button></div></section>
       <section className="content-card"><div className="section-title"><h2 title="Add detection rules that respond when matching emitter tags are within range.">Detector</h2><label className="toggle" title="Enable or disable every detection rule on this item."><input type="checkbox" aria-label="Enable detector" checked={detector.enabled} onChange={(event) => setDetector({ ...detector, enabled: event.target.checked })} /></label></div>{detector.rules.map((rule, ruleIndex) => <RuleEditor key={rule.id} rule={rule} index={ruleIndex} unit={gridUnit} items={items} party={party} emanationEnabled={emanationEnabled} library={effectLibrary.entries} onSaveRule={() => saveRuleToLibrary(rule)} onSaveEffect={saveEffectToLibrary} onChange={(update) => updateRule(ruleIndex, update)} onEffect={(effectIndex, update) => updateEffect(ruleIndex, effectIndex, update)} onDelete={() => confirmDelete(`Delete Rule ${ruleIndex + 1} and all of its effects?`, () => setDetector({ ...detector, rules: detector.rules.filter((_, i) => i !== ruleIndex) }))} />)}<div className="rule-add-actions"><button className="wide-button" title="Add another detection rule to this item." onClick={() => setDetector({ ...detector, rules: [...detector.rules, newRule()] })}>+ Add detection rule</button><button className={`mini-icon${ruleLibraryOpen ? " active" : ""}`} title={ruleLibrary.entries.length ? "Add a saved rule from your browser-local library." : "Your browser-local rules library is empty."} aria-label="Add rule from the rules library" disabled={!ruleLibrary.entries.length} onClick={() => setRuleLibraryOpen((value) => !value)}><BookIcon /></button></div>{ruleLibraryOpen && <div className="library-picker">{ruleLibrary.entries.map((entry) => <button key={entry.id} title={`Add ${entry.name} and all of its effects.`} onClick={() => { setDetector((current) => ({ ...current, rules: [...current.rules, instantiateLibraryRule(entry)] })); setRuleLibraryOpen(false); }}><span>{entry.name}</span><small>{entry.rule.signal} · {entry.rule.effects.length} effect{entry.rule.effects.length === 1 ? "" : "s"}</small></button>)}</div>}</section>

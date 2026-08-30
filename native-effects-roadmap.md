@@ -5,9 +5,7 @@ This document lists planned native effects for Sting, including progress, proble
 
 ### Directional glow
 instead of the whole detector glowing evenly, the side facing the detected emitter brightens.
-
-### Directional pulse
-a pulse travels across the detector toward the emitter, or repeatedly sweeps from the detector center toward the source direction. It communicates both there is something and it is that way.
+This is quite a bit like Responsive offset, and may be unnecessary.
 
 ### Arrow / chevron indicator
 a small local arrow attached to the detector points toward the emitter. Its size, brightness, opacity, or pulse rate can scale with proximity. Extremely legible and useful.
@@ -34,10 +32,11 @@ if the emitter is off-screen, place a marker at the edge of the user's viewport 
 
 ## Mechanical effects
 
-### Block
+### ❌ Block
 Prevents the detector from moving into the range of the the emitter. Or prevents the emitter from moving into the range of the detector. 
 Target cannot be "Specific item". It must be either the Detector, the Detected emitter(s), Parent, or Carrier.
 This effect is only valid if we can actually stop movement as the item is being dragged. If it's an after-drop effect, we can achieve the same effect with Repell.
+This effect is not feasable.
 
-### Repell
+### Repel
 Moves the target away from the emitter.

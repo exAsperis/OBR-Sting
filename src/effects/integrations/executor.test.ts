@@ -47,4 +47,19 @@ describe("IntegrationEffectExecutor", () => {
     const report = await executor.reconcile({ desired: [], events: [context] });
     expect(report.statuses.get("runtime")).toBe("provider-unavailable");
   });
+
+  it("elects only one GM connection for single-authority actions", async () => {
+    const registry = new IntegrationProviderRegistry();
+    const registered = provider();
+    registry.register(registered);
+    const executor = new IntegrationEffectExecutor(registry);
+    const effect: IntegrationEffectDefinitionV1 = {
+      id: "effect", type: "integration", enabled: true, lifecycle: "enter", target: { type: "detector" }, audience: { type: "everyone" },
+      providerId: registered.id, providerSchemaVersion: 1, actionId: "fire", parameters: {},
+    };
+    const losing = { effect, runtimeKey: "runtime", localPlayer: { id: "gm", role: "GM", connectionId: "gm-b" }, party: [{ id: "gm", role: "GM", connectionId: "gm-a" }], audienceMatch: true } as DesiredEffect;
+    const report = await executor.reconcile({ desired: [], events: [losing] });
+    expect(registered.reconcile).toHaveBeenCalledWith({ desired: [], events: [] });
+    expect(report.statuses.get("runtime")).toBe("not-execution-client");
+  });
 });

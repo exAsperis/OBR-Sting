@@ -22,6 +22,18 @@ Sting's first provider adapter can optionally trigger named presets or preset gr
 
 Cleanup is opt-in per effect. The external API only exposes `REMOVE_AURAS`, which removes every Auras and Emanations aura from the target. Sting therefore leaves cleanup disabled by default and shows a warning beside the option.
 
+## Rumble! integration
+
+Enable Rumble! for the scene in Sting settings to add event effects that send chat
+messages or party-visible dice rolls. Messages can target the party or a resolved Sting
+audience; dice use Rumble's documented Roll20-style notation and are always public.
+
+Rumble! exposes player-metadata commands but no readiness handshake or result callback.
+Sting therefore cannot verify that Rumble! is installed and never branches on a roll
+result. Rumble! stores its chat log locally and loses it on refresh. Configured message
+text lives in shared detector metadata, so direct delivery must not be used to hide the
+configured text from room participants.
+
 ## Local development
 
 ```sh

@@ -2,8 +2,8 @@ import type { Player } from "@owlbear-rodeo/sdk";
 
 type MechanicalPlayer = Pick<Player, "id" | "role" | "connectionId">;
 
-/** Elect one connected GM session as the shared writer for mechanical effects. */
-export function isMechanicalAuthority(localPlayer: MechanicalPlayer, party: Player[]): boolean {
+/** Elect one connected GM session as the shared writer for room-wide effects. */
+export function isSharedEffectAuthority(localPlayer: MechanicalPlayer, party: Player[]): boolean {
   if (localPlayer.role !== "GM") return false;
   // OBR.party intentionally excludes the local player. Include it explicitly so
   // every session elects from the same complete set of connected GM sessions.
@@ -14,3 +14,6 @@ export function isMechanicalAuthority(localPlayer: MechanicalPlayer, party: Play
     .sort();
   return gmConnections[0] === localPlayer.connectionId;
 }
+
+/** Backward-compatible mechanical-effect name. */
+export const isMechanicalAuthority = isSharedEffectAuthority;
