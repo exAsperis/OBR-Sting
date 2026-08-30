@@ -9,7 +9,7 @@ import { buildRuntimeEffectKey } from "../effects/runtimeKey";
 import { parseDetectorMetadata } from "../metadata/parse";
 import { evaluateRule, indexEmittersBySignal } from "../proximity/evaluate";
 import { buildAttachmentGraph } from "../scene/attachments";
-import { isAudienceMember, resolveEffectTarget } from "../scene/resolve";
+import { isAudienceMember, isShaderAudienceMember, resolveEffectTarget } from "../scene/resolve";
 import { deriveTransition, toRuleSnapshot } from "./lifecycle";
 import type { DebugRuleState, DesiredEffect, RuleSnapshot } from "../types";
 import type { DistanceMethod } from "../settings";
@@ -95,7 +95,9 @@ export class ProximityEngine {
             const target = resolveEffectTarget(effect.target, detector, evaluation.detectedEmitter, graph);
             const audienceMatch = effect.type === "mechanical"
               ? this.player.role === "GM"
-              : isAudienceMember(effect.audience, this.player, detector, target, graph);
+              : effect.type === "shader"
+                ? isShaderAudienceMember(effect.audience, effect.alwaysIncludeGm ?? false, this.player, detector, target, graph)
+                : isAudienceMember(effect.audience, this.player, detector, target, graph);
             const runtimeKey = target ? buildRuntimeEffectKey(
               detector.id,
               rule.id,

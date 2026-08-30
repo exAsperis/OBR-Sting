@@ -40,7 +40,8 @@ Only the GM can configure items. Select one scene item and open **Sting…** fro
 3. Add any number of effects to each rule.
 4. Choose each effect's target, audience, shader preset, color, intensity, animation, center offset, and inner/outer radius.
 5. Optionally link supported shader animation, softness, beam, scale, rotation, offset, and radius controls to signal strength with the `MIN` or `MAX` endpoint controls.
-6. Changes save automatically to item metadata after a short validation delay.
+6. Optionally blend between minimum/full-strength colors, use constant intensity, and always include GMs in a shader effect's audience.
+7. Changes save automatically to item metadata after a short validation delay.
 
 Open **Settings** without selecting an item to choose how Sting measures distance for the scene:
 using the scene-configured measurement type by default. A per-scene override can select

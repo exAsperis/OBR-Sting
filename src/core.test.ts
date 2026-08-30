@@ -7,7 +7,7 @@ import { calculateStrength } from "./proximity/strength";
 import { evaluateRule, indexEmittersBySignal, selectRuleEvaluations } from "./proximity/evaluate";
 import { getSceneDistance, toSceneUnits } from "./proximity/distance";
 import { buildAttachmentGraph, isSameAttachmentFamily, resolveCarrier, resolveParent } from "./scene/attachments";
-import { isAudienceMember, resolveEffectTarget } from "./scene/resolve";
+import { isAudienceMember, isShaderAudienceMember, resolveEffectTarget } from "./scene/resolve";
 import { normalizeSignal, normalizeSignals } from "./signals/normalize";
 import { DEFAULT_SCENE_SETTINGS, parseSceneSettings } from "./settings";
 import type { DetectionRuleV1, EffectAudienceV1, EffectDefinitionV1, ShaderEffectDefinitionV1 } from "./types";
@@ -165,6 +165,13 @@ describe("versioned detector parsing", () => {
     expect(parseEffectDefinition({ ...linked, beamWidthStrengthLink: "middle" })).toBeNull();
     expect(parseEffectDefinition({ ...linked, geometry: { ...linked.geometry, widthStrengthLink: "middle" } })).toBeNull();
   });
+  it("parses shader gradient, intensity, and GM audience options", () => {
+    const configured = { ...effect(), colorGradient: { minColor: "#112233" }, intensityStrengthLinked: false, alwaysIncludeGm: true };
+    expect(parseEffectDefinition(configured)).toMatchObject(configured);
+    expect(parseEffectDefinition({ ...configured, colorGradient: { minColor: "red" } })).toBeNull();
+    expect(parseEffectDefinition({ ...configured, intensityStrengthLinked: "yes" })).toBeNull();
+    expect(parseEffectDefinition({ ...configured, alwaysIncludeGm: "yes" })).toBeNull();
+  });
 
   it("parses Auras and Emanations preset triggers", () => {
     expect(parseEffectDefinition({ id: "ae", type: "emanation", enabled: true, target: { type: "detector" }, audience: { type: "everyone" }, presetName: "Spirits", removeAllOnDeactivate: true })).toMatchObject({
@@ -228,6 +235,12 @@ describe("attachment graph and targets", () => {
     [{ type: "specific-users", userIds: ["chosen"] } as const, { id: "chosen", role: "PLAYER" } as const, true],
     [{ type: "specific-users", userIds: ["chosen"] } as const, { id: "other", role: "PLAYER" } as const, false],
   ])("resolves audience %#", (audience, player, expected) => expect(isAudienceMember(audience as EffectAudienceV1, player, detector, unrelated, graph)).toBe(expected));
+  it("can always include GMs without changing the configured audience", () => {
+    const playersOnly = { type: "players" } as const;
+    expect(isShaderAudienceMember(playersOnly, true, { id: "gm", role: "GM" }, detector, unrelated, graph)).toBe(true);
+    expect(isShaderAudienceMember(playersOnly, false, { id: "gm", role: "GM" }, detector, unrelated, graph)).toBe(false);
+    expect(isShaderAudienceMember(playersOnly, true, { id: "player", role: "PLAYER" }, detector, unrelated, graph)).toBe(true);
+  });
 });
 
 describe("runtime effect identity", () => {

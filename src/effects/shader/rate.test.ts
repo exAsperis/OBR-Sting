@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ShaderEffectDefinitionV1 } from "../../types";
-import { resolveStrengthLinkedRate, resolveStrengthLinkedShaderValues, resolveStrengthLinkedValue, shaderConfigHash, shaderUniforms } from "./executor";
+import { resolveEffectIntensity, resolveSignalColor, resolveStrengthLinkedRate, resolveStrengthLinkedShaderValues, resolveStrengthLinkedValue, shaderConfigHash, shaderUniforms } from "./executor";
 
 describe("signal-linked animation rate", () => {
   it("keeps an unlinked rate constant", () => {
@@ -61,6 +61,24 @@ describe("signal-linked shader geometry", () => {
     const geometry = resolveStrengthLinkedShaderValues(conflicting, 0).geometry;
     expect(geometry.outerRadius).toBeGreaterThanOrEqual(geometry.innerRadius + 1);
     expect(geometry.outerRadius).toBeLessThanOrEqual(200);
+  });
+});
+
+describe("signal-linked color and intensity", () => {
+  const effect: ShaderEffectDefinitionV1 = {
+    id: "color", type: "shader", enabled: true, target: { type: "detector" }, audience: { type: "everyone" },
+    preset: "glow", shape: "circle", placement: "above", color: "#ffffff", colorGradient: { minColor: "#000000" }, maxIntensity: 1.5, spread: 1,
+  };
+
+  it("interpolates the gradient endpoints in RGB", () => {
+    expect(resolveSignalColor(effect, 0)).toEqual({ x: 0, y: 0, z: 0 });
+    expect(resolveSignalColor(effect, 0.5)).toEqual({ x: 0.5, y: 0.5, z: 0.5 });
+    expect(resolveSignalColor(effect, 1)).toEqual({ x: 1, y: 1, z: 1 });
+  });
+
+  it("defaults intensity linking on and supports static intensity", () => {
+    expect(resolveEffectIntensity(effect, 0.4)).toBeCloseTo(0.6);
+    expect(resolveEffectIntensity({ ...effect, intensityStrengthLinked: false }, 0.4)).toBe(1.5);
   });
 });
 

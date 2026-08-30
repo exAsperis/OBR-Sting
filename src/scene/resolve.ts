@@ -38,3 +38,14 @@ export function isAudienceMember(
     case "specific-users": return audience.userIds.includes(localPlayer.id);
   }
 }
+
+export function isShaderAudienceMember(
+  audience: EffectAudienceV1,
+  alwaysIncludeGm: boolean,
+  localPlayer: Pick<Player, "id" | "role">,
+  detector: Item,
+  target: Item | null,
+  graph: AttachmentGraph,
+): boolean {
+  return (alwaysIncludeGm && localPlayer.role === "GM") || isAudienceMember(audience, localPlayer, detector, target, graph);
+}

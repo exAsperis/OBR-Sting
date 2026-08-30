@@ -37,7 +37,11 @@ export interface ShaderEffectDefinitionV1 {
   shape: ShaderShape;
   placement: ShaderPlacement;
   color: string;
+  colorGradient?: { minColor: string };
   maxIntensity: number;
+  /** Defaults to true when omitted for backward compatibility. */
+  intensityStrengthLinked?: boolean;
+  alwaysIncludeGm?: boolean;
   spread: number;
   spreadStrengthLink?: StrengthLinkDirection;
   geometry?: {

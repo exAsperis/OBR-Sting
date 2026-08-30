@@ -129,11 +129,15 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   const legacyPreset = ["outline", "pulse", "flicker"].includes(String(value.preset)) ? String(value.preset) : null;
   const presets: ShaderPreset[] = ["glow", "beam"];
   if ((!legacyPreset && !presets.includes(value.preset as ShaderPreset)) || !color(value.color)) return null;
+  if (value.colorGradient !== undefined && (!record(value.colorGradient) || !color(value.colorGradient.minColor))) return null;
+  const colorGradient = value.colorGradient as { minColor: string } | undefined;
   const shapes: ShaderShape[] = ["circle", "square"];
   if (value.shape !== undefined && !shapes.includes(value.shape as ShaderShape)) return null;
   const placements: ShaderPlacement[] = ["above", "below"];
   if (value.placement !== undefined && !placements.includes(value.placement as ShaderPlacement)) return null;
   if (!finite(value.maxIntensity) || value.maxIntensity < 0 || value.maxIntensity > 2) return null;
+  if (value.intensityStrengthLinked !== undefined && typeof value.intensityStrengthLinked !== "boolean") return null;
+  if (value.alwaysIncludeGm !== undefined && typeof value.alwaysIncludeGm !== "boolean") return null;
   if (!finite(value.spread) || value.spread <= 0 || value.spread > 4) return null;
   if (value.spreadStrengthLink !== undefined && !["min", "max"].includes(String(value.spreadStrengthLink))) return null;
   let geometry: ShaderEffectDefinitionV1["geometry"];
@@ -199,6 +203,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     shape: value.shape as ShaderShape ?? "circle",
     placement: value.placement as ShaderPlacement ?? "above",
     color: value.color.toLowerCase(),
+    ...(colorGradient ? { colorGradient: { minColor: colorGradient.minColor.toLowerCase() } } : {}),
     // Preserve the old outline's approximate opacity and feather width while
     // migrating it to the unified glow shader.
     maxIntensity: legacyPreset === "outline"
@@ -206,6 +211,8 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
       : legacyPreset === "pulse" || legacyPreset === "flicker"
         ? Math.min(2, value.maxIntensity * (0.72 / 0.62))
         : value.maxIntensity,
+    ...(value.intensityStrengthLinked !== undefined ? { intensityStrengthLinked: value.intensityStrengthLinked } : {}),
+    ...(value.alwaysIncludeGm !== undefined ? { alwaysIncludeGm: value.alwaysIncludeGm } : {}),
     spread: legacyPreset === "outline" ? Math.max(0.05, value.spread * 0.12) : value.spread,
     ...(value.spreadStrengthLink !== undefined ? { spreadStrengthLink: value.spreadStrengthLink as "min" | "max" } : {}),
     ...(geometry ? { geometry } : {}),

@@ -56,6 +56,18 @@ export function resolveStrengthLinkedShaderValues(effect: ShaderEffectDefinition
   };
 }
 
+export function resolveSignalColor(effect: ShaderEffectDefinitionV1, strength: number) {
+  const max = colorVector(effect.color);
+  if (!effect.colorGradient) return max;
+  const min = colorVector(effect.colorGradient.minColor);
+  const t = Math.max(0, Math.min(1, strength));
+  return { x: min.x + (max.x - min.x) * t, y: min.y + (max.y - min.y) * t, z: min.z + (max.z - min.z) * t };
+}
+
+export function resolveEffectIntensity(effect: ShaderEffectDefinitionV1, strength: number): number {
+  return (effect.intensityStrengthLinked ?? true) ? strength * effect.maxIntensity : effect.maxIntensity;
+}
+
 function effectScale(effect: ShaderEffectDefinitionV1, resolved: ReturnType<typeof resolveStrengthLinkedShaderValues>): number {
   const { geometry } = resolved;
   const feather = effect.preset === "beam"
@@ -80,8 +92,8 @@ export function shaderUniforms(effect: ShaderEffectDefinitionV1, strength: numbe
   const { geometry } = resolved;
   const animationModes = { none: 0, pulse: 1, flicker: 2, "radial-pulse": 3 } as const;
   const values = [
-    { name: "signalColor", value: colorVector(effect.color) },
-    { name: "strength", value: strength * effect.maxIntensity },
+    { name: "signalColor", value: resolveSignalColor(effect, strength) },
+    { name: "strength", value: resolveEffectIntensity(effect, strength) },
     { name: "rate", value: resolveStrengthLinkedRate(effect.animation?.rate ?? 1, effect.animation?.rateStrengthLink, strength) },
     { name: "depth", value: resolveStrengthLinkedValue(effect.animation?.depth ?? 0, effect.animation?.depthStrengthLink, strength, 0, 1) },
     { name: "animationMode", value: animationModes[effect.animation?.mode ?? "none"] },
@@ -108,7 +120,7 @@ export function shaderUniforms(effect: ShaderEffectDefinitionV1, strength: numbe
 }
 
 export function shaderConfigHash(effect: ShaderEffectDefinitionV1): string {
-  return JSON.stringify([effect.preset, effect.shape, effect.placement, effect.color, effect.maxIntensity, effect.spread, effect.spreadStrengthLink, effect.geometry, effect.beamWidth, effect.beamWidthStrengthLink, effect.animation]);
+  return JSON.stringify([effect.preset, effect.shape, effect.placement, effect.color, effect.colorGradient, effect.maxIntensity, effect.intensityStrengthLinked, effect.spread, effect.spreadStrengthLink, effect.geometry, effect.beamWidth, effect.beamWidthStrengthLink, effect.animation]);
 }
 
 export function shaderZIndexForTarget(targetZIndex: number, runtimeKey: string, placement: ShaderEffectDefinitionV1["placement"]): number {
