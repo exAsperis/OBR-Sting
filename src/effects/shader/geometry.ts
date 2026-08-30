@@ -1,6 +1,8 @@
 import type { ShaderEffectDefinitionV1, ShaderPreset } from "../../types";
 
-export type ShaderGeometry = Required<NonNullable<ShaderEffectDefinitionV1["geometry"]>>;
+type GeometryDefinition = NonNullable<ShaderEffectDefinitionV1["geometry"]>;
+export type ShaderGeometry = Required<Pick<GeometryDefinition, "offsetX" | "offsetY" | "innerRadius" | "outerRadius" | "width" | "height" | "rotation">>
+  & Omit<GeometryDefinition, "offsetX" | "offsetY" | "innerRadius" | "outerRadius" | "width" | "height" | "rotation">;
 
 export const DEFAULT_GEOMETRY: Record<ShaderPreset, ShaderGeometry> = {
   glow: { offsetX: 0, offsetY: 0, innerRadius: 34, outerRadius: 104, width: 100, height: 100, rotation: 0 },

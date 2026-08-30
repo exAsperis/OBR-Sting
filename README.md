@@ -36,12 +36,13 @@ Add `http://localhost:5173/manifest-local.json` as an Owlbear Rodeo extension.
 Only the GM can configure items. Select one scene item and open **Sting…** from its context menu or use the extension action:
 
 1. Add zero or more emitter signal tags.
-2. Add detector rules with a signal, closest/all detection mode, inner/outer scene-unit range, and falloff curve.
+2. Add detector rules with a signal, closest/all detection mode, inner/outer scene-unit range, and smooth, linear, logarithmic, or binary falloff.
 3. Add any number of effects to each rule.
 4. Choose each effect's target, audience, shader preset, color, intensity, animation, center offset, and inner/outer radius.
-5. Changes save automatically to item metadata after a short validation delay.
+5. Optionally link supported shader animation, softness, beam, scale, rotation, offset, and radius controls to signal strength with the `MIN` or `MAX` endpoint controls.
+6. Changes save automatically to item metadata after a short validation delay.
 
-Open **Settings** without selecting an item to choose how Sting measures distance throughout the room:
+Open **Settings** without selecting an item to choose how Sting measures distance for the scene:
 using the scene-configured measurement type by default. A per-scene override can select
 Chessboard, Alternating Diagonal, Euclidean, or Manhattan measurement on square and
 isometric grids, or Hexagon or Euclidean measurement on either hex orientation. Settings also contains

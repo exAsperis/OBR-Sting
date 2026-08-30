@@ -1,6 +1,6 @@
 import OBR, { buildEffect, type BoundingBox, type Effect } from "@owlbear-rodeo/sdk";
 import { LOCAL_EFFECT_KEY } from "../../constants";
-import type { DesiredEffect, ShaderEffectDefinitionV1 } from "../../types";
+import type { DesiredEffect, ShaderEffectDefinitionV1, StrengthLinkDirection } from "../../types";
 import type { EffectDispatchBatch, EffectExecutor, EffectReconcileReport } from "../registry";
 import { resolveShaderGeometry } from "./geometry";
 import { SHADERS } from "./shaders";
@@ -16,6 +16,17 @@ interface RuntimeState {
 
 const EPSILON = 0.005;
 
+export function resolveStrengthLinkedValue(value: number, link: StrengthLinkDirection | undefined, strength: number, min: number, max: number): number {
+  if (!link) return value;
+  const clampedStrength = Math.max(0, Math.min(1, strength));
+  const lowStrengthValue = link === "max" ? min : max;
+  return lowStrengthValue + (value - lowStrengthValue) * clampedStrength;
+}
+
+export function resolveStrengthLinkedRate(rate: number, link: StrengthLinkDirection | undefined, strength: number): number {
+  return resolveStrengthLinkedValue(rate, link, strength, 0, 10);
+}
+
 function colorVector(hex: string) {
   return {
     x: Number.parseInt(hex.slice(1, 3), 16) / 255,
@@ -24,13 +35,35 @@ function colorVector(hex: string) {
   };
 }
 
-function effectScale(effect: ShaderEffectDefinitionV1): number {
-  const geometry = resolveShaderGeometry(effect);
+export function resolveStrengthLinkedShaderValues(effect: ShaderEffectDefinitionV1, strength: number) {
+  const configured = resolveShaderGeometry(effect);
+  const geometry = {
+    ...configured,
+    offsetX: resolveStrengthLinkedValue(configured.offsetX, configured.offsetXStrengthLink, strength, -100, 100),
+    offsetY: resolveStrengthLinkedValue(configured.offsetY, configured.offsetYStrengthLink, strength, -100, 100),
+    width: resolveStrengthLinkedValue(configured.width, configured.widthStrengthLink, strength, 5, 400),
+    height: resolveStrengthLinkedValue(configured.height, configured.heightStrengthLink, strength, 5, 400),
+    rotation: resolveStrengthLinkedValue(configured.rotation, configured.rotationStrengthLink, strength, -180, 180),
+    innerRadius: resolveStrengthLinkedValue(configured.innerRadius, configured.innerRadiusStrengthLink, strength, 0, Math.max(0, configured.outerRadius - 1)),
+    outerRadius: resolveStrengthLinkedValue(configured.outerRadius, configured.outerRadiusStrengthLink, strength, configured.innerRadius + 1, 200),
+  };
+  geometry.outerRadius = Math.min(200, Math.max(geometry.innerRadius + 1, geometry.outerRadius));
+  geometry.innerRadius = Math.min(geometry.innerRadius, geometry.outerRadius - 1);
+  return {
+    geometry,
+    spread: resolveStrengthLinkedValue(effect.spread, effect.spreadStrengthLink, strength, 0.05, 4),
+    beamWidth: resolveStrengthLinkedValue(effect.beamWidth ?? 38, effect.beamWidthStrengthLink, strength, 5, 120),
+  };
+}
+
+function effectScale(effect: ShaderEffectDefinitionV1, resolved: ReturnType<typeof resolveStrengthLinkedShaderValues>): number {
+  const { geometry } = resolved;
   const feather = effect.preset === "beam"
-    ? Math.min(0.12, Math.max(0.008, 0.025 * effect.spread))
-    : Math.min(0.45, Math.max(0.005, 0.1 * effect.spread));
+    ? Math.min(0.12, Math.max(0.008, 0.025 * resolved.spread))
+    : Math.min(0.45, Math.max(0.005, 0.1 * resolved.spread));
   const axisScale = Math.max(geometry.width, geometry.height) / 100;
-  return Math.max(1, geometry.outerRadius / 100 * axisScale + feather);
+  const offsetScale = Math.max(Math.abs(geometry.offsetX), Math.abs(geometry.offsetY)) / 100;
+  return Math.max(1, geometry.outerRadius / 100 * axisScale + offsetScale + feather);
 }
 
 function layout(bounds: BoundingBox, scale: number) {
@@ -43,18 +76,18 @@ function layout(bounds: BoundingBox, scale: number) {
   };
 }
 
-function uniforms(effect: ShaderEffectDefinitionV1, strength: number, scale: number, direction: { x: number; y: number }) {
-  const geometry = resolveShaderGeometry(effect);
+export function shaderUniforms(effect: ShaderEffectDefinitionV1, strength: number, scale: number, direction: { x: number; y: number }, resolved = resolveStrengthLinkedShaderValues(effect, strength)) {
+  const { geometry } = resolved;
   const animationModes = { none: 0, pulse: 1, flicker: 2, "radial-pulse": 3 } as const;
   const values = [
     { name: "signalColor", value: colorVector(effect.color) },
     { name: "strength", value: strength * effect.maxIntensity },
-    { name: "rate", value: effect.animation?.rate ?? 1 },
-    { name: "depth", value: effect.animation?.depth ?? 0 },
+    { name: "rate", value: resolveStrengthLinkedRate(effect.animation?.rate ?? 1, effect.animation?.rateStrengthLink, strength) },
+    { name: "depth", value: resolveStrengthLinkedValue(effect.animation?.depth ?? 0, effect.animation?.depthStrengthLink, strength, 0, 1) },
     { name: "animationMode", value: animationModes[effect.animation?.mode ?? "none"] },
     { name: "radialDirection", value: effect.animation?.radialDirection === "inward" ? -1 : 1 },
-    { name: "waveWidth", value: effect.animation?.waveWidth ?? 0.22 },
-    { name: "spread", value: effect.spread },
+    { name: "waveWidth", value: resolveStrengthLinkedValue(effect.animation?.waveWidth ?? 0.22, effect.animation?.waveWidthStrengthLink, strength, 0.05, 1) },
+    { name: "spread", value: resolved.spread },
     { name: "shapeMode", value: effect.shape === "square" ? 1 : 0 },
     { name: "centerOffset", value: { x: geometry.offsetX / 100 / scale, y: geometry.offsetY / 100 / scale } },
     { name: "innerRadius", value: geometry.innerRadius / 100 / scale },
@@ -69,13 +102,13 @@ function uniforms(effect: ShaderEffectDefinitionV1, strength: number, scale: num
     };
     const localDirectionLength = Math.hypot(localDirection.x, localDirection.y) || 1;
     values.push({ name: "beamDirection", value: { x: localDirection.x / localDirectionLength, y: localDirection.y / localDirectionLength } });
-    values.push({ name: "beamWidth", value: effect.beamWidth ?? 38 });
+    values.push({ name: "beamWidth", value: resolved.beamWidth });
   }
   return values;
 }
 
-function configHash(effect: ShaderEffectDefinitionV1): string {
-  return JSON.stringify([effect.preset, effect.shape, effect.placement, effect.color, effect.maxIntensity, effect.spread, effect.geometry, effect.beamWidth, effect.animation]);
+export function shaderConfigHash(effect: ShaderEffectDefinitionV1): string {
+  return JSON.stringify([effect.preset, effect.shape, effect.placement, effect.color, effect.maxIntensity, effect.spread, effect.spreadStrengthLink, effect.geometry, effect.beamWidth, effect.beamWidthStrengthLink, effect.animation]);
 }
 
 export function shaderZIndexForTarget(targetZIndex: number, runtimeKey: string, placement: ShaderEffectDefinitionV1["placement"]): number {
@@ -115,12 +148,13 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
       };
       const directionLength = Math.hypot(directionVector.x, directionVector.y) || 1;
       const direction = { x: directionVector.x / directionLength, y: directionVector.y / directionLength };
-      const scale = effectScale(effect);
+      const resolved = resolveStrengthLinkedShaderValues(effect, context.strength);
+      const scale = effectScale(effect, resolved);
       const effectLayout = layout(bounds, scale);
       const effectZIndex = shaderZIndexForTarget(context.target!.zIndex, context.runtimeKey, effect.placement);
       const effectLayer = context.target!.layer;
       const nextLayoutHash = JSON.stringify([effectLayout, direction]);
-      const hash = configHash(effect);
+      const hash = shaderConfigHash(effect);
       let existing = this.states.get(context.runtimeKey);
       // Owlbear does not reliably recompile SkSL when an existing Effect item's
       // source changes. Recreate on preset changes; uniform-only changes stay fast.
@@ -144,7 +178,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
           .disableAttachmentBehavior(["SCALE", "ROTATION"])
           .zIndex(effectZIndex)
           .sksl(SHADERS[effect.preset])
-          .uniforms(uniforms(effect, context.strength, scale, direction))
+          .uniforms(shaderUniforms(effect, context.strength, scale, direction, resolved))
           .blendMode("SRC_OVER")
           .locked(true)
           .disableHit(true)
@@ -162,7 +196,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
             item.position = effectLayout.position;
             item.zIndex = effectZIndex;
             item.layer = effectLayer;
-            item.uniforms = uniforms(effect, context.strength, scale, direction);
+            item.uniforms = shaderUniforms(effect, context.strength, scale, direction, resolved);
           }
         });
         existing.strength = context.strength;

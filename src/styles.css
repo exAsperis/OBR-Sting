@@ -105,6 +105,10 @@ code { color: var(--obr-muted); font-size: 10px; word-break: break-all; }
 .numeric-control { min-width: 0; }
 .numeric-heading { display: flex; min-height: 28px; align-items: center; justify-content: space-between; gap: 6px; }
 .numeric-heading .field-label { margin: 0; }
+.strength-link-label { display: inline-flex; align-items: center; white-space: nowrap; }
+.strength-link-option { min-height: 20px; padding: 1px 2px; border: 0; border-radius: 4px; background: transparent; color: inherit; font: inherit; text-decoration: line-through; }
+.strength-link-option.active { color: var(--obr-text); text-decoration: none; }
+.strength-link-option:hover, .strength-link-option:focus-visible { background: var(--surface); color: var(--obr-text); outline: 1px solid var(--border); }
 .numeric-value { max-width: 55%; padding: 2px 6px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--obr-muted); font-size: 11px; font-weight: 750; }
 .numeric-value:hover { border-color: var(--border); background: var(--surface); color: var(--obr-text); }
 .numeric-direct-input { width: 76px; min-height: 28px; padding: 3px 6px; text-align: right; }

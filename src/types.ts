@@ -1,10 +1,11 @@
 import type { Item, Player } from "@owlbear-rodeo/sdk";
 
-export type Falloff = "binary" | "linear" | "smoothstep";
+export type Falloff = "binary" | "linear" | "smoothstep" | "logarithmic";
 export type ShaderPreset = "glow" | "beam";
 export type ShaderShape = "circle" | "square";
 export type ShaderPlacement = "above" | "below";
 export type ShaderAnimationMode = "none" | "pulse" | "flicker" | "radial-pulse";
+export type StrengthLinkDirection = "min" | "max";
 export type EffectLifecycle = "continuous" | "enter" | "exit" | "nearest-change";
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
@@ -38,27 +39,40 @@ export interface ShaderEffectDefinitionV1 {
   color: string;
   maxIntensity: number;
   spread: number;
+  spreadStrengthLink?: StrengthLinkDirection;
   geometry?: {
     /** Percentage of the target half-width/height. */
     offsetX: number;
     offsetY: number;
+    offsetXStrengthLink?: StrengthLinkDirection;
+    offsetYStrengthLink?: StrengthLinkDirection;
     /** Percentage of the normalized target radius. */
     innerRadius: number;
     outerRadius: number;
+    innerRadiusStrengthLink?: StrengthLinkDirection;
+    outerRadiusStrengthLink?: StrengthLinkDirection;
     /** Percentage scale of the effect's local horizontal/vertical axes. */
     width?: number;
     height?: number;
+    widthStrengthLink?: StrengthLinkDirection;
+    heightStrengthLink?: StrengthLinkDirection;
     /** Clockwise rotation in degrees; beams treat this as an aim offset. */
     rotation?: number;
+    rotationStrengthLink?: StrengthLinkDirection;
   };
   /** Angular width in degrees for directional beam effects. */
   beamWidth?: number;
+  beamWidthStrengthLink?: StrengthLinkDirection;
   animation?: {
     mode: ShaderAnimationMode;
     rate: number;
+    /** Optional configurable-endpoint direction for signal-strength interpolation. */
+    rateStrengthLink?: StrengthLinkDirection;
     depth: number;
+    depthStrengthLink?: StrengthLinkDirection;
     radialDirection?: "outward" | "inward";
     waveWidth?: number;
+    waveWidthStrengthLink?: StrengthLinkDirection;
   };
 }
 

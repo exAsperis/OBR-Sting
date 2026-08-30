@@ -68,6 +68,12 @@ describe("versioned detector parsing", () => {
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("a"), range: { inner: 10, outer: 10 } }] })).toBeNull();
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [rule("a"), rule("a")] })).toBeNull();
   });
+  it("calculates logarithmic falloff with a steep initial drop and a long tail", () => {
+    expect(calculateStrength(5, 60, 5, "logarithmic")).toBe(1);
+    expect(calculateStrength(60, 60, 5, "logarithmic")).toBe(0);
+    expect(calculateStrength(32.5, 60, 5, "logarithmic")).toBeCloseTo(1 - Math.log(5.5) / Math.log(10));
+    expect(calculateStrength(18.75, 60, 5, "logarithmic")).toBeGreaterThan(calculateStrength(46.25, 60, 5, "logarithmic"));
+  });
   it("calculates straight-line distance from scene pixels and grid DPI", async () => {
     await expect(getSceneDistance({ x: 0, y: 0 }, { x: 300, y: 400 }, 5, { dpi: 100, type: "SQUARE", measurement: "CHEBYSHEV" }, "euclidean")).resolves.toBe(25);
   });
@@ -129,6 +135,35 @@ describe("versioned detector parsing", () => {
     const radial = { ...effect(), animation: { mode: "radial-pulse", rate: 1.5, depth: 0.8, radialDirection: "inward", waveWidth: 0.3 } };
     expect(parseEffectDefinition(radial)).toMatchObject(radial);
     expect(parseEffectDefinition({ ...radial, animation: { ...radial.animation, waveWidth: 2 } })).toBeNull();
+  });
+  it("parses optional animation rate strength linking and rejects unknown values", () => {
+    expect(parseEffectDefinition({ ...effect(), animation: { mode: "pulse", rate: 2, depth: 0.5, rateStrengthLink: "max" } }))
+      .toMatchObject({ animation: { mode: "pulse", rate: 2, depth: 0.5, rateStrengthLink: "max" } });
+    expect(parseEffectDefinition({ ...effect(), animation: { mode: "pulse", rate: 2, depth: 0.5 } }))
+      .toMatchObject({ animation: { mode: "pulse", rate: 2, depth: 0.5 } });
+    expect(parseEffectDefinition({ ...effect(), animation: { mode: "pulse", rate: 2, depth: 0.5, rateStrengthLink: "middle" } })).toBeNull();
+  });
+  it("parses optional depth and wave-width strength linking", () => {
+    const linked = { ...effect(), animation: { mode: "radial-pulse", rate: 2, depth: 0.5, depthStrengthLink: "min", waveWidth: 0.25, waveWidthStrengthLink: "max" } };
+    expect(parseEffectDefinition(linked)).toMatchObject(linked);
+    expect(parseEffectDefinition({ ...linked, animation: { ...linked.animation, depthStrengthLink: "middle" } })).toBeNull();
+    expect(parseEffectDefinition({ ...linked, animation: { ...linked.animation, waveWidthStrengthLink: "middle" } })).toBeNull();
+    const { waveWidth: _waveWidth, ...missingWaveWidth } = linked.animation;
+    expect(parseEffectDefinition({ ...linked, animation: missingWaveWidth })).toBeNull();
+  });
+  it("parses shader appearance and geometry strength links", () => {
+    const linked = {
+      ...effect(), spreadStrengthLink: "max", beamWidth: 40, beamWidthStrengthLink: "min",
+      geometry: {
+        offsetX: 10, offsetY: -10, innerRadius: 20, outerRadius: 100, width: 120, height: 80, rotation: 15,
+        offsetXStrengthLink: "min", offsetYStrengthLink: "max", innerRadiusStrengthLink: "max", outerRadiusStrengthLink: "min",
+        widthStrengthLink: "max", heightStrengthLink: "min", rotationStrengthLink: "max",
+      },
+    };
+    expect(parseEffectDefinition(linked)).toMatchObject(linked);
+    expect(parseEffectDefinition({ ...linked, spreadStrengthLink: "middle" })).toBeNull();
+    expect(parseEffectDefinition({ ...linked, beamWidthStrengthLink: "middle" })).toBeNull();
+    expect(parseEffectDefinition({ ...linked, geometry: { ...linked.geometry, widthStrengthLink: "middle" } })).toBeNull();
   });
 
   it("parses Auras and Emanations preset triggers", () => {

@@ -29,6 +29,13 @@ describe("effects library", () => {
     expect(effect.id).not.toBe(glow.id);
   });
 
+  it("preserves animation rate strength linking", () => {
+    const linked = { ...glow, animation: { mode: "radial-pulse" as const, rate: 3, depth: 0.5, waveWidth: 0.25, rateStrengthLink: "max" as const, depthStrengthLink: "min" as const, waveWidthStrengthLink: "max" as const } };
+    const parsed = parseEffectLibrary({ version: 1, entries: [{ id: "linked", name: "Linked pulse", effect: linked }] });
+    expect(parsed.entries[0].effect).toMatchObject({ animation: { rate: 3, rateStrengthLink: "max", depthStrengthLink: "min", waveWidthStrengthLink: "max" } });
+    expect(instantiateLibraryEffect(parsed.entries[0])).toMatchObject({ animation: { rate: 3, rateStrengthLink: "max", depthStrengthLink: "min", waveWidthStrengthLink: "max" } });
+  });
+
   it("loads browser-local data and tolerates malformed JSON", () => {
     const serialized = JSON.stringify({ version: 1, entries: [{ id: "entry", name: "Blue glow", effect: glow }] });
     expect(loadEffectLibrary({ getItem: () => serialized }, "library").entries).toHaveLength(1);

@@ -135,35 +135,49 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   if (value.placement !== undefined && !placements.includes(value.placement as ShaderPlacement)) return null;
   if (!finite(value.maxIntensity) || value.maxIntensity < 0 || value.maxIntensity > 2) return null;
   if (!finite(value.spread) || value.spread <= 0 || value.spread > 4) return null;
+  if (value.spreadStrengthLink !== undefined && !["min", "max"].includes(String(value.spreadStrengthLink))) return null;
   let geometry: ShaderEffectDefinitionV1["geometry"];
   if (value.geometry !== undefined) {
     if (!record(value.geometry)) return null;
-    const { offsetX, offsetY, innerRadius, outerRadius } = value.geometry;
+    const geometryValue = value.geometry;
+    const { offsetX, offsetY, innerRadius, outerRadius } = geometryValue;
     if (!finite(offsetX) || !finite(offsetY) || !finite(innerRadius) || !finite(outerRadius)) return null;
     if (offsetX < -100 || offsetX > 100 || offsetY < -100 || offsetY > 100) return null;
     if (innerRadius < 0 || outerRadius <= innerRadius || outerRadius > 200) return null;
-    const width = value.geometry.width ?? 100;
-    const height = value.geometry.height ?? 100;
-    const rotation = value.geometry.rotation ?? 0;
+    const width = geometryValue.width ?? 100;
+    const height = geometryValue.height ?? 100;
+    const rotation = geometryValue.rotation ?? 0;
     if (!finite(width) || !finite(height) || !finite(rotation)) return null;
     if (width < 5 || width > 400 || height < 5 || height > 400 || rotation < -180 || rotation > 180) return null;
-    geometry = { offsetX, offsetY, innerRadius, outerRadius, width, height, rotation };
+    const linkFields = ["offsetXStrengthLink", "offsetYStrengthLink", "innerRadiusStrengthLink", "outerRadiusStrengthLink", "widthStrengthLink", "heightStrengthLink", "rotationStrengthLink"] as const;
+    for (const field of linkFields) if (geometryValue[field] !== undefined && !["min", "max"].includes(String(geometryValue[field]))) return null;
+    geometry = {
+      offsetX, offsetY, innerRadius, outerRadius, width, height, rotation,
+      ...Object.fromEntries(linkFields.filter((field) => geometryValue[field] !== undefined).map((field) => [field, geometryValue[field]])),
+    };
   }
   let animation: ShaderEffectDefinitionV1["animation"];
   if (value.animation !== undefined) {
     if (!record(value.animation) || !finite(value.animation.rate) || !finite(value.animation.depth)) return null;
     if (value.animation.rate < 0 || value.animation.rate > 10 || value.animation.depth < 0 || value.animation.depth > 1) return null;
+    if (value.animation.rateStrengthLink !== undefined && !["min", "max"].includes(String(value.animation.rateStrengthLink))) return null;
+    if (value.animation.depthStrengthLink !== undefined && !["min", "max"].includes(String(value.animation.depthStrengthLink))) return null;
     const inferredMode = legacyPreset === "pulse" || legacyPreset === "flicker" ? legacyPreset : "none";
     const modes: ShaderAnimationMode[] = ["none", "pulse", "flicker", "radial-pulse"];
     if (value.animation.mode !== undefined && !modes.includes(value.animation.mode as ShaderAnimationMode)) return null;
     if (value.animation.radialDirection !== undefined && !["outward", "inward"].includes(String(value.animation.radialDirection))) return null;
     if (value.animation.waveWidth !== undefined && (!finite(value.animation.waveWidth) || value.animation.waveWidth < 0.05 || value.animation.waveWidth > 1)) return null;
+    if (value.animation.waveWidthStrengthLink !== undefined && !["min", "max"].includes(String(value.animation.waveWidthStrengthLink))) return null;
+    if (value.animation.waveWidthStrengthLink !== undefined && value.animation.waveWidth === undefined) return null;
     animation = {
       mode: value.animation.mode as ShaderAnimationMode ?? inferredMode,
       rate: value.animation.rate,
+      ...(value.animation.rateStrengthLink !== undefined ? { rateStrengthLink: value.animation.rateStrengthLink as "min" | "max" } : {}),
       depth: value.animation.depth,
+      ...(value.animation.depthStrengthLink !== undefined ? { depthStrengthLink: value.animation.depthStrengthLink as "min" | "max" } : {}),
       ...(value.animation.radialDirection !== undefined ? { radialDirection: value.animation.radialDirection as "outward" | "inward" } : {}),
       ...(value.animation.waveWidth !== undefined ? { waveWidth: value.animation.waveWidth } : {}),
+      ...(value.animation.waveWidthStrengthLink !== undefined ? { waveWidthStrengthLink: value.animation.waveWidthStrengthLink as "min" | "max" } : {}),
     };
   } else if (legacyPreset === "pulse" || legacyPreset === "flicker") {
     animation = { mode: legacyPreset, rate: 1, depth: 0.35 };
@@ -173,6 +187,8 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     if (!finite(value.beamWidth) || value.beamWidth < 5 || value.beamWidth > 120) return null;
     beamWidth = value.beamWidth;
   }
+  if (value.beamWidthStrengthLink !== undefined && !["min", "max"].includes(String(value.beamWidthStrengthLink))) return null;
+  if (value.beamWidthStrengthLink !== undefined && value.beamWidth === undefined) return null;
   return {
     id: value.id,
     type: "shader",
@@ -191,8 +207,10 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
         ? Math.min(2, value.maxIntensity * (0.72 / 0.62))
         : value.maxIntensity,
     spread: legacyPreset === "outline" ? Math.max(0.05, value.spread * 0.12) : value.spread,
+    ...(value.spreadStrengthLink !== undefined ? { spreadStrengthLink: value.spreadStrengthLink as "min" | "max" } : {}),
     ...(geometry ? { geometry } : {}),
     ...(beamWidth !== undefined ? { beamWidth } : {}),
+    ...(value.beamWidthStrengthLink !== undefined ? { beamWidthStrengthLink: value.beamWidthStrengthLink as "min" | "max" } : {}),
     ...(animation ? { animation } : {}),
   };
 }
@@ -200,7 +218,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
 export function parseDetectionRule(value: unknown): DetectionRuleV1 | null {
   if (!record(value) || !id(value.id) || typeof value.enabled !== "boolean") return null;
   const signal = typeof value.signal === "string" ? normalizeSignal(value.signal) : "";
-  if (!signal || !["nearest", "all"].includes(String(value.aggregation)) || !["binary", "linear", "smoothstep"].includes(String(value.falloff))) return null;
+  if (!signal || !["nearest", "all"].includes(String(value.aggregation)) || !["binary", "linear", "smoothstep", "logarithmic"].includes(String(value.falloff))) return null;
   if (value.ignoreHidden !== undefined && typeof value.ignoreHidden !== "boolean") return null;
   if (!record(value.range) || !finite(value.range.outer) || !finite(value.range.inner)) return null;
   if (value.range.outer <= 0 || value.range.inner < 0 || value.range.inner >= value.range.outer) return null;

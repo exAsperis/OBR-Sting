@@ -9,6 +9,9 @@ export function calculateRawStrength(distance: number, outer: number, inner: num
 export function applyFalloff(raw: number, falloff: Falloff, distance: number, outer: number): number {
   if (falloff === "binary") return distance <= outer ? 1 : 0;
   if (falloff === "smoothstep") return raw * raw * (3 - 2 * raw);
+  // A fixed factor of 9 gives a pronounced initial drop and a long tail while
+  // preserving exact strengths of 1 and 0 at the inner and outer boundaries.
+  if (falloff === "logarithmic") return 1 - Math.log1p(9 * (1 - raw)) / Math.log(10);
   return raw;
 }
 
