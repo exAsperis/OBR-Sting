@@ -1,5 +1,7 @@
 # Sting for Owlbear Rodeo
 
+See [OBR local-light compatibility](docs/local-light-compatibility.md) for the current SDK findings, safety model, and live deployment verification checklist.
+
 Proximity sensing effects triggers.
 
 Sting is a generic, declarative proximity rules engine for Owlbear Rodeo. Scene items can emit arbitrary signal tags; detectors respond with one or more audience-aware local shader effects.

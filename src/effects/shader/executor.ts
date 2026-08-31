@@ -1,4 +1,4 @@
-import OBR, { buildEffect, type BoundingBox, type Effect } from "@owlbear-rodeo/sdk";
+import OBR, { buildEffect, isLight, type BoundingBox, type Effect, type Item } from "@owlbear-rodeo/sdk";
 import { LOCAL_EFFECT_KEY } from "../../constants";
 import type { DesiredEffect, ShaderDynamicField, ShaderEffectDefinitionV1, StrengthLinkDirection } from "../../types";
 import type { EffectDispatchBatch, EffectExecutor, EffectReconcileReport } from "../registry";
@@ -15,6 +15,7 @@ interface RuntimeState {
 }
 
 const EPSILON = 0.005;
+const itemCenter = async (item: Item): Promise<{ x: number; y: number }> => isLight(item) ? item.position : (await OBR.scene.items.getItemBounds([item.id])).center;
 
 export function resolveStrengthLinkedValue(value: number, link: StrengthLinkDirection | undefined, strength: number, min: number, max: number): number {
   if (!link) return value;
@@ -180,16 +181,15 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
       const effect = context.effect as ShaderEffectDefinitionV1;
       const bounds = await OBR.scene.items.getItemBounds([context.target!.id]);
       const aimTarget = context.detectedEmitter?.id === context.target!.id ? context.detector : context.detectedEmitter;
-      const aimBounds = aimTarget ? await OBR.scene.items.getItemBounds([aimTarget.id]) : bounds;
+      const aimCenter = aimTarget ? await itemCenter(aimTarget) : bounds.center;
       const directionVector = {
-        x: (aimBounds.center.x - bounds.center.x) / Math.max(bounds.width / 2, 1),
-        y: (aimBounds.center.y - bounds.center.y) / Math.max(bounds.height / 2, 1),
+        x: (aimCenter.x - bounds.center.x) / Math.max(bounds.width / 2, 1),
+        y: (aimCenter.y - bounds.center.y) / Math.max(bounds.height / 2, 1),
       };
       const directionLength = Math.hypot(directionVector.x, directionVector.y) || 1;
       const direction = { x: directionVector.x / directionLength, y: directionVector.y / directionLength };
-      const responsiveBounds = await Promise.all((context.responsiveEmitters ?? (context.detectedEmitter ? [context.detectedEmitter] : []))
-        .map((emitter) => OBR.scene.items.getItemBounds([emitter.id])));
-      const responsiveDirection = averageDetectionDirections(bounds.center, responsiveBounds.map((entry) => entry.center));
+      const responsiveCenters = await Promise.all((context.responsiveEmitters ?? (context.detectedEmitter ? [context.detectedEmitter] : [])).map(itemCenter));
+      const responsiveDirection = averageDetectionDirections(bounds.center, responsiveCenters);
       const resolved = resolveStrengthLinkedShaderValues(effect, context.strength);
       const scale = effectScale(effect, resolved);
       const effectLayout = layout(bounds, scale);

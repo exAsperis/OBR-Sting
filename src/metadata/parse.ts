@@ -8,6 +8,8 @@ import type {
   EmitterMetadataV1,
   IntegrationEffectDefinitionV1,
   JsonObject,
+  LightDynamicValueV1,
+  LightEffectDefinitionV1,
   MechanicalEffectDefinitionV1,
   ShaderAnimationMode,
   ShaderDynamicField,
@@ -25,6 +27,13 @@ const id = (value: unknown): value is string => typeof value === "string" && val
 const color = (value: unknown): value is string => typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
 const jsonObject = (value: unknown): value is JsonObject => {
   try { return record(value) && JSON.stringify(value) !== undefined; } catch { return false; }
+};
+const parseLightValue = (value: unknown, minimum: number, maximum: number): LightDynamicValueV1 | null => {
+  if (!record(value) || !finite(value.value) || value.value < minimum || value.value > maximum) return null;
+  if (value.range === undefined) return { value: value.value };
+  if (!record(value.range) || !finite(value.range.minimum) || !finite(value.range.maximum) || value.range.minimum < minimum || value.range.minimum > maximum || value.range.maximum < minimum || value.range.maximum > maximum) return null;
+  if (value.range.enabled !== undefined && typeof value.range.enabled !== "boolean") return null;
+  return { value: value.value, range: { minimum: value.range.minimum, maximum: value.range.maximum, ...(value.range.enabled === false ? { enabled: false } : {}) } };
 };
 
 export function parseEmitterMetadata(value: unknown): EmitterMetadataV1 | null {
@@ -97,6 +106,21 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   }
   const audience = parseAudience(value.audience);
   if (!audience) return null;
+  if (value.type === "light") {
+    if (!["add", "modify"].includes(String(value.action))) return null;
+    if (value.duration !== undefined && !["temporary", "permanent"].includes(String(value.duration))) return null;
+    const attenuationRadius = parseLightValue(value.attenuationRadius, 0, value.radiusOperation === "multiply" ? 20 : 1000);
+    const sourceRadius = value.sourceRadius === undefined ? undefined : parseLightValue(value.sourceRadius, 0, 1000);
+    const falloff = value.falloff === undefined ? undefined : parseLightValue(value.falloff, 0, 10);
+    const innerAngle = value.innerAngle === undefined ? undefined : parseLightValue(value.innerAngle, 0, 360);
+    const outerAngle = value.outerAngle === undefined ? undefined : parseLightValue(value.outerAngle, 0, 360);
+    if (!attenuationRadius || value.sourceRadius !== undefined && !sourceRadius || value.falloff !== undefined && !falloff || value.innerAngle !== undefined && !innerAngle || value.outerAngle !== undefined && !outerAngle) return null;
+    if (value.lightType !== undefined && !["PRIMARY", "SECONDARY", "AUXILIARY"].includes(String(value.lightType))) return null;
+    if (value.radiusOperation !== undefined && !["set", "add", "multiply"].includes(String(value.radiusOperation))) return null;
+    if (value.rotationBehavior !== undefined && !["target", "fixed"].includes(String(value.rotationBehavior))) return null;
+    if (value.rotation !== undefined && (!finite(value.rotation) || value.rotation < -360 || value.rotation > 360)) return null;
+    return { id: value.id, ...named, type: "light", enabled: value.enabled, action: value.action as "add" | "modify", duration: value.duration as LightEffectDefinitionV1["duration"] ?? "temporary", target, audience, attenuationRadius, ...(sourceRadius ? { sourceRadius } : {}), ...(falloff ? { falloff } : {}), ...(innerAngle ? { innerAngle } : {}), ...(outerAngle ? { outerAngle } : {}), ...(value.lightType ? { lightType: value.lightType as LightEffectDefinitionV1["lightType"] } : {}), radiusOperation: value.radiusOperation as LightEffectDefinitionV1["radiusOperation"] ?? "set", rotationBehavior: value.rotationBehavior as LightEffectDefinitionV1["rotationBehavior"] ?? "target", ...(value.rotation !== undefined ? { rotation: value.rotation } : {}) };
+  }
   // Compatibility migration for detector metadata written before the generic provider model.
   if (value.type === "emanation") {
     if (!id(value.presetName) || typeof value.removeAllOnDeactivate !== "boolean") return null;
@@ -270,7 +294,18 @@ export function parseDetectionRule(value: unknown): DetectionRuleV1 | null {
   if (!record(value) || !id(value.id) || typeof value.enabled !== "boolean") return null;
   if (value.name !== undefined && (typeof value.name !== "string" || !value.name.trim() || value.name.trim().length > 80)) return null;
   const signal = typeof value.signal === "string" ? normalizeSignal(value.signal) : "";
-  if (!signal || !["nearest", "all"].includes(String(value.aggregation)) || !["binary", "linear", "smoothstep", "logarithmic"].includes(String(value.falloff))) return null;
+  let source: DetectionRuleV1["source"];
+  if (value.source !== undefined) {
+    if (!record(value.source) || !["sting-emitter", "obr-light"].includes(String(value.source.type))) return null;
+    if (value.source.type === "obr-light") {
+      if (!["distance", "within-radius"].includes(String(value.source.detection))) return null;
+      if (value.source.lightType !== undefined && !["PRIMARY", "SECONDARY", "AUXILIARY"].includes(String(value.source.lightType))) return null;
+      if (value.source.ownership !== undefined && !["any", "sting", "external"].includes(String(value.source.ownership))) return null;
+      if (value.source.attachment !== undefined && !["any", "attached", "unattached"].includes(String(value.source.attachment))) return null;
+      source = { type: "obr-light", detection: value.source.detection as "distance" | "within-radius", ...(value.source.lightType ? { lightType: value.source.lightType as "PRIMARY" | "SECONDARY" | "AUXILIARY" } : {}), ...(value.source.ownership ? { ownership: value.source.ownership as "any" | "sting" | "external" } : {}), ...(value.source.attachment ? { attachment: value.source.attachment as "any" | "attached" | "unattached" } : {}) };
+    } else source = { type: "sting-emitter" };
+  }
+  if ((!signal && source?.type !== "obr-light") || !["nearest", "all"].includes(String(value.aggregation)) || !["binary", "linear", "smoothstep", "logarithmic"].includes(String(value.falloff))) return null;
   if (value.ignoreHidden !== undefined && typeof value.ignoreHidden !== "boolean") return null;
   if (!record(value.range) || !finite(value.range.outer) || !finite(value.range.inner)) return null;
   if (value.range.outer <= 0 || value.range.inner < 0 || value.range.inner > value.range.outer) return null;
@@ -287,6 +322,7 @@ export function parseDetectionRule(value: unknown): DetectionRuleV1 | null {
     ...(value.name !== undefined ? { name: (value.name as string).trim() } : {}),
     enabled: value.enabled,
     signal,
+    ...(source ? { source } : {}),
     range: { outer: value.range.outer, inner: value.range.inner },
     aggregation: value.aggregation as DetectionRuleV1["aggregation"],
     ignoreHidden: value.ignoreHidden ?? false,

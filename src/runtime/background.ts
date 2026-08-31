@@ -1,4 +1,4 @@
-import OBR from "@owlbear-rodeo/sdk";
+import OBR, { isLight } from "@owlbear-rodeo/sdk";
 import { CONTEXT_MENU_ID, EMANATION_INTEGRATION_KEY, SETTINGS_KEY } from "../constants";
 import { ProximityEngine } from "./engine";
 import { parseSceneSettings } from "../settings";
@@ -12,6 +12,7 @@ OBR.onReady(async () => {
   const engine = new ProximityEngine(authority);
   let stopItems: (() => void) | undefined;
   let stopGrid: (() => void) | undefined;
+  let stopLocal: (() => void) | undefined;
   let stopSceneMetadata: (() => void) | undefined;
   let latestItems = [] as Awaited<ReturnType<typeof OBR.scene.items.getItems>>;
 
@@ -38,9 +39,11 @@ OBR.onReady(async () => {
   const attachScene = async (ready: boolean) => {
     stopItems?.();
     stopGrid?.();
+    stopLocal?.();
     stopSceneMetadata?.();
     stopItems = undefined;
     stopGrid = undefined;
+    stopLocal = undefined;
     stopSceneMetadata = undefined;
     if (!ready) {
       latestItems = [];
@@ -49,9 +52,11 @@ OBR.onReady(async () => {
       return;
     }
     latestItems = await OBR.scene.items.getItems();
+    engine.setLights(await OBR.scene.local.getItems(isLight));
     engine.setItems(latestItems);
     void syncSelectedFacePivots(latestItems);
     stopItems = OBR.scene.items.onChange((items) => { latestItems = items; engine.setItems(items); void syncSelectedFacePivots(items); });
+    stopLocal = OBR.scene.local.onChange((items) => engine.setLights(items.filter(isLight)));
     stopGrid = OBR.scene.grid.onChange(() => engine.schedule());
     const applySettings = (metadata: Awaited<ReturnType<typeof OBR.scene.getMetadata>>) => engine.setDistanceMethod(parseSceneSettings(metadata[SETTINGS_KEY]).distanceMethod);
     applySettings(await OBR.scene.getMetadata());
@@ -81,6 +86,7 @@ OBR.onReady(async () => {
   window.addEventListener("beforeunload", () => {
     stopItems?.();
     stopGrid?.();
+    stopLocal?.();
     stopSceneMetadata?.();
     stopReady();
     stopPlayer();

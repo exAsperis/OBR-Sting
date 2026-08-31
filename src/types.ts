@@ -1,4 +1,4 @@
-import type { Item, Player } from "@owlbear-rodeo/sdk";
+import type { Item, LightType, Player } from "@owlbear-rodeo/sdk";
 
 export type Falloff = "binary" | "linear" | "smoothstep" | "logarithmic";
 export type ShaderPreset = "glow" | "beam";
@@ -129,13 +129,36 @@ export interface MechanicalVisibilityEffectDefinitionV1 {
 
 export type MechanicalEffectDefinitionV1 = MechanicalFaceEffectDefinitionV1 | MechanicalVisibilityEffectDefinitionV1;
 
-export type EffectDefinitionV1 = ShaderEffectDefinitionV1 | IntegrationEffectDefinitionV1 | MechanicalEffectDefinitionV1;
+export interface LightDynamicValueV1 { value: number; range?: DynamicValueRange }
+export interface LightEffectDefinitionV1 {
+  id: string;
+  name?: string;
+  type: "light";
+  enabled: boolean;
+  action: "add" | "modify";
+  /** Permanent Add Lights latch after their first activation until runtime/scene cleanup. */
+  duration?: "temporary" | "permanent";
+  target: EffectTargetV1;
+  audience: EffectAudienceV1;
+  attenuationRadius: LightDynamicValueV1;
+  sourceRadius?: LightDynamicValueV1;
+  falloff?: LightDynamicValueV1;
+  innerAngle?: LightDynamicValueV1;
+  outerAngle?: LightDynamicValueV1;
+  lightType?: LightType;
+  radiusOperation?: "set" | "add" | "multiply";
+  rotationBehavior?: "target" | "fixed";
+  rotation?: number;
+}
+
+export type EffectDefinitionV1 = ShaderEffectDefinitionV1 | IntegrationEffectDefinitionV1 | MechanicalEffectDefinitionV1 | LightEffectDefinitionV1;
 
 export interface DetectionRuleV1 {
   id: string;
   name?: string;
   enabled: boolean;
   signal: string;
+  source?: { type: "sting-emitter" } | { type: "obr-light"; detection: "distance" | "within-radius"; lightType?: LightType; ownership?: "any" | "sting" | "external"; attachment?: "any" | "attached" | "unattached" };
   range: { outer: number; inner: number };
   aggregation: "nearest" | "all";
   ignoreHidden: boolean;

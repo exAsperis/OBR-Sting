@@ -1,9 +1,10 @@
-import OBR, { type Item, type Player } from "@owlbear-rodeo/sdk";
+import OBR, { type Item, type Light, type Player } from "@owlbear-rodeo/sdk";
 import { DETECTOR_KEY, EXTENSION_ID } from "../constants";
 import { ShaderEffectExecutor } from "../effects/shader/executor";
 import { EffectExecutorRegistry, type EffectDispatchBatch } from "../effects/registry";
 import { IntegrationEffectExecutor } from "../effects/integrations/executor";
 import { MechanicalEffectExecutor } from "../effects/mechanical/executor";
+import { LightEffectExecutor } from "../effects/light/executor";
 import { createIntegrationProviderRegistry } from "../effects/integrations/providers";
 import { buildRuntimeEffectKey } from "../effects/runtimeKey";
 import { parseDetectorMetadata } from "../metadata/parse";
@@ -19,6 +20,7 @@ const DEBUG_STORAGE_KEY = `${EXTENSION_ID}/debug`;
 
 export class ProximityEngine {
   private latestItems: Item[] = [];
+  private latestLights: Light[] = [];
   private player: Pick<Player, "id" | "role" | "connectionId"> | null = null;
   private party: Player[] = [];
   private running = false;
@@ -32,9 +34,11 @@ export class ProximityEngine {
     this.registry.register(new ShaderEffectExecutor());
     this.registry.register(new IntegrationEffectExecutor(createIntegrationProviderRegistry(), authority));
     this.registry.register(new MechanicalEffectExecutor(authority));
+    this.registry.register(new LightEffectExecutor());
   }
 
   setItems(items: Item[]): void { this.latestItems = items; this.schedule(); }
+  setLights(lights: Light[]): void { this.latestLights = lights; this.schedule(); }
   setPlayer(player: Pick<Player, "id" | "role" | "connectionId">): void { this.player = player; this.schedule(); }
   setParty(party: Player[]): void { this.party = party; this.schedule(); }
   setDistanceMethod(method: DistanceMethod): void { this.distanceMethod = method; this.schedule(); }
@@ -79,7 +83,7 @@ export class ProximityEngine {
       const metadata = parseDetectorMetadata(detector.metadata[DETECTOR_KEY]);
       if (!metadata?.enabled) continue;
       for (const rule of metadata.rules.filter((entry) => entry.enabled)) {
-        const result = await evaluateRule(detector, rule, signalIndex, graph, gridScale.parsed.multiplier, { dpi: gridDpi, type: gridType, measurement: gridMeasurement }, this.distanceMethod);
+        const result = await evaluateRule(detector, rule, { signals: signalIndex, lights: this.latestLights }, graph, gridScale.parsed.multiplier, { dpi: gridDpi, type: gridType, measurement: gridMeasurement }, this.distanceMethod);
         const activeEvaluations = result.evaluations.filter((evaluation) => evaluation.strength > 0 && evaluation.detectedEmitter);
         const responsiveEmitters = activeEvaluations.map((evaluation) => evaluation.detectedEmitter!);
         const baseRuleKey = `${detector.id.length}:${detector.id}|${rule.id.length}:${rule.id}`;
@@ -108,7 +112,7 @@ export class ProximityEngine {
               target.id,
               effect.type,
               effect.type === "integration" ? effect.providerId : "",
-              effect.type === "integration" ? effect.actionId : effect.type === "mechanical" ? effect.action : "",
+              effect.type === "integration" ? effect.actionId : effect.type === "mechanical" || effect.type === "light" ? effect.action : "",
               rule.aggregation === "all" ? emitterId : "",
             ) : null;
             const lifecycle = effect.type === "integration" ? effect.lifecycle : "continuous";
@@ -200,6 +204,7 @@ export class ProximityEngine {
 
   async clear(): Promise<void> {
     this.latestItems = [];
+    this.latestLights = [];
     this.ruleStates.clear();
     this.lastActiveEffects.clear();
     localStorage.removeItem(DEBUG_STORAGE_KEY);

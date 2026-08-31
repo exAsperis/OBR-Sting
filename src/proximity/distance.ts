@@ -3,6 +3,8 @@ import { isDistanceMethodValidForGrid, type DistanceMethod } from "../settings";
 
 export interface GridDistanceContext { dpi: number; type: GridType; measurement: GridMeasurement }
 export function toSceneUnits(gridDistance: number, scaleMultiplier: number): number { return gridDistance * scaleMultiplier; }
+export function worldToSceneUnits(worldDistance: number, dpi: number, scaleMultiplier: number): number { return toSceneUnits(worldDistance / Math.max(dpi, 1), scaleMultiplier); }
+export function sceneToWorldUnits(sceneDistance: number, dpi: number, scaleMultiplier: number): number { return sceneDistance / Math.max(scaleMultiplier, Number.EPSILON) * Math.max(dpi, 1); }
 
 function squareCoordinates(point: Vector2, dpi: number, type: GridType): Vector2 {
   if (type === "SQUARE") return { x: point.x / dpi, y: point.y / dpi };
