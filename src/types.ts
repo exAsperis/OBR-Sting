@@ -162,7 +162,7 @@ export interface DetectionRuleV1 {
   name?: string;
   enabled: boolean;
   signal: string;
-  source?: { type: "sting-emitter" } | { type: "obr-light"; detection: "distance" | "within-radius"; lightType?: LightType; ownership?: "any" | "sting" | "external"; attachment?: "any" | "attached" | "unattached" };
+  source?: { type: "sting-emitter" | "item-name" | "item-label" } | { type: "obr-light"; detection: "distance" | "within-radius"; lightType?: LightType; ownership?: "any" | "sting" | "external"; attachment?: "any" | "attached" | "unattached" };
   range: { outer: number; inner: number };
   aggregation: "nearest" | "all";
   ignoreHidden: boolean;

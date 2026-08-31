@@ -301,14 +301,14 @@ export function parseDetectionRule(value: unknown): DetectionRuleV1 | null {
   const signal = typeof value.signal === "string" ? normalizeSignal(value.signal) : "";
   let source: DetectionRuleV1["source"];
   if (value.source !== undefined) {
-    if (!record(value.source) || !["sting-emitter", "obr-light"].includes(String(value.source.type))) return null;
+    if (!record(value.source) || !["sting-emitter", "item-name", "item-label", "obr-light"].includes(String(value.source.type))) return null;
     if (value.source.type === "obr-light") {
       if (!["distance", "within-radius"].includes(String(value.source.detection))) return null;
       if (value.source.lightType !== undefined && !["PRIMARY", "SECONDARY", "AUXILIARY"].includes(String(value.source.lightType))) return null;
       if (value.source.ownership !== undefined && !["any", "sting", "external"].includes(String(value.source.ownership))) return null;
       if (value.source.attachment !== undefined && !["any", "attached", "unattached"].includes(String(value.source.attachment))) return null;
       source = { type: "obr-light", detection: value.source.detection as "distance" | "within-radius", ...(value.source.lightType ? { lightType: value.source.lightType as "PRIMARY" | "SECONDARY" | "AUXILIARY" } : {}), ...(value.source.ownership ? { ownership: value.source.ownership as "any" | "sting" | "external" } : {}), ...(value.source.attachment ? { attachment: value.source.attachment as "any" | "attached" | "unattached" } : {}) };
-    } else source = { type: "sting-emitter" };
+    } else source = { type: value.source.type as "sting-emitter" | "item-name" | "item-label" };
   }
   if ((!signal && source?.type !== "obr-light") || !["nearest", "all"].includes(String(value.aggregation)) || !["binary", "linear", "smoothstep", "logarithmic"].includes(String(value.falloff))) return null;
   if (value.ignoreHidden !== undefined && typeof value.ignoreHidden !== "boolean") return null;

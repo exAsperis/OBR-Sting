@@ -114,6 +114,9 @@ describe("versioned detector parsing", () => {
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("ignore"), ignoreHidden: true }] })?.rules[0].ignoreHidden).toBe(true);
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("bad"), ignoreHidden: "yes" }] })).toBeNull();
   });
+  it.each(["item-name", "item-label"] as const)("parses the %s source type", (type) => {
+    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule(type), source: { type } }] })?.rules[0].source).toEqual({ type });
+  });
   it("parses valid shader geometry and rejects inverted radii", () => {
     const configured = { ...effect(), geometry: { offsetX: 20, offsetY: -15, innerRadius: 30, outerRadius: 120 } };
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [rule("a", [configured])] })?.rules[0].effects[0]).toMatchObject(configured);
@@ -371,6 +374,27 @@ describe("rule aggregation", () => {
       .resolves.toMatchObject({ matchingEmitterCount: 2 });
     await expect(evaluateRule(detector, { ...rule("ignore"), aggregation: "all", ignoreHidden: true }, signalIndex, graph, 5, grid, "euclidean"))
       .resolves.toMatchObject({ matchingEmitterCount: 1, evaluations: [{ detectedEmitter: { id: "visible" } }] });
+  });
+
+  it("detects items by normalized item name", async () => {
+    const named = { ...item("named"), name: "Red   Dragon", position: { x: 100, y: 0 } };
+    const items = [detector, named];
+    const result = await evaluateRule(detector, { ...rule("name"), signal: "red-dragon", source: { type: "item-name" } }, { signals: new Map(), lights: [], items }, buildAttachmentGraph(items), 5, { dpi: 100, type: "SQUARE", measurement: "CHEBYSHEV" }, "euclidean");
+    expect(result).toMatchObject({ matchingEmitterCount: 1, evaluations: [{ detectedEmitter: { id: "named" } }] });
+  });
+
+  it("detects an image item by its normalized OBR label text", async () => {
+    const labeled = { ...item("labeled"), name: "Ranger", position: { x: 100, y: 0 }, textItemType: "LABEL", text: { plainText: "Red   Dragon" } } as Item;
+    const items = [detector, labeled];
+    const result = await evaluateRule(detector, { ...rule("label"), signal: "red-dragon", source: { type: "item-label" } }, { signals: new Map(), lights: [], items }, buildAttachmentGraph(items), 5, { dpi: 100, type: "SQUARE", measurement: "CHEBYSHEV" }, "euclidean");
+    expect(result).toMatchObject({ matchingEmitterCount: 1, evaluations: [{ detectedEmitter: { id: "labeled", name: "Ranger" } }] });
+  });
+
+  it("does not treat image overlay text as an item label", async () => {
+    const textOverlay = { ...item("overlay"), position: { x: 100, y: 0 }, textItemType: "TEXT", text: { plainText: "Red Dragon" } } as Item;
+    const items = [detector, textOverlay];
+    await expect(evaluateRule(detector, { ...rule("label"), signal: "red-dragon", source: { type: "item-label" } }, { signals: new Map(), lights: [], items }, buildAttachmentGraph(items), 5, { dpi: 100, type: "SQUARE", measurement: "CHEBYSHEV" }, "euclidean"))
+      .resolves.toMatchObject({ matchingEmitterCount: 0 });
   });
 
   it("indexes ranged tags by base signal and keeps each emitter's widest cap", () => {

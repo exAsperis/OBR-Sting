@@ -6,10 +6,10 @@ import type { AttachmentGraph, DetectionRuleV1, RuleEvaluation, RuleEvaluationSe
 import { getSceneDistance, worldToSceneUnits } from "./distance";
 import { calculateStrength } from "./strength";
 import type { DistanceMethod } from "../settings";
-import { parseEmitterSignal } from "../signals/normalize";
+import { normalizeSignal, parseEmitterSignal } from "../signals/normalize";
 
 export interface IndexedEmitter { item: Item; range?: number }
-export interface EvaluationSources { signals: Map<string, IndexedEmitter[]>; lights: Light[] }
+export interface EvaluationSources { signals: Map<string, IndexedEmitter[]>; lights: Light[]; items?: Item[] }
 
 /** Geometric light-area test only; walls and Dynamic Fog illumination are intentionally out of scope. */
 export function isWithinLightArea(point: { x: number; y: number }, light: Light): boolean {
@@ -73,7 +73,18 @@ export async function evaluateRule(
     const selected = selectRuleEvaluations(rule, candidates);
     return { matchingEmitterCount: lights.length, evaluations: rule.aggregation === "all" ? selected : [selected[0] ?? { detector, rule, matchingEmitterCount: lights.length, detectedEmitter: null, distance: null, strength: 0 }] };
   }
-  const matches = (sources.signals.get(rule.signal) ?? []).filter(({ item }) =>
+  const itemLabel = (item: Item) => {
+    if (!("text" in item)) return "";
+    const text = (item as Item & { text: { plainText: string } }).text.plainText;
+    if (item.type === "LABEL") return text;
+    return item.type === "IMAGE" && "textItemType" in item && item.textItemType === "LABEL" ? text : "";
+  };
+  const sourceMatches: IndexedEmitter[] = rule.source?.type === "item-name"
+    ? (sources.items ?? []).filter((item) => normalizeSignal(item.name) === rule.signal).map((item) => ({ item }))
+    : rule.source?.type === "item-label"
+      ? (sources.items ?? []).filter((item) => normalizeSignal(itemLabel(item)) === rule.signal).map((item) => ({ item }))
+      : sources.signals.get(rule.signal) ?? [];
+  const matches = sourceMatches.filter(({ item }) =>
     !isSameAttachmentFamily(detector, item, graph) && (!rule.ignoreHidden || item.visible)
   );
   const inRange = (await Promise.all(matches.map(async ({ item: emitter, range }) => ({

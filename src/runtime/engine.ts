@@ -83,7 +83,7 @@ export class ProximityEngine {
       const metadata = parseDetectorMetadata(detector.metadata[DETECTOR_KEY]);
       if (!metadata?.enabled) continue;
       for (const rule of metadata.rules.filter((entry) => entry.enabled)) {
-        const result = await evaluateRule(detector, rule, { signals: signalIndex, lights: this.latestLights }, graph, gridScale.parsed.multiplier, { dpi: gridDpi, type: gridType, measurement: gridMeasurement }, this.distanceMethod);
+        const result = await evaluateRule(detector, rule, { signals: signalIndex, lights: this.latestLights, items: this.latestItems }, graph, gridScale.parsed.multiplier, { dpi: gridDpi, type: gridType, measurement: gridMeasurement }, this.distanceMethod);
         const activeEvaluations = result.evaluations.filter((evaluation) => evaluation.strength > 0 && evaluation.detectedEmitter);
         const responsiveEmitters = activeEvaluations.map((evaluation) => evaluation.detectedEmitter!);
         const baseRuleKey = `${detector.id.length}:${detector.id}|${rule.id.length}:${rule.id}`;
