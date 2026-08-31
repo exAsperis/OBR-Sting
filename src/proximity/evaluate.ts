@@ -6,10 +6,19 @@ import type { AttachmentGraph, DetectionRuleV1, RuleEvaluation, RuleEvaluationSe
 import { getSceneDistance, worldToSceneUnits } from "./distance";
 import { calculateStrength } from "./strength";
 import type { DistanceMethod } from "../settings";
-import { normalizeSignal, parseEmitterSignal } from "../signals/normalize";
+import { parseEmitterSignal } from "../signals/normalize";
 
 export interface IndexedEmitter { item: Item; range?: number }
 export interface EvaluationSources { signals: Map<string, IndexedEmitter[]>; lights: Light[]; items?: Item[] }
+
+export function matchesRuleText(value: string, pattern: string, matchType: DetectionRuleV1["matchType"]): boolean {
+  if (matchType === "exact") return value.trim().toLowerCase() === pattern.trim().toLowerCase();
+  if (matchType === "wildcard") {
+    const escaped = pattern.trim().replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".");
+    try { return new RegExp(`^${escaped}$`, "i").test(value.trim()); } catch { return false; }
+  }
+  try { return new RegExp(pattern, "i").test(value); } catch { return false; }
+}
 
 /** Geometric light-area test only; walls and Dynamic Fog illumination are intentionally out of scope. */
 export function isWithinLightArea(point: { x: number; y: number }, light: Light): boolean {
@@ -60,6 +69,7 @@ export async function evaluateRule(
   if (rule.source?.type === "obr-light") {
     const filter = rule.source;
     const lights = sources.lights.filter((light) =>
+      !rule.excludeLayers.includes(light.layer) &&
       (!filter.lightType || light.lightType === filter.lightType) &&
       (!filter.ownership || filter.ownership === "any" || (filter.ownership === "sting") === (light.metadata[LOCAL_LIGHT_KEY] !== undefined)) &&
       (!filter.attachment || filter.attachment === "any" || (filter.attachment === "attached") === Boolean(light.attachedTo))
@@ -79,13 +89,19 @@ export async function evaluateRule(
     if (item.type === "LABEL") return text;
     return item.type === "IMAGE" && "textItemType" in item && item.textItemType === "LABEL" ? text : "";
   };
+  const matchingSignals = [...sources.signals].filter(([signal]) => matchesRuleText(signal, rule.signal, rule.matchType)).flatMap(([, emitters]) => emitters);
+  const deduplicatedSignals = [...matchingSignals.reduce((items, emitter) => {
+    const current = items.get(emitter.item.id);
+    if (!current || current.range !== undefined && (emitter.range === undefined || emitter.range > current.range)) items.set(emitter.item.id, emitter);
+    return items;
+  }, new Map<string, IndexedEmitter>()).values()];
   const sourceMatches: IndexedEmitter[] = rule.source?.type === "item-name"
-    ? (sources.items ?? []).filter((item) => normalizeSignal(item.name) === rule.signal).map((item) => ({ item }))
+    ? (sources.items ?? []).filter((item) => matchesRuleText(item.name, rule.signal, rule.matchType)).map((item) => ({ item }))
     : rule.source?.type === "item-label"
-      ? (sources.items ?? []).filter((item) => normalizeSignal(itemLabel(item)) === rule.signal).map((item) => ({ item }))
-      : sources.signals.get(rule.signal) ?? [];
+      ? (sources.items ?? []).filter((item) => matchesRuleText(itemLabel(item), rule.signal, rule.matchType)).map((item) => ({ item }))
+      : deduplicatedSignals;
   const matches = sourceMatches.filter(({ item }) =>
-    !isSameAttachmentFamily(detector, item, graph) && (!rule.ignoreHidden || item.visible)
+    !rule.excludeLayers.includes(item.layer) && !isSameAttachmentFamily(detector, item, graph) && (!rule.ignoreHidden || item.visible)
   );
   const inRange = (await Promise.all(matches.map(async ({ item: emitter, range }) => ({
     emitter,

@@ -160,6 +160,9 @@ code { color: var(--obr-muted); font-size: 10px; word-break: break-all; }
 .animation-section[open] summary::before { transform: rotate(90deg); }
 .animation-section summary small { color: var(--obr-muted); font-weight: 600; text-transform: capitalize; }
 .animation-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 9px; }
+.rule-advanced { padding-top: 8px; border-top: 1px solid var(--border); }
+.layer-multiselect { min-height: 104px; padding: 5px; }
+.layer-multiselect option { padding: 3px 6px; border-radius: 4px; }
 output { float: right; color: var(--obr-muted); font-size: 10px; }
 .effects-heading { display: flex; margin: 14px 0 7px; align-items: center; justify-content: space-between; gap: 8px; }
 .effects-heading .effect-count { display: inline-grid; place-items: center; min-width: 20px; height: 20px; border-radius: 50%; background: var(--soft); color: var(--obr-primary); font-size: 10px; }

@@ -298,7 +298,13 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
 export function parseDetectionRule(value: unknown): DetectionRuleV1 | null {
   if (!record(value) || !id(value.id) || typeof value.enabled !== "boolean") return null;
   if (value.name !== undefined && (typeof value.name !== "string" || !value.name.trim() || value.name.trim().length > 80)) return null;
-  const signal = typeof value.signal === "string" ? normalizeSignal(value.signal) : "";
+  if (value.matchType !== undefined && !["exact", "wildcard", "regex"].includes(String(value.matchType))) return null;
+  const matchType = value.matchType as DetectionRuleV1["matchType"] ?? "exact";
+  const usesNaturalText = record(value.source) && ["item-name", "item-label"].includes(String(value.source.type));
+  const signal = typeof value.signal === "string" ? matchType === "exact" && !usesNaturalText ? normalizeSignal(value.signal) : value.signal.trim() : "";
+  const layers = ["MAP", "GRID", "DRAWING", "PROP", "MOUNT", "CHARACTER", "ATTACHMENT", "NOTE", "TEXT", "RULER", "FOG", "POINTER", "POST_PROCESS", "CONTROL", "POPOVER"] as const;
+  if (value.excludeLayers !== undefined && (!Array.isArray(value.excludeLayers) || value.excludeLayers.some((layer) => !layers.includes(layer as typeof layers[number])))) return null;
+  const excludeLayers = [...new Set((value.excludeLayers as DetectionRuleV1["excludeLayers"] | undefined) ?? [])];
   let source: DetectionRuleV1["source"];
   if (value.source !== undefined) {
     if (!record(value.source) || !["sting-emitter", "item-name", "item-label", "obr-light"].includes(String(value.source.type))) return null;
@@ -328,6 +334,8 @@ export function parseDetectionRule(value: unknown): DetectionRuleV1 | null {
     enabled: value.enabled,
     signal,
     ...(source ? { source } : {}),
+    matchType,
+    excludeLayers,
     range: { outer: value.range.outer, inner: value.range.inner },
     aggregation: value.aggregation as DetectionRuleV1["aggregation"],
     ignoreHidden: value.ignoreHidden ?? false,

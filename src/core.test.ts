@@ -4,7 +4,7 @@ import { EMITTER_KEY } from "./constants";
 import { buildRuntimeEffectKey } from "./effects/runtimeKey";
 import { parseDetectorMetadata, parseEffectDefinition, parseEmitterMetadata } from "./metadata/parse";
 import { calculateStrength } from "./proximity/strength";
-import { evaluateRule, indexEmittersBySignal, selectRuleEvaluations } from "./proximity/evaluate";
+import { evaluateRule, indexEmittersBySignal, matchesRuleText, selectRuleEvaluations } from "./proximity/evaluate";
 import { getSceneDistance, toSceneUnits } from "./proximity/distance";
 import { buildAttachmentGraph, isSameAttachmentFamily, resolveCarrier, resolveParent } from "./scene/attachments";
 import { isAudienceMember, isShaderAudienceMember, resolveEffectTarget } from "./scene/resolve";
@@ -25,7 +25,7 @@ const effect = (id = "effect-1"): ShaderEffectDefinitionV1 => ({
 });
 
 const rule = (id: string, effects: EffectDefinitionV1[] = []): DetectionRuleV1 => ({
-  id, enabled: true, signal: "orc", range: { outer: 60, inner: 5 }, aggregation: "nearest", ignoreHidden: false, falloff: "smoothstep", effects,
+  id, enabled: true, signal: "orc", matchType: "exact", excludeLayers: [], range: { outer: 60, inner: 5 }, aggregation: "nearest", ignoreHidden: false, falloff: "smoothstep", effects,
 });
 
 describe("signal normalization", () => {
@@ -46,6 +46,19 @@ describe("signal normalization", () => {
     expect(parseEmitterMetadata({ version: 1, enabled: false, signals: [" LIGHT [ 20.0 ] ", "light[60]"] })).toEqual({ version: 1, enabled: false, signals: ["light[20]", "light[60]"] });
   });
   it("rejects invalid emitter enabled values", () => expect(parseEmitterMetadata({ version: 1, enabled: "yes", signals: ["light"] })).toBeNull());
+});
+
+describe("rule text matching", () => {
+  it("matches exact text after trimming and case normalization", () => expect(matchesRuleText(" Red Dragon ", "red dragon", "exact")).toBe(true));
+  it.each([
+    ["Red Dragon", "red*", true],
+    ["Red Dragon", "red ??????", true],
+    ["Red Dragon", "blue*", false],
+  ])("matches wildcard text %#", (value, pattern, expected) => expect(matchesRuleText(value, pattern, "wildcard")).toBe(expected));
+  it("matches case-insensitive regex and safely rejects invalid regex", () => {
+    expect(matchesRuleText("Somewyn", "^somew(y|i)n$", "regex")).toBe(true);
+    expect(matchesRuleText("Somewyn", "[", "regex")).toBe(false);
+  });
 });
 
 describe("strength", () => {
@@ -116,6 +129,13 @@ describe("versioned detector parsing", () => {
   });
   it.each(["item-name", "item-label"] as const)("parses the %s source type", (type) => {
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule(type), source: { type } }] })?.rules[0].source).toEqual({ type });
+  });
+  it("defaults advanced rule settings and validates configured layers", () => {
+    const parsed = parseDetectorMetadata({ version: 1, enabled: true, rules: [rule("advanced")] })?.rules[0];
+    expect(parsed).toMatchObject({ matchType: "exact", excludeLayers: [] });
+    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("layers"), matchType: "wildcard", excludeLayers: ["CHARACTER", "PROP"] }] })?.rules[0])
+      .toMatchObject({ matchType: "wildcard", excludeLayers: ["CHARACTER", "PROP"] });
+    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("bad-layer"), excludeLayers: ["UNKNOWN"] }] })).toBeNull();
   });
   it("parses valid shader geometry and rejects inverted radii", () => {
     const configured = { ...effect(), geometry: { offsetX: 20, offsetY: -15, innerRadius: 30, outerRadius: 120 } };
@@ -376,17 +396,25 @@ describe("rule aggregation", () => {
       .resolves.toMatchObject({ matchingEmitterCount: 1, evaluations: [{ detectedEmitter: { id: "visible" } }] });
   });
 
-  it("detects items by normalized item name", async () => {
+  it("excludes emitters on configured OBR layers", async () => {
+    const character = { ...item("character"), metadata: { [EMITTER_KEY]: { version: 1, signals: ["orc"] } } };
+    const prop = { ...item("prop"), layer: "PROP" as const, position: { x: 10, y: 0 }, metadata: { [EMITTER_KEY]: { version: 1, signals: ["orc"] } } };
+    const items = [detector, character, prop];
+    const result = await evaluateRule(detector, { ...rule("layers"), aggregation: "all", excludeLayers: ["CHARACTER"] }, indexEmittersBySignal(items), buildAttachmentGraph(items), 5, { dpi: 100, type: "SQUARE", measurement: "CHEBYSHEV" }, "euclidean");
+    expect(result).toMatchObject({ matchingEmitterCount: 1, evaluations: [{ detectedEmitter: { id: "prop" } }] });
+  });
+
+  it("detects items by trimmed, case-insensitive item name", async () => {
     const named = { ...item("named"), name: "Red   Dragon", position: { x: 100, y: 0 } };
     const items = [detector, named];
-    const result = await evaluateRule(detector, { ...rule("name"), signal: "red-dragon", source: { type: "item-name" } }, { signals: new Map(), lights: [], items }, buildAttachmentGraph(items), 5, { dpi: 100, type: "SQUARE", measurement: "CHEBYSHEV" }, "euclidean");
+    const result = await evaluateRule(detector, { ...rule("name"), signal: "red   dragon", source: { type: "item-name" } }, { signals: new Map(), lights: [], items }, buildAttachmentGraph(items), 5, { dpi: 100, type: "SQUARE", measurement: "CHEBYSHEV" }, "euclidean");
     expect(result).toMatchObject({ matchingEmitterCount: 1, evaluations: [{ detectedEmitter: { id: "named" } }] });
   });
 
-  it("detects an image item by its normalized OBR label text", async () => {
+  it("detects an image item by its trimmed, case-insensitive OBR label text", async () => {
     const labeled = { ...item("labeled"), name: "Ranger", position: { x: 100, y: 0 }, textItemType: "LABEL", text: { plainText: "Red   Dragon" } } as Item;
     const items = [detector, labeled];
-    const result = await evaluateRule(detector, { ...rule("label"), signal: "red-dragon", source: { type: "item-label" } }, { signals: new Map(), lights: [], items }, buildAttachmentGraph(items), 5, { dpi: 100, type: "SQUARE", measurement: "CHEBYSHEV" }, "euclidean");
+    const result = await evaluateRule(detector, { ...rule("label"), signal: "red   dragon", source: { type: "item-label" } }, { signals: new Map(), lights: [], items }, buildAttachmentGraph(items), 5, { dpi: 100, type: "SQUARE", measurement: "CHEBYSHEV" }, "euclidean");
     expect(result).toMatchObject({ matchingEmitterCount: 1, evaluations: [{ detectedEmitter: { id: "labeled", name: "Ranger" } }] });
   });
 

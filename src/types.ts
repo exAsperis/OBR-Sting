@@ -1,4 +1,4 @@
-import type { Item, LightType, Player } from "@owlbear-rodeo/sdk";
+import type { Item, Layer, LightType, Player } from "@owlbear-rodeo/sdk";
 
 export type Falloff = "binary" | "linear" | "smoothstep" | "logarithmic";
 export type ShaderPreset = "glow" | "beam";
@@ -163,6 +163,8 @@ export interface DetectionRuleV1 {
   enabled: boolean;
   signal: string;
   source?: { type: "sting-emitter" | "item-name" | "item-label" } | { type: "obr-light"; detection: "distance" | "within-radius"; lightType?: LightType; ownership?: "any" | "sting" | "external"; attachment?: "any" | "attached" | "unattached" };
+  matchType: "exact" | "wildcard" | "regex";
+  excludeLayers: Layer[];
   range: { outer: number; inner: number };
   aggregation: "nearest" | "all";
   ignoreHidden: boolean;
