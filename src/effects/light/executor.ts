@@ -3,10 +3,24 @@ import { DYNAMIC_FOG_LIGHT_KEY, LOCAL_LIGHT_KEY } from "../../constants";
 import { sceneToWorldUnits } from "../../proximity/distance";
 import type { DesiredEffect, LightDynamicValueV1, LightEffectDefinitionV1 } from "../../types";
 import type { EffectDispatchBatch, EffectExecutor, EffectReconcileReport } from "../registry";
+import { advanceFaceRotation, compareFaceContexts, faceBearing, normalizeAngle, shortestAngleDelta } from "../mechanical/face";
 
 export interface MutableLightState { attenuationRadius: number; sourceRadius: number; falloff: number; innerAngle: number; outerAngle: number; lightType: LightType }
 interface AddedState { localItemId: string; configHash: string }
 interface ModifiedState { base: MutableLightState; applied: MutableLightState; contexts: DesiredEffect[]; attachedTo?: string }
+interface SpotlightState {
+  base: MutableLightState;
+  baseRotation: number;
+  currentRotation: number;
+  desiredRotation: number;
+  speed: number;
+  duration: "temporary" | "permanent";
+  attachedTo?: string;
+  parentRotation: number;
+  runtimeKey: string;
+  lastTime: number;
+  pending?: Promise<void>;
+}
 
 const record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const snapshot = (light: Light): MutableLightState => ({ attenuationRadius: light.attenuationRadius, sourceRadius: light.sourceRadius, falloff: light.falloff, innerAngle: light.innerAngle, outerAngle: light.outerAngle, lightType: light.lightType });
@@ -26,6 +40,25 @@ async function persistDynamicFogLight(targetId: string, config: DynamicFogLightC
       if (JSON.stringify(item.metadata[DYNAMIC_FOG_LIGHT_KEY]) !== JSON.stringify(config)) {
         item.metadata[DYNAMIC_FOG_LIGHT_KEY] = config;
       }
+    }
+  });
+}
+
+async function persistDynamicFogRotation(targetId: string, rotation: number, fallback: MutableLightState): Promise<void> {
+  await OBR.scene.items.updateItems([targetId], (items) => {
+    for (const item of items) {
+      const existing = item.metadata[DYNAMIC_FOG_LIGHT_KEY];
+      const config = record(existing) ? existing : fallback;
+      item.metadata[DYNAMIC_FOG_LIGHT_KEY] = { ...config, rotation };
+    }
+  });
+}
+
+async function persistDynamicFogProperties(targetId: string, config: MutableLightState): Promise<void> {
+  await OBR.scene.items.updateItems([targetId], (items) => {
+    for (const item of items) {
+      const existing = item.metadata[DYNAMIC_FOG_LIGHT_KEY];
+      item.metadata[DYNAMIC_FOG_LIGHT_KEY] = record(existing) ? { ...existing, ...config } : config;
     }
   });
 }
@@ -55,7 +88,8 @@ export function lightsForTarget(context: Pick<DesiredEffect, "target" | "localLi
 
 export class LightEffectExecutor implements EffectExecutor<LightEffectDefinitionV1> {
   readonly type = "light" as const; readonly scope = "local" as const;
-  private added = new Map<string, AddedState>(); private modified = new Map<string, ModifiedState>(); private initialized = false;
+  private added = new Map<string, AddedState>(); private modified = new Map<string, ModifiedState>(); private spotlights = new Map<string, SpotlightState>(); private initialized = false;
+  private tickerWorker: Worker | null = null; private tickerTimer: ReturnType<typeof setInterval> | null = null;
 
   private async initialize(): Promise<void> {
     if (this.initialized) return;
@@ -78,13 +112,17 @@ export class LightEffectExecutor implements EffectExecutor<LightEffectDefinition
     await this.initialize();
     const [dpi, scale] = await Promise.all([OBR.scene.grid.getDpi(), OBR.scene.grid.getScale()]);
     const toWorld = (value: number) => sceneToWorldUnits(value, dpi, scale.parsed.multiplier);
-    const addGroups = new Map<string, DesiredEffect[]>(), modifyGroups = new Map<string, DesiredEffect[]>();
+    const addGroups = new Map<string, DesiredEffect[]>(), modifyGroups = new Map<string, DesiredEffect[]>(), spotlightGroups = new Map<string, DesiredEffect[]>();
     for (const context of batch.desired.filter((entry) => entry.effect.type === "light")) {
       const effect = context.effect as LightEffectDefinitionV1;
       if (effect.action === "add") { const key = ownerKey(context); addGroups.set(key, [...(addGroups.get(key) ?? []), context]); continue; }
       const targets = lightsForTarget(context);
       if (!targets.length) statuses.set(context.runtimeKey, "target-has-no-light");
-      for (const light of targets) modifyGroups.set(light.id, [...(modifyGroups.get(light.id) ?? []), { ...context, target: light }]);
+      for (const light of targets) {
+        const resolved = { ...context, target: light };
+        const groups = effect.action === "spotlight" ? spotlightGroups : modifyGroups;
+        groups.set(light.id, [...(groups.get(light.id) ?? []), resolved]);
+      }
     }
 
     for (const [key, state] of [...this.added]) if (!addGroups.has(key)) {
@@ -120,7 +158,7 @@ export class LightEffectExecutor implements EffectExecutor<LightEffectDefinition
     for (const [lightId, state] of [...this.modified]) if (!modifyGroups.has(lightId)) {
       state.base = applyLightModifiers(state.base, state.contexts.filter(permanent), toWorld);
       try { await OBR.scene.local.updateItems<Light>([lightId], (items) => { for (const light of items) Object.assign(light, state.base); }); } catch { /* removed with owner */ }
-      if (state.contexts.some(permanent) && state.attachedTo) try { await persistDynamicFogLight(state.attachedTo, dynamicFogConfig(state.base)); } catch { /* target removed or update denied */ }
+      if (state.contexts.some(permanent) && state.attachedTo) try { await persistDynamicFogProperties(state.attachedTo, state.base); } catch { /* target removed or update denied */ }
       this.modified.delete(lightId);
     }
     for (const [lightId, contexts] of modifyGroups) {
@@ -139,7 +177,7 @@ export class LightEffectExecutor implements EffectExecutor<LightEffectDefinition
       }
       if (contexts.some(permanent)) {
         if (!state.attachedTo) { for (const context of contexts.filter(permanent)) statuses.set(context.runtimeKey, "permanent-target-unattached"); }
-        else try { await persistDynamicFogLight(state.attachedTo, dynamicFogConfig(desired)); }
+        else try { await persistDynamicFogProperties(state.attachedTo, desired); }
         catch { for (const context of contexts.filter(permanent)) statuses.set(context.runtimeKey, "permanent-light-denied"); }
       }
       state.applied = desired; state.contexts = contexts; this.modified.set(lightId, state);
@@ -148,7 +186,83 @@ export class LightEffectExecutor implements EffectExecutor<LightEffectDefinition
         if (!statuses.has(context.runtimeKey)) statuses.set(context.runtimeKey, permanent(context) ? "modified-permanent" : light.metadata[LOCAL_LIGHT_KEY] === undefined ? "modified-external-temporary" : "modified-temporary");
       }
     }
+    await this.reconcileSpotlights(spotlightGroups, statuses, localIds);
     return { localIds, statuses };
+  }
+
+  private async reconcileSpotlights(groups: Map<string, DesiredEffect[]>, statuses: Map<string, string>, localIds: Map<string, string>): Promise<void> {
+    const winners = new Map<string, DesiredEffect>();
+    for (const [lightId, contexts] of groups) {
+      for (const context of contexts) {
+        const light = context.target as Light;
+        if (!context.detectedEmitter || light.attachedTo === context.detectedEmitter.id) { statuses.set(context.runtimeKey, "self-skipped"); continue; }
+        const current = winners.get(lightId);
+        if (!current || compareFaceContexts(context, current) < 0) {
+          if (current) statuses.set(current.runtimeKey, "superseded");
+          winners.set(lightId, context);
+        } else statuses.set(context.runtimeKey, "superseded");
+      }
+    }
+    for (const [lightId, state] of [...this.spotlights]) if (!winners.has(lightId)) await this.finishSpotlight(lightId, state);
+    for (const [lightId, context] of winners) {
+      const light = context.target as Light;
+      const effect = context.effect as LightEffectDefinitionV1;
+      const angle = effect.spotlightAngle ?? 0;
+      const desiredRotation = faceBearing(light.position, context.detectedEmitter!.position, angle);
+      const parentRotation = light.attachedTo ? context.graph.byId.get(light.attachedTo)?.rotation ?? 0 : 0;
+      let state = this.spotlights.get(lightId);
+      if (!state) {
+        state = { base: snapshot(light), baseRotation: light.rotation, currentRotation: normalizeAngle(light.rotation), desiredRotation, speed: effect.spotlightSpeed ?? 180, duration: effect.duration ?? "temporary", attachedTo: light.attachedTo, parentRotation, runtimeKey: context.runtimeKey, lastTime: performance.now() };
+        this.spotlights.set(lightId, state);
+        this.ensureTicker();
+      } else {
+        state.desiredRotation = desiredRotation; state.speed = effect.spotlightSpeed ?? 180; state.duration = effect.duration ?? "temporary"; state.parentRotation = parentRotation; state.runtimeKey = context.runtimeKey;
+      }
+      localIds.set(context.runtimeKey, lightId);
+      if (state.duration === "permanent" && !state.attachedTo) statuses.set(context.runtimeKey, "permanent-target-unattached");
+      else statuses.set(context.runtimeKey, Math.abs(shortestAngleDelta(state.currentRotation, desiredRotation)) <= 0.05 ? "spotlight-facing" : "spotlight-turning");
+    }
+  }
+
+  private tickSpotlights(): void {
+    const time = performance.now();
+    for (const [lightId, state] of this.spotlights) {
+      if (state.pending) continue;
+      const elapsed = Math.max(0, time - state.lastTime) / 1000;
+      state.lastTime = time;
+      const nextRotation = advanceFaceRotation(state.currentRotation, state.desiredRotation, state.speed, elapsed);
+      if (Math.abs(shortestAngleDelta(state.currentRotation, nextRotation)) <= 0.001) continue;
+      state.currentRotation = nextRotation;
+      const update = OBR.scene.local.updateItems<Light>([lightId], (items) => { for (const light of items) light.rotation = state.currentRotation; });
+      state.pending = update;
+      void update.catch(() => undefined).finally(() => { if (state.pending === update) state.pending = undefined; });
+    }
+  }
+
+  private ensureTicker(): void {
+    if (this.tickerWorker || this.tickerTimer !== null) return;
+    if (typeof Worker !== "undefined" && typeof Blob !== "undefined") try {
+      const url = URL.createObjectURL(new Blob(["setInterval(() => postMessage(0), 50);"], { type: "text/javascript" }));
+      this.tickerWorker = new Worker(url); URL.revokeObjectURL(url); this.tickerWorker.onmessage = () => this.tickSpotlights(); return;
+    } catch { /* use timer fallback */ }
+    this.tickerTimer = setInterval(() => this.tickSpotlights(), 50);
+  }
+
+  private stopTicker(): void {
+    this.tickerWorker?.terminate(); this.tickerWorker = null;
+    if (this.tickerTimer !== null) clearInterval(this.tickerTimer);
+    this.tickerTimer = null;
+  }
+
+  private async finishSpotlight(lightId: string, state: SpotlightState): Promise<void> {
+    this.spotlights.delete(lightId);
+    try { await state.pending; } catch { /* update failure is handled by restoration */ }
+    if (state.duration === "permanent" && state.attachedTo) {
+      try { await persistDynamicFogRotation(state.attachedTo, normalizeAngle(state.currentRotation - state.parentRotation), state.base); } catch { /* target removed or update denied */ }
+    } else {
+      try { await OBR.scene.local.updateItems<Light>([lightId], (items) => { for (const light of items) light.rotation = state.baseRotation; }); } catch { /* light removed */ }
+    }
+    if (this.spotlights.size === 0) this.stopTicker();
   }
 
   async clear(): Promise<void> {
@@ -160,8 +274,9 @@ export class LightEffectExecutor implements EffectExecutor<LightEffectDefinition
     for (const [id, state] of this.modified) {
       const committed = applyLightModifiers(state.base, state.contexts.filter(permanent), toWorld);
       try { await OBR.scene.local.updateItems<Light>([id], (items) => { for (const light of items) Object.assign(light, committed); }); } catch { /* scene closed or removed */ }
-      if (state.contexts.some(permanent) && state.attachedTo) try { await persistDynamicFogLight(state.attachedTo, dynamicFogConfig(committed)); } catch { /* scene closed or target removed */ }
+      if (state.contexts.some(permanent) && state.attachedTo) try { await persistDynamicFogProperties(state.attachedTo, committed); } catch { /* scene closed or target removed */ }
     }
-    this.added.clear(); this.modified.clear(); this.initialized = false;
+    for (const [id, state] of [...this.spotlights]) await this.finishSpotlight(id, state);
+    this.stopTicker(); this.added.clear(); this.modified.clear(); this.spotlights.clear(); this.initialized = false;
   }
 }

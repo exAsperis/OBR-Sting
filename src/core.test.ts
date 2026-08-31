@@ -315,6 +315,14 @@ describe("runtime effect identity", () => {
     expect(parseEffectDefinition({ ...visibility, visibility: "transparent" })).toBeNull();
     expect(parseEffectDefinition({ ...visibility, reverseOnExit: "yes" })).toBeNull();
   });
+  it("parses Spotlight light effects with Face-style defaults and validation", () => {
+    const spotlight = { id: "spotlight", type: "light", enabled: true, action: "spotlight", duration: "temporary", target: { type: "detector" }, audience: { type: "everyone" }, attenuationRadius: { value: 4 } };
+    expect(parseEffectDefinition(spotlight)).toMatchObject({ ...spotlight, spotlightAngle: 0, spotlightSpeed: 180 });
+    expect(parseEffectDefinition({ ...spotlight, spotlightAngle: 359, spotlightSpeed: 720 })).toMatchObject({ spotlightAngle: 359, spotlightSpeed: 720 });
+    expect(parseEffectDefinition({ ...spotlight, target: { type: "detected-emitter" } })).toMatchObject({ target: { type: "detector" } });
+    expect(parseEffectDefinition({ ...spotlight, spotlightAngle: 360 })).toBeNull();
+    expect(parseEffectDefinition({ ...spotlight, spotlightSpeed: 14 })).toBeNull();
+  });
   it("separates all-mode effects by detected emitter", () => {
     expect(buildRuntimeEffectKey("d", "r", "e", "same-target", "shader", "", "", "a"))
       .not.toBe(buildRuntimeEffectKey("d", "r", "e", "same-target", "shader", "", "", "b"));

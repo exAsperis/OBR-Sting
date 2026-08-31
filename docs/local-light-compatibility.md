@@ -6,7 +6,7 @@ The Owlbear Rodeo SDK 3.1 types and current official documentation confirm that 
 
 Sting therefore subscribes once to `OBR.scene.local.onChange`, filters with `isLight`, and feeds the resulting cache into its normal reconciliation loop. Temporary lights remain purely local.
 
-The official Dynamic Fog implementation persists a manually added light differently: it writes the configuration to the attached scene item's `rodeo.owlbear.dynamic-fog/light` metadata, then reconciles that shared configuration into a local `LIGHT` on every client. Sting uses that same public implementation contract for permanent Add Light and permanent Modify Light effects. This makes the context menu show **Light Settings** and lets Dynamic Fog recreate the light after refresh.
+The official Dynamic Fog implementation persists a manually added light differently: it writes the configuration to the attached scene item's `rodeo.owlbear.dynamic-fog/light` metadata, then reconciles that shared configuration into a local `LIGHT` on every client. Sting uses that same public implementation contract for permanent Add Light, Modify Light, and Spotlight effects. This makes the context menu show **Light Settings** and lets Dynamic Fog recreate the light after refresh.
 
 ## Live-room result (2026-08-31)
 
@@ -20,6 +20,7 @@ Foreign mutation/restoration and whether `scene.local.onChange` reports owner-ex
 - Light effects default to temporary. Permanent additions and modifications are committed to the attached scene item's official Dynamic Fog metadata and are not removed or reversed by Sting runtime cleanup.
 - A foreign light is never deleted. Modify Light attempts the SDK-supported local update and reports `modification-denied` without retaining modifier state if Owlbear rejects it.
 - Modification captures a base state, applies all active Sting modifiers in deterministic runtime-key order, and restores the base when the final temporary modifier ends.
+- Spotlight uses the same bearing, shortest-turn, and constant-angular-speed model as Face. A temporary Spotlight restores its starting rotation; a permanent Spotlight commits its final rotation to the attached item's Dynamic Fog metadata.
 - If the observed light differs from Sting's last applied state while modifiers are active, the observed state becomes the new base before modifiers are recomputed. This preserves owner changes instead of blindly restoring an obsolete snapshot.
 - The UI calls the detector **Within Light Radius**, not “illuminated,” because walls, elevation, secondary-light rules, and GPU fog composition are not evaluated.
 

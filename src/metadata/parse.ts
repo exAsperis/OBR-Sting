@@ -107,7 +107,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   const audience = parseAudience(value.audience);
   if (!audience) return null;
   if (value.type === "light") {
-    if (!["add", "modify"].includes(String(value.action))) return null;
+    if (!["add", "modify", "spotlight"].includes(String(value.action))) return null;
     if (value.duration !== undefined && !["temporary", "permanent"].includes(String(value.duration))) return null;
     const attenuationRadius = parseLightValue(value.attenuationRadius, 0, value.radiusOperation === "multiply" ? 20 : 1000);
     const sourceRadius = value.sourceRadius === undefined ? undefined : parseLightValue(value.sourceRadius, 0, 1000);
@@ -119,7 +119,12 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     if (value.radiusOperation !== undefined && !["set", "add", "multiply"].includes(String(value.radiusOperation))) return null;
     if (value.rotationBehavior !== undefined && !["target", "fixed"].includes(String(value.rotationBehavior))) return null;
     if (value.rotation !== undefined && (!finite(value.rotation) || value.rotation < -360 || value.rotation > 360)) return null;
-    return { id: value.id, ...named, type: "light", enabled: value.enabled, action: value.action as "add" | "modify", duration: value.duration as LightEffectDefinitionV1["duration"] ?? "temporary", target, audience, attenuationRadius, ...(sourceRadius ? { sourceRadius } : {}), ...(falloff ? { falloff } : {}), ...(innerAngle ? { innerAngle } : {}), ...(outerAngle ? { outerAngle } : {}), ...(value.lightType ? { lightType: value.lightType as LightEffectDefinitionV1["lightType"] } : {}), radiusOperation: value.radiusOperation as LightEffectDefinitionV1["radiusOperation"] ?? "set", rotationBehavior: value.rotationBehavior as LightEffectDefinitionV1["rotationBehavior"] ?? "target", ...(value.rotation !== undefined ? { rotation: value.rotation } : {}) };
+    const spotlightAngle = value.spotlightAngle ?? 0;
+    const spotlightSpeed = value.spotlightSpeed ?? 180;
+    if (!finite(spotlightAngle) || spotlightAngle < 0 || spotlightAngle > 359 || !finite(spotlightSpeed) || spotlightSpeed < 15 || spotlightSpeed > 720) return null;
+    // Spotlight already aims at the detected emitter, so using it as the light target is self-referential.
+    const lightTarget = value.action === "spotlight" && target.type === "detected-emitter" ? { type: "detector" as const } : target;
+    return { id: value.id, ...named, type: "light", enabled: value.enabled, action: value.action as LightEffectDefinitionV1["action"], duration: value.duration as LightEffectDefinitionV1["duration"] ?? "temporary", target: lightTarget, audience, attenuationRadius, ...(sourceRadius ? { sourceRadius } : {}), ...(falloff ? { falloff } : {}), ...(innerAngle ? { innerAngle } : {}), ...(outerAngle ? { outerAngle } : {}), ...(value.lightType ? { lightType: value.lightType as LightEffectDefinitionV1["lightType"] } : {}), radiusOperation: value.radiusOperation as LightEffectDefinitionV1["radiusOperation"] ?? "set", rotationBehavior: value.rotationBehavior as LightEffectDefinitionV1["rotationBehavior"] ?? "target", ...(value.rotation !== undefined ? { rotation: value.rotation } : {}), ...(value.action === "spotlight" ? { spotlightAngle, spotlightSpeed } : {}) };
   }
   // Compatibility migration for detector metadata written before the generic provider model.
   if (value.type === "emanation") {

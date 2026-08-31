@@ -135,7 +135,7 @@ export interface LightEffectDefinitionV1 {
   name?: string;
   type: "light";
   enabled: boolean;
-  action: "add" | "modify";
+  action: "add" | "modify" | "spotlight";
   /** Permanent light changes are saved on the target using Dynamic Fog's scene metadata. */
   duration?: "temporary" | "permanent";
   target: EffectTargetV1;
@@ -149,6 +149,10 @@ export interface LightEffectDefinitionV1 {
   radiusOperation?: "set" | "add" | "multiply";
   rotationBehavior?: "target" | "fixed";
   rotation?: number;
+  /** Direction the cone points at zero light rotation, clockwise from north. */
+  spotlightAngle?: number;
+  /** Constant spotlight turning speed in degrees per second. */
+  spotlightSpeed?: number;
 }
 
 export type EffectDefinitionV1 = ShaderEffectDefinitionV1 | IntegrationEffectDefinitionV1 | MechanicalEffectDefinitionV1 | LightEffectDefinitionV1;

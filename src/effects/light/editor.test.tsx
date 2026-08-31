@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { LightEffectEditor } from "../integrations/ui/IntegrationEffectEditor";
 import type { LightEffectDefinitionV1 } from "../../types";
 
-const effect = (action: "add" | "modify"): LightEffectDefinitionV1 => ({
+const effect = (action: LightEffectDefinitionV1["action"]): LightEffectDefinitionV1 => ({
   id: "light-1", type: "light", enabled: true, action, duration: "temporary",
   target: action === "add" ? { type: "detector" } : { type: "detected-emitter" },
   audience: { type: "everyone" }, attenuationRadius: { value: 4 }, sourceRadius: { value: 0 },
@@ -27,5 +27,15 @@ describe("LightEffectEditor duration", () => {
     renderEditor(effect("modify"));
     expect(screen.getByText("Duration")).not.toBeNull();
     expect(screen.getByRole("option", { name: "Permanent — leave in scene" })).not.toBeNull();
+  });
+
+  it("shows Face and Speed controls for Spotlight without radius controls", () => {
+    renderEditor(effect("spotlight"));
+    expect(screen.getByText("Face")).not.toBeNull();
+    expect(screen.getByText("Speed")).not.toBeNull();
+    expect(screen.getByText("Light target")).not.toBeNull();
+    expect(screen.queryByRole("option", { name: "Detected emitter(s)" })).toBeNull();
+    expect(screen.queryByText("Radius (scene units)")).toBeNull();
+    expect(screen.getByText("Duration")).not.toBeNull();
   });
 });
