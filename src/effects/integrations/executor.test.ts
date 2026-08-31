@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DesiredEffect, IntegrationEffectDefinitionV1 } from "../../types";
+import { fixedSharedAuthority } from "../mechanical/authority";
 import { IntegrationEffectExecutor } from "./executor";
 import { IntegrationProviderRegistry } from "./registry";
 import type { IntegrationProvider } from "./types";
@@ -30,14 +31,14 @@ describe("IntegrationEffectExecutor", () => {
     const registry = new IntegrationProviderRegistry();
     const registered = provider();
     registry.register(registered);
-    const executor = new IntegrationEffectExecutor(registry);
+    const executor = new IntegrationEffectExecutor(registry, fixedSharedAuthority(true));
     await executor.reconcile({ desired: [], events: [] });
     expect(registered.reconcile).toHaveBeenCalledWith({ desired: [], events: [] });
   });
 
   it("retains unknown provider effects as unavailable instead of throwing", async () => {
     const registry = new IntegrationProviderRegistry();
-    const executor = new IntegrationEffectExecutor(registry);
+    const executor = new IntegrationEffectExecutor(registry, fixedSharedAuthority(true));
     const effect: IntegrationEffectDefinitionV1 = {
       id: "effect", type: "integration", enabled: true, lifecycle: "enter",
       target: { type: "detector" }, audience: { type: "everyone" },
@@ -48,16 +49,16 @@ describe("IntegrationEffectExecutor", () => {
     expect(report.statuses.get("runtime")).toBe("provider-unavailable");
   });
 
-  it("elects only one GM connection for single-authority actions", async () => {
+  it("keeps single-authority actions inactive on a standby GM runtime", async () => {
     const registry = new IntegrationProviderRegistry();
     const registered = provider();
     registry.register(registered);
-    const executor = new IntegrationEffectExecutor(registry);
+    const executor = new IntegrationEffectExecutor(registry, fixedSharedAuthority(false));
     const effect: IntegrationEffectDefinitionV1 = {
       id: "effect", type: "integration", enabled: true, lifecycle: "enter", target: { type: "detector" }, audience: { type: "everyone" },
       providerId: registered.id, providerSchemaVersion: 1, actionId: "fire", parameters: {},
     };
-    const losing = { effect, runtimeKey: "runtime", localPlayer: { id: "gm", role: "GM", connectionId: "gm-b" }, party: [{ id: "gm", role: "GM", connectionId: "gm-a" }], audienceMatch: true } as DesiredEffect;
+    const losing = { effect, runtimeKey: "runtime", localPlayer: { id: "gm", role: "GM", connectionId: "gm-b" }, party: [], audienceMatch: true } as unknown as DesiredEffect;
     const report = await executor.reconcile({ desired: [], events: [losing] });
     expect(registered.reconcile).toHaveBeenCalledWith({ desired: [], events: [] });
     expect(report.statuses.get("runtime")).toBe("not-execution-client");

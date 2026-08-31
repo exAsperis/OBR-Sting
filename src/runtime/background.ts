@@ -3,20 +3,38 @@ import { CONTEXT_MENU_ID, EMANATION_INTEGRATION_KEY, SETTINGS_KEY } from "../con
 import { ProximityEngine } from "./engine";
 import { parseSceneSettings } from "../settings";
 import { clearSelectedFacePivots, syncSelectedFacePivots } from "./pivotDebug";
+import { applyAuthorityBadge, AuthorityCoordinator } from "./authority";
 
-OBR.onReady(() => {
-  const engine = new ProximityEngine();
+OBR.onReady(async () => {
+  const [role, connectionId, initialParty] = await Promise.all([OBR.player.getRole(), OBR.player.getConnectionId(), OBR.party.getPlayers()]);
+  const initialPlayer = { id: OBR.player.id, role, connectionId };
+  const authority = new AuthorityCoordinator(initialPlayer, initialParty);
+  const engine = new ProximityEngine(authority);
   let stopItems: (() => void) | undefined;
   let stopGrid: (() => void) | undefined;
   let stopSceneMetadata: (() => void) | undefined;
   let latestItems = [] as Awaited<ReturnType<typeof OBR.scene.items.getItems>>;
 
+  const updateBadge = async () => {
+    try {
+      await applyAuthorityBadge(authority.getSnapshot());
+    } catch { /* badge feedback must not interrupt the runtime */ }
+  };
+  const stopAuthority = authority.subscribe(() => { engine.schedule(); void updateBadge(); });
+  await authority.start();
+
   const refreshPlayer = async () => {
     const [role, connectionId] = await Promise.all([OBR.player.getRole(), OBR.player.getConnectionId()]);
-    engine.setPlayer({ id: OBR.player.id, role, connectionId });
+    const player = { id: OBR.player.id, role, connectionId };
+    engine.setPlayer(player);
+    authority.setPlayer(player);
     void syncSelectedFacePivots(latestItems);
   };
-  const refreshParty = async () => engine.setParty(await OBR.party.getPlayers());
+  const refreshParty = async () => {
+    const party = await OBR.party.getPlayers();
+    engine.setParty(party);
+    authority.setParty(party);
+  };
   const attachScene = async (ready: boolean) => {
     stopItems?.();
     stopGrid?.();
@@ -53,9 +71,11 @@ OBR.onReady(() => {
 
   const stopReady = OBR.scene.onReadyChange((ready) => void attachScene(ready));
   const stopPlayer = OBR.player.onChange(() => void refreshPlayer());
-  const stopParty = OBR.party.onChange((party) => engine.setParty(party));
+  const stopParty = OBR.party.onChange((party) => { engine.setParty(party); authority.setParty(party); });
   const integrationChanged = (event: StorageEvent) => { if (event.key === EMANATION_INTEGRATION_KEY) engine.schedule(); };
   window.addEventListener("storage", integrationChanged);
+  engine.setPlayer(initialPlayer);
+  engine.setParty(initialParty);
   void Promise.all([OBR.scene.isReady().then(attachScene), refreshPlayer(), refreshParty()]);
 
   window.addEventListener("beforeunload", () => {
@@ -65,9 +85,12 @@ OBR.onReady(() => {
     stopReady();
     stopPlayer();
     stopParty();
+    stopAuthority();
     window.removeEventListener("storage", integrationChanged);
     void OBR.contextMenu.remove(CONTEXT_MENU_ID);
     void engine.clear();
+    void authority.stop();
+    void OBR.action.setBadgeText(undefined);
     void clearSelectedFacePivots();
   }, { once: true });
 });

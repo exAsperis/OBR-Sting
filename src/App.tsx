@@ -1,6 +1,6 @@
 import OBR, { isImage, type GridType, type Item, type Player } from "@owlbear-rodeo/sdk";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DETECTOR_KEY, EFFECT_LIBRARY_STORAGE_KEY, EMANATION_INTEGRATION_KEY, EMITTER_KEY, EXTENSION_NAME, RULE_LIBRARY_STORAGE_KEY, RUMBLE_INTEGRATION_KEY, SETTINGS_KEY } from "./constants";
+import { AUTHORITY_CONTROL_CHANNEL, AUTHORITY_STATUS_CHANNEL, DETECTOR_KEY, EFFECT_LIBRARY_STORAGE_KEY, EMANATION_INTEGRATION_KEY, EMITTER_KEY, EXTENSION_NAME, RULE_LIBRARY_STORAGE_KEY, RUMBLE_INTEGRATION_KEY, SETTINGS_KEY } from "./constants";
 import { parseDetectionRule, parseDetectorMetadata, parseEmitterMetadata } from "./metadata/parse";
 import { DEBUG_STORAGE_KEY } from "./runtime/engine";
 import { DEFAULT_GEOMETRY, resolveShaderGeometry } from "./effects/shader/geometry";
@@ -21,6 +21,8 @@ import { CaretIcon, GearsIcon, SaveToBookIcon, TrashIcon } from "./components/Ed
 import { SignalCombobox } from "./components/SignalCombobox";
 import { EditableTitle } from "./components/EditableTitle";
 import { clearEmitterLabels, labelAllEmitters } from "./runtime/emitterLabels";
+import type { SharedAuthoritySnapshot } from "./effects/mechanical/authority";
+import { parseAuthorityStatus, type AuthorityControlMessage } from "./runtime/authority";
 
 const newEffect = (): ShaderEffectDefinitionV1 => ({ id: crypto.randomUUID(), type: "shader", enabled: true, target: { type: "detector" }, audience: { type: "everyone" }, preset: "glow", shape: "circle", placement: "above", color: "#55aaff", maxIntensity: 1, spread: 1.25, animation: { mode: "none", rate: 1, depth: 0.35 } });
 const newFaceEffect = (): MechanicalEffectDefinitionV1 => ({ id: crypto.randomUUID(), type: "mechanical", enabled: true, action: "face", target: { type: "detector" }, faceAngle: 0, pivotX: 0, pivotY: 0, speed: 180 });
@@ -66,6 +68,10 @@ export default function App() {
   const [ruleLibrary, setRuleLibrary] = useState<RuleLibraryV1>(() => loadRuleLibrary(localStorage, RULE_LIBRARY_STORAGE_KEY));
   const [ruleLibraryOpen, setRuleLibraryOpen] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [authority, setAuthority] = useState<SharedAuthoritySnapshot | null>(null);
+  const [authorityPending, setAuthorityPending] = useState(false);
+  const [authorityError, setAuthorityError] = useState<string | null>(null);
+  const authorityRequest = useRef<string | null>(null);
   const hydratedItemId = useRef<string | null>(null);
   const lastSavedSignature = useRef("");
   const selectionSignature = useRef("");
@@ -133,6 +139,36 @@ export default function App() {
     const timer = window.setInterval(refresh, 750);
     return () => window.clearInterval(timer);
   }, [showDebug]);
+
+  useEffect(() => {
+    if (connection.status !== "ready") return;
+    const stop = OBR.broadcast.onMessage(AUTHORITY_STATUS_CHANNEL, (event) => {
+      const message = parseAuthorityStatus(event.data);
+      if (!message) return;
+      setAuthority(message.snapshot);
+      if (message.requestId && message.requestId === authorityRequest.current) {
+        authorityRequest.current = null;
+        setAuthorityPending(false);
+        setAuthorityError(message.error ?? null);
+      }
+    });
+    const requestId = crypto.randomUUID();
+    void OBR.broadcast.sendMessage(AUTHORITY_CONTROL_CHANNEL, { version: 1, type: "request-status", requestId } satisfies AuthorityControlMessage, { destination: "LOCAL" });
+    return stop;
+  }, [connection.status]);
+
+  const sendAuthorityCommand = useCallback((type: "take-control" | "release-control") => {
+    const requestId = crypto.randomUUID();
+    authorityRequest.current = requestId;
+    setAuthorityPending(true);
+    setAuthorityError(null);
+    void OBR.broadcast.sendMessage(AUTHORITY_CONTROL_CHANNEL, { version: 1, type, requestId } satisfies AuthorityControlMessage, { destination: "LOCAL" }).catch(() => {
+      if (authorityRequest.current !== requestId) return;
+      authorityRequest.current = null;
+      setAuthorityPending(false);
+      setAuthorityError("Unable to contact the Sting background runtime. Reload the room and try again.");
+    });
+  }, []);
 
   useEffect(() => {
     if (connection.sceneReady) return;
@@ -267,7 +303,7 @@ export default function App() {
         {settingsError && <div className="validation-error" role="alert">{settingsError}</div>}
       </div>
     </section>}
-    {showDebug ? <><div className="debug-emitter-labels"><button className="wide-button" disabled={!connection.sceneReady} onClick={toggleEmitterLabels}>{emitterLabelsVisible ? "Clear emitter labels" : "Label all emitters"}</button>{emitterLabelsVisible && <p className="muted" role="status">Showing {emitterLabelCount} local emitter label{emitterLabelCount === 1 ? "" : "s"}.</p>}</div><DebugView rules={debug} /></> : selected && !showSettings && connection.role === "GM" ? <>
+    {showDebug ? <><div className="debug-emitter-labels"><button className="wide-button" disabled={!connection.sceneReady} onClick={toggleEmitterLabels}>{emitterLabelsVisible ? "Clear emitter labels" : "Label all emitters"}</button>{emitterLabelsVisible && <p className="muted" role="status">Showing {emitterLabelCount} local emitter label{emitterLabelCount === 1 ? "" : "s"}.</p>}</div><DebugView rules={debug} authority={authority} pending={authorityPending} error={authorityError} onTakeControl={() => sendAuthorityCommand("take-control")} onReleaseControl={() => sendAuthorityCommand("release-control")} /></> : selected && !showSettings && connection.role === "GM" ? <>
       <section className="item-heading"><div className="selected-thumbnail">{isImage(selected) && selected.image.mime.startsWith("image/") ? <img src={selected.image.url} alt="" /> : <span aria-hidden="true">◇</span>}</div><div><span className="eyebrow">Selected item</span><h2>{selected.name || "Unnamed item"}</h2><code>{selected.id}</code></div></section>
       <section className="content-card"><div className="section-title"><h2 title="Add detectable signal tags. End a tag with a range such as [20] to cap it in scene units.">Emitter</h2><label className="toggle" title="Enable or disable every signal emitted by this item."><input type="checkbox" aria-label="Enable emitter" checked={emitter.enabled} onChange={(event) => setEmitter({ ...emitter, enabled: event.target.checked })} /></label></div><div className="chips">{emitter.signals.map((signal) => <button title={`Remove the ${signal} signal from this item.`} key={signal} className="chip" onClick={() => setEmitter({ ...emitter, signals: emitter.signals.filter((value) => value !== signal) })}>{signal}<span>×</span></button>)}</div><div className="input-row"><SignalCombobox value={signalDraft} options={sceneSignals} onChange={setSignalDraft} onEnter={addSignal} /><button title="Add this signal to the selected item." onClick={addSignal}>Add</button></div></section>
       <section className="content-card"><div className="section-title"><h2 title="Add detection rules that respond when matching emitter tags are within range.">Detector</h2><label className="toggle" title="Enable or disable every detection rule on this item."><input type="checkbox" aria-label="Enable detector" checked={detector.enabled} onChange={(event) => setDetector({ ...detector, enabled: event.target.checked })} /></label></div>{detector.rules.map((rule, ruleIndex) => <RuleEditor key={rule.id} rule={rule} index={ruleIndex} unit={gridUnit} items={items} party={party} emanationEnabled={emanationEnabled} library={effectLibrary.entries} onSaveRule={() => saveRuleToLibrary(rule)} onSaveEffect={saveEffectToLibrary} onChange={(update) => updateRule(ruleIndex, update)} onEffect={(effectIndex, update) => updateEffect(ruleIndex, effectIndex, update)} onDelete={() => confirmDelete(`Delete Rule ${ruleIndex + 1} and all of its effects?`, () => setDetector({ ...detector, rules: detector.rules.filter((_, i) => i !== ruleIndex) }))} />)}<div className="rule-add-actions"><button className="wide-button" title="Add another detection rule to this item." onClick={() => setDetector({ ...detector, rules: [...detector.rules, newRule()] })}>+ Add detection rule</button><button className={`mini-icon${ruleLibraryOpen ? " active" : ""}`} title={ruleLibrary.entries.length ? "Add a saved rule from your browser-local library." : "Your browser-local rules library is empty."} aria-label="Add rule from the rules library" disabled={!ruleLibrary.entries.length} onClick={() => setRuleLibraryOpen((value) => !value)}><BookIcon /></button></div>{ruleLibraryOpen && <div className="library-picker">{ruleLibrary.entries.map((entry) => <button key={entry.id} title={`Add ${entry.name} and all of its effects.`} onClick={() => { setDetector((current) => ({ ...current, rules: [...current.rules, instantiateLibraryRule(entry)] })); setRuleLibraryOpen(false); }}><span>{entry.name}</span><small>{entry.rule.signal} · {entry.rule.effects.length} effect{entry.rule.effects.length === 1 ? "" : "s"}</small></button>)}</div>}</section>
@@ -360,6 +396,13 @@ function EffectEditor({ effect, items, party, onSave, onChange, onDelete }: { ef
   </div>{effect.audience.type === "specific-users" && <fieldset><legend>Specific users</legend>{party.length ? party.map((player) => <label className="user-check" key={player.id}><input type="checkbox" checked={effect.audience.type === "specific-users" && effect.audience.userIds.includes(player.id)} onChange={(event) => onChange((value) => { const audience = value.audience.type === "specific-users" ? value.audience : { type: "specific-users" as const, userIds: [] }; return { ...value, audience: { ...audience, userIds: event.target.checked ? [...audience.userIds, player.id] : audience.userIds.filter((id) => id !== player.id) } }; })} />{player.name} <small>{player.role}</small></label>) : <p className="muted">No connected users. Stored offline IDs are retained.</p>}</fieldset>}</>}</div>;
 }
 
-function DebugView({ rules }: { rules: DebugRuleState[] }) {
-  return <section className="content-card debug-view"><h2>Local runtime</h2><p className="muted">Derived state from this client only. Nothing here is stored in scene metadata.</p>{rules.length === 0 ? <div className="notice">No active detector rules.</div> : rules.map((rule) => <article key={`${rule.detectorId}:${rule.ruleId}`}><h3>{rule.detectorName}</h3><code>{rule.signal} · {rule.aggregation === "all" ? "all in range" : "closest"} · {rule.range.outer}</code><dl className="facts"><div><dt>Matches</dt><dd>{rule.matchingEmitterCount}</dd></div><div><dt>Active</dt><dd>{rule.activeEmitterCount}</dd></div></dl>{rule.detections.map((detection, index) => <div className="debug-detection" key={`${detection.emitterName}:${index}`}><strong>{detection.emitterName}</strong><span>{detection.distance.toFixed(2)} · strength {detection.strength.toFixed(3)}</span></div>)}{rule.effects.map((effect, index) => <div className="debug-effect" key={`${effect.effectId}:${effect.runtimeKey ?? index}`}><strong>{effect.providerId ? `${effect.providerId} · ${effect.actionId}` : effect.actionId ? `${effect.type} · ${effect.actionId}` : effect.type} · {effect.lifecycle}</strong><span>{effect.transition} · {effect.targetType} → {effect.targetName ?? "unresolved"}</span><span>{effect.audience ?? "GM authority"} · {effect.audienceMatch ? "execution client" : "not executing here"}</span><code>{effect.executionStatus ?? effect.localItemId ?? "inactive"}</code></div>)}</article>)}</section>;
+interface DebugViewProps { rules: DebugRuleState[]; authority: SharedAuthoritySnapshot | null; pending: boolean; error: string | null; onTakeControl: () => void; onReleaseControl: () => void }
+
+export function AuthorityCard({ authority, pending, error, onTakeControl, onReleaseControl }: Omit<DebugViewProps, "rules">) {
+  const authorityLabel = !authority ? "Connecting" : authority.state === "active" ? "Active" : authority.state === "standby" ? "Standby" : authority.state === "discovering" ? "Discovering" : "Not eligible";
+  return <div className={`authority-card authority-${authority?.state ?? "discovering"}`}><div className="authority-heading"><strong>Shared-effect authority</strong><span>{authorityLabel}</span></div><p>{authority?.state === "active" ? "This session executes shared mechanical and integration effects." : authority?.state === "standby" ? "Another healthy GM session is executing shared effects." : authority?.state === "discovering" ? "Checking for other healthy Sting runtimes…" : "Only GM sessions can execute shared effects."}</p>{authority && <small>{authority.healthyRuntimeCount} healthy GM runtime{authority.healthyRuntimeCount === 1 ? "" : "s"} · {authority.selection} selection</small>}{authority?.state === "standby" && <button className="wide-button" disabled={pending} onClick={onTakeControl}>{pending ? "Taking control…" : "Take control"}</button>}{authority?.state === "active" && authority.manualClaimedByLocal && <button className="wide-button" disabled={pending} onClick={onReleaseControl}>{pending ? "Returning…" : "Return to automatic"}</button>}{error && <div className="validation-error" role="alert">{error}</div>}</div>;
+}
+
+function DebugView({ rules, authority, pending, error, onTakeControl, onReleaseControl }: DebugViewProps) {
+  return <section className="content-card debug-view"><h2>Local runtime</h2><p className="muted">Derived state from this client only. Nothing here is stored in scene metadata.</p><AuthorityCard authority={authority} pending={pending} error={error} onTakeControl={onTakeControl} onReleaseControl={onReleaseControl} />{rules.length === 0 ? <div className="notice">No active detector rules.</div> : rules.map((rule) => <article key={`${rule.detectorId}:${rule.ruleId}`}><h3>{rule.detectorName}</h3><code>{rule.signal} · {rule.aggregation === "all" ? "all in range" : "closest"} · {rule.range.outer}</code><dl className="facts"><div><dt>Matches</dt><dd>{rule.matchingEmitterCount}</dd></div><div><dt>Active</dt><dd>{rule.activeEmitterCount}</dd></div></dl>{rule.detections.map((detection, index) => <div className="debug-detection" key={`${detection.emitterName}:${index}`}><strong>{detection.emitterName}</strong><span>{detection.distance.toFixed(2)} · strength {detection.strength.toFixed(3)}</span></div>)}{rule.effects.map((effect, index) => <div className="debug-effect" key={`${effect.effectId}:${effect.runtimeKey ?? index}`}><strong>{effect.providerId ? `${effect.providerId} · ${effect.actionId}` : effect.actionId ? `${effect.type} · ${effect.actionId}` : effect.type} · {effect.lifecycle}</strong><span>{effect.transition} · {effect.targetType} → {effect.targetName ?? "unresolved"}</span><span>{effect.audience ?? "GM authority"} · {effect.audienceMatch ? "execution client" : "not executing here"}</span><code>{effect.executionStatus ?? effect.localItemId ?? "inactive"}</code></div>)}</article>)}</section>;
 }

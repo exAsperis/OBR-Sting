@@ -1,13 +1,13 @@
 import type { DesiredEffect, IntegrationEffectDefinitionV1 } from "../../types";
 import type { EffectDispatchBatch, EffectExecutor, EffectReconcileReport } from "../registry";
 import type { IntegrationProviderRegistry } from "./registry";
-import { isSharedEffectAuthority } from "../mechanical/authority";
+import type { SharedEffectAuthority } from "../mechanical/authority";
 
 export class IntegrationEffectExecutor implements EffectExecutor<IntegrationEffectDefinitionV1> {
   readonly type = "integration" as const;
   readonly scope = "shared" as const;
 
-  constructor(private readonly providers: IntegrationProviderRegistry) {}
+  constructor(private readonly providers: IntegrationProviderRegistry, private readonly authority: SharedEffectAuthority) {}
 
   async reconcile(batch: EffectDispatchBatch): Promise<EffectReconcileReport> {
     const localIds = new Map<string, string>();
@@ -29,7 +29,7 @@ export class IntegrationEffectExecutor implements EffectExecutor<IntegrationEffe
         const effect = entry.effect as IntegrationEffectDefinitionV1;
         const action = provider.actions.find((candidate) => candidate.id === effect.actionId);
         const authorized = action?.execution === "single-authority"
-          ? isSharedEffectAuthority(entry.localPlayer, entry.party)
+          ? entry.localPlayer.role === "GM" && this.authority.isAuthority()
           : entry.audienceMatch;
         if (!authorized) {
           statuses.set(entry.runtimeKey, "not-execution-client");

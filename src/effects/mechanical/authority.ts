@@ -1,19 +1,32 @@
-import type { Player } from "@owlbear-rodeo/sdk";
+export type SharedAuthorityState = "discovering" | "active" | "standby" | "ineligible";
 
-type MechanicalPlayer = Pick<Player, "id" | "role" | "connectionId">;
-
-/** Elect one connected GM session as the shared writer for room-wide effects. */
-export function isSharedEffectAuthority(localPlayer: MechanicalPlayer, party: Player[]): boolean {
-  if (localPlayer.role !== "GM") return false;
-  // OBR.party intentionally excludes the local player. Include it explicitly so
-  // every session elects from the same complete set of connected GM sessions.
-  const gmConnections = [localPlayer, ...party]
-    .filter((player) => player.role === "GM")
-    .map((player) => player.connectionId)
-    .filter((connectionId, index, all) => all.indexOf(connectionId) === index)
-    .sort();
-  return gmConnections[0] === localPlayer.connectionId;
+export interface SharedAuthoritySnapshot {
+  state: SharedAuthorityState;
+  localConnectionId: string;
+  leaderConnectionId: string | null;
+  healthyRuntimeCount: number;
+  selection: "automatic" | "manual";
+  manualClaimedByLocal: boolean;
 }
 
-/** Backward-compatible mechanical-effect name. */
-export const isMechanicalAuthority = isSharedEffectAuthority;
+/** Read-only authority surface shared by every room-wide effect executor. */
+export interface SharedEffectAuthority {
+  isAuthority(): boolean;
+  getSnapshot(): SharedAuthoritySnapshot;
+}
+
+/** Small deterministic authority used by isolated executor tests. */
+export function fixedSharedAuthority(active: boolean): SharedEffectAuthority {
+  const state = active ? "active" : "standby";
+  return {
+    isAuthority: () => active,
+    getSnapshot: () => ({
+      state,
+      localConnectionId: "test-local",
+      leaderConnectionId: active ? "test-local" : "test-remote",
+      healthyRuntimeCount: active ? 1 : 2,
+      selection: "automatic",
+      manualClaimedByLocal: false,
+    }),
+  };
+}

@@ -2,7 +2,7 @@ import OBR, { buildLine, type Item } from "@owlbear-rodeo/sdk";
 import { PIVOT_DEBUG_KEY } from "../../constants";
 import type { DesiredEffect, MechanicalEffectDefinitionV1, MechanicalFaceEffectDefinitionV1, MechanicalVisibilityEffectDefinitionV1 } from "../../types";
 import type { EffectDispatchBatch, EffectExecutor, EffectReconcileReport } from "../registry";
-import { isMechanicalAuthority } from "./authority";
+import type { SharedEffectAuthority } from "./authority";
 import { advanceFaceRotation, compareFaceContexts, faceBearing, localPivotFromOrigin, normalizeAngle, positionForFixedPivot, resolvePivot, shortestAngleDelta, unrotatedItemSize } from "./face";
 
 interface FaceState {
@@ -48,16 +48,18 @@ export class MechanicalEffectExecutor implements EffectExecutor<MechanicalEffect
   private tickerWorker: Worker | null = null;
   private tickerTimer: ReturnType<typeof setInterval> | null = null;
 
+  constructor(private readonly authority: SharedEffectAuthority) {}
+
   async reconcile(batch: EffectDispatchBatch): Promise<EffectReconcileReport> {
     const statuses = new Map<string, string>();
     for (const context of batch.desired.filter((entry) => entry.effect.type === "mechanical")) {
       if (context.localPlayer.role !== "GM") statuses.set(context.runtimeKey, "player-inactive");
-      else if (!isMechanicalAuthority(context.localPlayer, context.party)) statuses.set(context.runtimeKey, "authority-standby");
+      else if (!this.authority.isAuthority()) statuses.set(context.runtimeKey, this.authority.getSnapshot().state === "discovering" ? "authority-discovering" : "authority-standby");
       else if (!context.target || !context.detectedEmitter) statuses.set(context.runtimeKey, "unresolved");
       else if (context.effect.type === "mechanical" && context.effect.action === "face" && context.target.id === context.detectedEmitter.id) statuses.set(context.runtimeKey, "self-skipped");
     }
     const eligible = batch.desired.filter((context) =>
-      isMechanicalAuthority(context.localPlayer, context.party) &&
+      context.localPlayer.role === "GM" && this.authority.isAuthority() &&
       context.effect.type === "mechanical" &&
       context.effect.action === "face" &&
       context.target !== null &&
@@ -140,13 +142,13 @@ export class MechanicalEffectExecutor implements EffectExecutor<MechanicalEffect
 
   private async reconcileVisibility(desired: DesiredEffect[], statuses: Map<string, string>): Promise<void> {
     const visibilityContexts = desired.filter((context) => context.effect.type === "mechanical" && context.effect.action === "visibility");
-    if (visibilityContexts.length > 0 && !visibilityContexts.some((context) => isMechanicalAuthority(context.localPlayer, context.party))) {
+    if (visibilityContexts.length > 0 && !this.authority.isAuthority()) {
       this.visibilityStates.clear();
       return;
     }
     const grouped = new Map<string, DesiredEffect>();
     for (const context of visibilityContexts) {
-      if (!isMechanicalAuthority(context.localPlayer, context.party) || context.effect.type !== "mechanical" || context.effect.action !== "visibility" || !context.target || !context.detectedEmitter) continue;
+      if (context.localPlayer.role !== "GM" || !this.authority.isAuthority() || context.effect.type !== "mechanical" || context.effect.action !== "visibility" || !context.target || !context.detectedEmitter) continue;
       const groupKey = JSON.stringify([context.detector.id, context.rule.id, context.effect.id, context.target.id]);
       const current = grouped.get(groupKey);
       if (!current || compareFaceContexts(context, current) < 0) grouped.set(groupKey, context);

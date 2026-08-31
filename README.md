@@ -63,6 +63,12 @@ the optional extension integrations.
 
 The background page evaluates rules on every client even while the editor is closed. Derived proximity state and Effect item IDs are never written to the shared scene.
 
+Shared mechanical effects and single-authority integrations are executed by one healthy
+GM runtime. Sting discovers those runtimes through ephemeral heartbeats and automatically
+fails over after roughly eight seconds when the current authority stops responding. A
+standby GM session shows an amber **STBY** action badge; its Debug view can take control
+for the lifetime of that connection or return authority to automatic election.
+
 ## Verification
 
 ```sh
@@ -86,4 +92,4 @@ pnpm run build
 - Extension ID: `com.ex-asperis.sting`
 - Published author: `ex Asperis`
 - Stable manifest: `public/manifest.json`
-- Versioned manifest: `public/manifest-v0.1.4.json`
+- Versioned manifest: `public/manifest-v0.1.5.json`

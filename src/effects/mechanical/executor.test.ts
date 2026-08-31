@@ -1,6 +1,7 @@
 import type { Item } from "@owlbear-rodeo/sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DesiredEffect, MechanicalEffectDefinitionV1 } from "../../types";
+import { fixedSharedAuthority } from "./authority";
 
 const { startItemInteraction, updateItems, getItemBounds, addLocalItems, deleteLocalItems } = vi.hoisted(() => ({ startItemInteraction: vi.fn(), updateItems: vi.fn(), getItemBounds: vi.fn(), addLocalItems: vi.fn(), deleteLocalItems: vi.fn() }));
 vi.mock("@owlbear-rodeo/sdk", () => ({
@@ -55,41 +56,53 @@ describe("MechanicalEffectExecutor", () => {
   it("only lets the GM start shared Face interactions", async () => {
     const target = item("target", 0, 0);
     const emitter = item("emitter", 10, 0);
-    await new MechanicalEffectExecutor().reconcile({ desired: [context(target, emitter, 10, "PLAYER")], events: [] });
+    await new MechanicalEffectExecutor(fixedSharedAuthority(true)).reconcile({ desired: [context(target, emitter, 10, "PLAYER")], events: [] });
     expect(startItemInteraction).not.toHaveBeenCalled();
   });
 
-  it("elects only the first GM connection when several GM tabs are present", async () => {
+  it("keeps a GM standby when the coordinator elects another healthy runtime", async () => {
     const target = item("target", 0, 0);
     const emitter = item("emitter", 10, 0);
     const losing = context(target, emitter, 10);
-    losing.localPlayer.connectionId = "gm-b";
-    losing.party = [
-      { id: "gm", role: "GM", connectionId: "gm-a" },
-    ] as DesiredEffect["party"];
-    const report = await new MechanicalEffectExecutor().reconcile({ desired: [losing], events: [] });
+    const report = await new MechanicalEffectExecutor(fixedSharedAuthority(false)).reconcile({ desired: [losing], events: [] });
     expect(startItemInteraction).not.toHaveBeenCalled();
     expect(report.statuses.get(losing.runtimeKey)).toBe("authority-standby");
   });
 
-  it("elects the local session when its connection sorts before every other GM", async () => {
+  it("executes when the coordinator elects this GM session", async () => {
     const target = item("target", 0, 0);
     const winning = context(target, item("emitter", 10, 0), 10);
-    winning.localPlayer.connectionId = "gm-a";
-    winning.party = [{ id: "gm", role: "GM", connectionId: "gm-b" }] as DesiredEffect["party"];
-    const report = await new MechanicalEffectExecutor().reconcile({ desired: [winning], events: [] });
+    const report = await new MechanicalEffectExecutor(fixedSharedAuthority(true)).reconcile({ desired: [winning], events: [] });
     expect(startItemInteraction).toHaveBeenCalledOnce();
     expect(report.statuses.get(winning.runtimeKey)).toBe("turning");
   });
 
+  it("commits and stops an in-flight Face interaction when authority is lost", async () => {
+    let active = true;
+    const stop = vi.fn();
+    const authority = {
+      isAuthority: () => active,
+      getSnapshot: () => ({ state: active ? "active" as const : "standby" as const, localConnectionId: "gm", leaderConnectionId: active ? "gm" : "other", healthyRuntimeCount: 2, selection: "automatic" as const, manualClaimedByLocal: false }),
+    };
+    startItemInteraction.mockResolvedValueOnce([(recipe: (draft: Item) => void) => { const draft = item("target", 0, 0); recipe(draft); return draft; }, stop]);
+    const executor = new MechanicalEffectExecutor(authority);
+    const desired = context(item("target", 0, 0), item("emitter", 10, 0), 10);
+    await executor.reconcile({ desired: [desired], events: [] });
+    active = false;
+    const report = await executor.reconcile({ desired: [desired], events: [] });
+    expect(stop).toHaveBeenCalledOnce();
+    expect(updateItems).toHaveBeenCalled();
+    expect(report.statuses.get(desired.runtimeKey)).toBe("authority-standby");
+  });
+
   it("silently ignores a target that is its own detected emitter", async () => {
     const same = item("same", 0, 0);
-    await new MechanicalEffectExecutor().reconcile({ desired: [context(same, same, 0)], events: [] });
+    await new MechanicalEffectExecutor(fixedSharedAuthority(true)).reconcile({ desired: [context(same, same, 0)], events: [] });
     expect(startItemInteraction).not.toHaveBeenCalled();
   });
 
   it("shows a local crosshair at the resolved pivot and removes it when Face becomes inactive", async () => {
-    const executor = new MechanicalEffectExecutor();
+    const executor = new MechanicalEffectExecutor(fixedSharedAuthority(true));
     const ctx = context(item("target", 0, 0), item("emitter", 10, 0), 10);
     ctx.effect = { ...effect, pivotX: 200 };
     await executor.reconcile({ desired: [ctx], events: [] });
@@ -105,7 +118,7 @@ describe("MechanicalEffectExecutor", () => {
     const target = item("target", 0, 0);
     const near = context(target, item("near", 10, 0), 10, "GM", ["detector", "rule", "near-effect"]);
     const far = context(target, item("far", -20, 0), 20, "GM", ["detector", "rule", "far-effect"]);
-    const report = await new MechanicalEffectExecutor().reconcile({ desired: [far, near], events: [] });
+    const report = await new MechanicalEffectExecutor(fixedSharedAuthority(true)).reconcile({ desired: [far, near], events: [] });
     expect(startItemInteraction).toHaveBeenCalledTimes(1);
     expect(report.statuses.get(near.runtimeKey)).toBe("turning");
     expect(report.statuses.get(far.runtimeKey)).toBe("superseded");
@@ -114,12 +127,12 @@ describe("MechanicalEffectExecutor", () => {
   it("fails silently when Owlbear refuses to start an interaction", async () => {
     startItemInteraction.mockRejectedValueOnce(new Error("permission"));
     const ctx = context(item("target", 0, 0), item("emitter", 10, 0), 10);
-    const report = await new MechanicalEffectExecutor().reconcile({ desired: [ctx], events: [] });
+    const report = await new MechanicalEffectExecutor(fixedSharedAuthority(true)).reconcile({ desired: [ctx], events: [] });
     expect(report.statuses.get(ctx.runtimeKey)).toBe("skipped");
   });
 
   it("advances rotations from background-safe timer ticks", async () => {
-    const executor = new MechanicalEffectExecutor();
+    const executor = new MechanicalEffectExecutor(fixedSharedAuthority(true));
     await executor.reconcile({ desired: [context(item("target", 0, 0), item("emitter", 10, 0), 10)], events: [] });
     await vi.advanceTimersByTimeAsync(250);
     expect(updatedRotations.at(-1)).toBeCloseTo(45, 0);
@@ -127,7 +140,7 @@ describe("MechanicalEffectExecutor", () => {
   });
 
   it("moves Owlbear's native item origin around the configured pivot", async () => {
-    const executor = new MechanicalEffectExecutor();
+    const executor = new MechanicalEffectExecutor(fixedSharedAuthority(true));
     const ctx = context(item("target", 0, 0), item("emitter", 200, 0), 10);
     ctx.effect = { ...effect, pivotX: 200 };
     await executor.reconcile({ desired: [ctx], events: [] });
@@ -140,7 +153,7 @@ describe("MechanicalEffectExecutor", () => {
   it("persists the final rotation before ending the temporary interaction", async () => {
     const stop = vi.fn();
     startItemInteraction.mockResolvedValueOnce([(recipe: (draft: Item) => void) => { const draft = item("target", 0, 0); recipe(draft); return draft; }, stop]);
-    const executor = new MechanicalEffectExecutor();
+    const executor = new MechanicalEffectExecutor(fixedSharedAuthority(true));
     await executor.reconcile({ desired: [context(item("target", 0, 0), item("emitter", 10, 0), 10)], events: [] });
     await vi.advanceTimersByTimeAsync(500);
     expect(persistedRotations.at(-1)).toBe(90);
@@ -148,7 +161,7 @@ describe("MechanicalEffectExecutor", () => {
   });
 
   it("hides on entry and reverses only after the final all-mode emitter exits", async () => {
-    const executor = new MechanicalEffectExecutor();
+    const executor = new MechanicalEffectExecutor(fixedSharedAuthority(true));
     const target = item("target", 0, 0);
     const near = visibilityContext(target, item("near", 10, 0), 10, "hidden", true, ["detector", "rule", "visibility"]);
     const far = visibilityContext(target, item("far", 20, 0), 20, "hidden", true, ["detector", "rule", "visibility"]);
@@ -161,7 +174,7 @@ describe("MechanicalEffectExecutor", () => {
   });
 
   it("leaves the entry visibility in place when reverse is disabled", async () => {
-    const executor = new MechanicalEffectExecutor();
+    const executor = new MechanicalEffectExecutor(fixedSharedAuthority(true));
     const ctx = visibilityContext(item("target", 0, 0), item("emitter", 10, 0), 10, "shown", false);
     await executor.reconcile({ desired: [ctx], events: [] });
     await executor.reconcile({ desired: [], events: [] });
@@ -169,7 +182,7 @@ describe("MechanicalEffectExecutor", () => {
   });
 
   it("allows a detected emitter to be its own Hide/Show target", async () => {
-    const executor = new MechanicalEffectExecutor();
+    const executor = new MechanicalEffectExecutor(fixedSharedAuthority(true));
     const same = item("same", 0, 0);
     const ctx = visibilityContext(same, same, 0);
     const report = await executor.reconcile({ desired: [ctx], events: [] });

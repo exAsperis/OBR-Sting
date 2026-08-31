@@ -13,6 +13,7 @@ import { isAudienceMember, isShaderAudienceMember, resolveEffectTarget } from ".
 import { deriveTransition, toRuleSnapshot } from "./lifecycle";
 import type { DebugRuleState, DesiredEffect, RuleSnapshot } from "../types";
 import type { DistanceMethod } from "../settings";
+import type { SharedEffectAuthority } from "../effects/mechanical/authority";
 
 const DEBUG_STORAGE_KEY = `${EXTENSION_ID}/debug`;
 
@@ -27,10 +28,10 @@ export class ProximityEngine {
   private lastActiveEffects = new Map<string, DesiredEffect>();
   private distanceMethod: DistanceMethod = "scene";
 
-  constructor() {
+  constructor(authority: SharedEffectAuthority) {
     this.registry.register(new ShaderEffectExecutor());
-    this.registry.register(new IntegrationEffectExecutor(createIntegrationProviderRegistry()));
-    this.registry.register(new MechanicalEffectExecutor());
+    this.registry.register(new IntegrationEffectExecutor(createIntegrationProviderRegistry(), authority));
+    this.registry.register(new MechanicalEffectExecutor(authority));
   }
 
   setItems(items: Item[]): void { this.latestItems = items; this.schedule(); }
