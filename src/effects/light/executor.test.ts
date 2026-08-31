@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Light } from "@owlbear-rodeo/sdk";
 import { isWithinLightArea } from "../../proximity/evaluate";
-import { applyLightModifiers, shouldRetainInactiveAddedLight, type MutableLightState } from "./executor";
+import { applyLightModifiers, dynamicFogConfig, lightsForTarget, type MutableLightState } from "./executor";
 import type { DesiredEffect, LightEffectDefinitionV1 } from "../../types";
 
 const light = (overrides: Partial<Light> = {}) => ({ type: "LIGHT", position: { x: 0, y: 0 }, rotation: 0, attenuationRadius: 100, sourceRadius: 0, falloff: 0.5, innerAngle: 360, outerAngle: 360, lightType: "PRIMARY", metadata: {}, ...overrides }) as Light;
@@ -44,6 +44,22 @@ describe("light modifier composition", () => {
 });
 
 describe("added-light duration", () => {
-  it("removes temporary lights after deactivation", () => expect(shouldRetainInactiveAddedLight({ permanent: false })).toBe(false));
-  it("retains permanent lights after deactivation", () => expect(shouldRetainInactiveAddedLight({ permanent: true })).toBe(true));
+  it("serializes permanent lights using Dynamic Fog's persistent configuration", () => {
+    expect(dynamicFogConfig(base, 15)).toEqual({ ...base, rotation: 15 });
+    expect(dynamicFogConfig(base)).toEqual(base);
+  });
+});
+
+describe("Modify Light target resolution", () => {
+  it("uses a directly targeted local light", () => {
+    const target = light({ id: "direct" });
+    expect(lightsForTarget({ target, localLights: [] })).toEqual([target]);
+  });
+
+  it("finds every light attached to a standard effect target", () => {
+    const target = { id: "torch", type: "IMAGE" } as DesiredEffect["target"];
+    const attached = light({ id: "attached", attachedTo: "torch" });
+    const other = light({ id: "other", attachedTo: "other" });
+    expect(lightsForTarget({ target, localLights: [attached, other] })).toEqual([attached]);
+  });
 });

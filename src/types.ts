@@ -136,7 +136,7 @@ export interface LightEffectDefinitionV1 {
   type: "light";
   enabled: boolean;
   action: "add" | "modify";
-  /** Permanent Add Lights latch after their first activation until runtime/scene cleanup. */
+  /** Permanent light changes are saved on the target using Dynamic Fog's scene metadata. */
   duration?: "temporary" | "permanent";
   target: EffectTargetV1;
   audience: EffectAudienceV1;
@@ -209,6 +209,7 @@ export interface EffectExecutionContext extends RuleEvaluation {
   localPlayer: Pick<Player, "id" | "role" | "connectionId">;
   party: Player[];
   graph: AttachmentGraph;
+  localLights?: import("@owlbear-rodeo/sdk").Light[];
   current: RuleSnapshot;
   previous: RuleSnapshot | null;
   transition: RuleTransition;

@@ -4,7 +4,9 @@
 
 The Owlbear Rodeo SDK 3.1 types and current official documentation confirm that `Light` is local-only, `isLight` is the supported type guard, and `OBR.scene.local` exposes filtered `getItems`, whole-inventory `onChange`, `addItems`, `updateItems`, and `deleteItems`. The documentation describes these methods as operating on the current user's local items, but does not document extension-level ownership isolation.
 
-Sting therefore subscribes once to `OBR.scene.local.onChange`, filters with `isLight`, and feeds the resulting cache into its normal reconciliation loop. It never mirrors local Light items into shared scene state.
+Sting therefore subscribes once to `OBR.scene.local.onChange`, filters with `isLight`, and feeds the resulting cache into its normal reconciliation loop. Temporary lights remain purely local.
+
+The official Dynamic Fog implementation persists a manually added light differently: it writes the configuration to the attached scene item's `rodeo.owlbear.dynamic-fog/light` metadata, then reconciles that shared configuration into a local `LIGHT` on every client. Sting uses that same public implementation contract for permanent Add Light and permanent Modify Light effects. This makes the context menu show **Light Settings** and lets Dynamic Fog recreate the light after refresh.
 
 ## Live-room result (2026-08-31)
 
@@ -15,9 +17,9 @@ Foreign mutation/restoration and whether `scene.local.onChange` reports owner-ex
 ## Safety behavior while compatibility is unconfirmed
 
 - Sting-owned lights are identified by `com.ex-asperis.sting/local-light` metadata and may be created, updated, and deleted.
-- Add Light effects default to temporary. Permanent Add Lights latch after their first activation and remain when the trigger clears; scene/runtime teardown still removes local items.
-- A detected foreign light is never deleted or modified while cross-extension mutation remains unverified; the executor reports `external-modification-unverified`.
-- Modification of Sting-owned lights captures a base state, applies all active Sting modifiers in deterministic runtime-key order, and restores the base when the final modifier ends.
+- Light effects default to temporary. Permanent additions and modifications are committed to the attached scene item's official Dynamic Fog metadata and are not removed or reversed by Sting runtime cleanup.
+- A foreign light is never deleted. Modify Light attempts the SDK-supported local update and reports `modification-denied` without retaining modifier state if Owlbear rejects it.
+- Modification captures a base state, applies all active Sting modifiers in deterministic runtime-key order, and restores the base when the final temporary modifier ends.
 - If the observed light differs from Sting's last applied state while modifiers are active, the observed state becomes the new base before modifiers are recomputed. This preserves owner changes instead of blindly restoring an obsolete snapshot.
 - The UI calls the detector **Within Light Radius**, not “illuminated,” because walls, elevation, secondary-light rules, and GPU fog composition are not evaluated.
 

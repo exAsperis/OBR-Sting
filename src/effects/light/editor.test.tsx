@@ -18,13 +18,14 @@ describe("LightEffectEditor duration", () => {
     renderEditor(effect("add"));
     const duration = screen.getByText("Duration").closest("label")!.querySelector("select")!;
     expect([...duration.options].map((option) => option.text)).toEqual([
-      "Temporary — remove when trigger clears",
-      "Permanent — keep after trigger clears",
+      "Temporary — reverse when trigger clears",
+      "Permanent — leave in scene",
     ]);
   });
 
-  it("hides duration for Modify Light", () => {
+  it("offers the same duration setting for Modify Light", () => {
     renderEditor(effect("modify"));
-    expect(screen.queryByText("Duration")).toBeNull();
+    expect(screen.getByText("Duration")).not.toBeNull();
+    expect(screen.getByRole("option", { name: "Permanent — leave in scene" })).not.toBeNull();
   });
 });
