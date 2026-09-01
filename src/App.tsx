@@ -23,6 +23,7 @@ import { EditableTitle } from "./components/EditableTitle";
 import { clearEmitterLabels, labelAllEmitters } from "./runtime/emitterLabels";
 import type { SharedAuthoritySnapshot } from "./effects/mechanical/authority";
 import { parseAuthorityStatus, type AuthorityControlMessage } from "./runtime/authority";
+import { resolveEditorSelection } from "./scene/editorSelection";
 
 const newEffect = (): ShaderEffectDefinitionV1 => ({ id: crypto.randomUUID(), type: "shader", enabled: true, target: { type: "detector" }, audience: { type: "everyone" }, preset: "glow", shape: "circle", placement: "above", color: "#55aaff", maxIntensity: 1, spread: 1.25, animation: { mode: "none", rate: 1, depth: 0.35 } });
 const newFaceEffect = (): MechanicalEffectDefinitionV1 => ({ id: crypto.randomUUID(), type: "mechanical", enabled: true, action: "face", target: { type: "detector" }, faceAngle: 0, pivotX: 0, pivotY: 0, speed: 180, reverseOnExit: true });
@@ -78,6 +79,7 @@ export default function App() {
   const [authorityPending, setAuthorityPending] = useState(false);
   const [authorityError, setAuthorityError] = useState<string | null>(null);
   const authorityRequest = useRef<string | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
   const hydratedItemId = useRef<string | null>(null);
   const lastSavedSignature = useRef("");
   const selectionSignature = useRef("");
@@ -89,13 +91,14 @@ export default function App() {
     const allItems = nextItems ?? await OBR.scene.items.getItems();
     setItems(allItems);
     const selection = await OBR.player.getSelection();
-    const nextSelectedId = selection?.length === 1 ? selection[0] : null;
-    const nextSignature = selection?.length === 1 ? `one:${selection[0]}` : `count:${selection?.length ?? 0}`;
+    const nextSelectedId = resolveEditorSelection(selectedIdRef.current, selection, allItems.map((item) => item.id));
+    const nextSignature = nextSelectedId === null ? "none" : `item:${nextSelectedId}`;
     if (selectionSignature.current !== nextSignature) {
       selectionSignature.current = nextSignature;
       setShowSettings(nextSelectedId === null);
       setShowDebug(false);
     }
+    selectedIdRef.current = nextSelectedId;
     setSelectedId(nextSelectedId);
   }, []);
 
