@@ -50,7 +50,7 @@ Add `http://localhost:5173/manifest-local.json` as an Owlbear Rodeo extension.
 Only the GM can configure items. Select one scene item and open **Sting…** from its context menu or use the extension action:
 
 1. Add zero or more emitter signal tags.
-2. Add detector rules with a signal, closest/all detection mode, inner/outer scene-unit range, and smooth, linear, logarithmic, or binary falloff.
+2. Add detector rules with a signal, closest/all detection mode, an inclusive inner-to-outer scene-unit detection band, and smooth, linear, logarithmic, or binary falloff. Emitters closer than the inner bound are ignored; the inner edge is full strength.
 3. Add any number of effects to each rule.
 4. Add shader effects such as Glow/Shadow or Directional Beam, state effects such as Face, Hide/Show, Lock/Unlock, Set Image, or Add/Remove Emitter, and Dynamic Fog light effects.
 5. Choose each effect's target and action-specific settings. Set Image selects replacement artwork from Owlbear and can preserve the target's displayed size.

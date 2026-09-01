@@ -1,6 +1,6 @@
 import OBR, { isImage, type GridType, type Item, type Layer, type Player } from "@owlbear-rodeo/sdk";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AUTHORITY_CONTROL_CHANNEL, AUTHORITY_STATUS_CHANNEL, DETECTOR_KEY, EFFECT_LIBRARY_STORAGE_KEY, EMANATION_INTEGRATION_KEY, EMITTER_KEY, EXTENSION_NAME, RULE_LIBRARY_STORAGE_KEY, RUMBLE_INTEGRATION_KEY, SETTINGS_KEY } from "./constants";
+import { ACTION_HEIGHT_STORAGE_KEY, AUTHORITY_CONTROL_CHANNEL, AUTHORITY_STATUS_CHANNEL, DETECTOR_KEY, EFFECT_LIBRARY_STORAGE_KEY, EMANATION_INTEGRATION_KEY, EMITTER_KEY, EXTENSION_NAME, RULE_LIBRARY_STORAGE_KEY, RUMBLE_INTEGRATION_KEY, SETTINGS_KEY } from "./constants";
 import { parseDetectionRule, parseDetectorMetadata, parseEmitterMetadata } from "./metadata/parse";
 import { DEBUG_STORAGE_KEY } from "./runtime/engine";
 import { DEFAULT_GEOMETRY, resolveShaderGeometry } from "./effects/shader/geometry";
@@ -24,6 +24,8 @@ import { clearEmitterLabels, labelAllEmitters } from "./runtime/emitterLabels";
 import type { SharedAuthoritySnapshot } from "./effects/mechanical/authority";
 import { parseAuthorityStatus, type AuthorityControlMessage } from "./runtime/authority";
 import { resolveEditorSelection } from "./scene/editorSelection";
+import { clampActionHeight, DEFAULT_ACTION_HEIGHT } from "./actionHeight";
+import { RELEASE_VERSION } from "./version";
 
 const newEffect = (): ShaderEffectDefinitionV1 => ({ id: crypto.randomUUID(), type: "shader", enabled: true, target: { type: "detector" }, audience: { type: "everyone" }, preset: "glow", shape: "circle", placement: "above", color: "#55aaff", maxIntensity: 1, spread: 1.25, animation: { mode: "none", rate: 1, depth: 0.35 } });
 const newFaceEffect = (): MechanicalEffectDefinitionV1 => ({ id: crypto.randomUUID(), type: "mechanical", enabled: true, action: "face", target: { type: "detector" }, faceAngle: 0, pivotX: 0, pivotY: 0, speed: 180, reverseOnExit: true });
@@ -34,7 +36,7 @@ const newEmitterEffect = (): MechanicalEffectDefinitionV1 => ({ id: crypto.rando
 const newLightEffect = (): LightEffectDefinitionV1 => ({ id: crypto.randomUUID(), type: "light", enabled: true, action: "add", duration: "temporary", target: { type: "detector" }, audience: { type: "everyone" }, attenuationRadius: { value: 4 }, sourceRadius: { value: 0 }, falloff: { value: 0.5 }, innerAngle: { value: 360 }, outerAngle: { value: 360 }, lightType: "PRIMARY", radiusOperation: "set", rotationBehavior: "target" });
 const aurasEmanationsIcon = INTEGRATION_CATALOG.find((provider) => provider.id === "auras-emanations")?.iconUrl ?? "";
 const rumbleIcon = INTEGRATION_CATALOG.find((provider) => provider.id === "rumble")?.iconUrl ?? "";
-const newRule = (): DetectionRuleV1 => ({ id: crypto.randomUUID(), enabled: true, signal: "", aggregation: "nearest", ignoreHidden: false, matchType: "exact", excludeLayers: [], range: { outer: 60, inner: 5 }, falloff: "smoothstep", effects: [newEffect()] });
+export const newRule = (): DetectionRuleV1 => ({ id: crypto.randomUUID(), enabled: true, signal: "", aggregation: "nearest", ignoreHidden: false, matchType: "exact", excludeLayers: [], range: { outer: 60, inner: 0 }, falloff: "smoothstep", effects: [newEffect()] });
 const OBR_LAYERS: Layer[] = ["MAP", "GRID", "DRAWING", "PROP", "MOUNT", "CHARACTER", "ATTACHMENT", "NOTE", "TEXT", "RULER", "FOG", "POINTER", "POST_PROCESS", "CONTROL", "POPOVER"];
 const Label = ({ children, tooltip }: { children: React.ReactNode; tooltip?: string }) => <span className="field-label" title={tooltip}>{children}</span>;
 const Icon = ({ children }: { children: React.ReactNode }) => <svg viewBox="0 0 24 24" aria-hidden="true">{children}</svg>;
@@ -78,6 +80,76 @@ export default function App() {
   const [authority, setAuthority] = useState<SharedAuthoritySnapshot | null>(null);
   const [authorityPending, setAuthorityPending] = useState(false);
   const [authorityError, setAuthorityError] = useState<string | null>(null);
+  const preferredActionHeight = useRef(Number(localStorage.getItem(ACTION_HEIGHT_STORAGE_KEY)) || DEFAULT_ACTION_HEIGHT);
+  const resizeCleanup = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    if (connection.status !== "ready") return;
+    let active = true;
+    let resizeFrame: number | undefined;
+
+    const constrainActionHeight = async () => {
+      try {
+        const nextHeight = clampActionHeight(preferredActionHeight.current, await OBR.viewport.getHeight());
+        if (active && await OBR.action.getHeight() !== nextHeight) await OBR.action.setHeight(nextHeight);
+      } catch {
+        // The manifest height remains a usable fallback if runtime resizing is unavailable.
+      }
+    };
+    const queueResize = () => {
+      if (resizeFrame !== undefined) window.cancelAnimationFrame(resizeFrame);
+      resizeFrame = window.requestAnimationFrame(() => void constrainActionHeight());
+    };
+
+    void constrainActionHeight();
+    window.addEventListener("resize", queueResize);
+    return () => {
+      active = false;
+      window.removeEventListener("resize", queueResize);
+      if (resizeFrame !== undefined) window.cancelAnimationFrame(resizeFrame);
+    };
+  }, [connection.status]);
+  useEffect(() => () => resizeCleanup.current?.(), []);
+
+  const beginActionResize = async (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeCleanup.current?.();
+    try {
+      const [currentHeight, viewportHeight] = await Promise.all([OBR.action.getHeight(), OBR.viewport.getHeight()]);
+      const startHeight = currentHeight ?? preferredActionHeight.current;
+      const startY = event.clientY;
+      const onMove = (moveEvent: PointerEvent) => {
+        const nextHeight = clampActionHeight(startHeight + moveEvent.clientY - startY, viewportHeight);
+        preferredActionHeight.current = nextHeight;
+        localStorage.setItem(ACTION_HEIGHT_STORAGE_KEY, String(nextHeight));
+        void OBR.action.setHeight(nextHeight);
+      };
+      const stop = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", stop);
+        window.removeEventListener("pointercancel", stop);
+        resizeCleanup.current = null;
+      };
+      resizeCleanup.current = stop;
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", stop);
+      window.addEventListener("pointercancel", stop);
+    } catch {
+      // The manifest height remains usable if runtime resizing is unavailable.
+    }
+  };
+  const resizeActionBy = async (difference: number) => {
+    try {
+      const [currentHeight, viewportHeight] = await Promise.all([OBR.action.getHeight(), OBR.viewport.getHeight()]);
+      const nextHeight = clampActionHeight((currentHeight ?? preferredActionHeight.current) + difference, viewportHeight);
+      preferredActionHeight.current = nextHeight;
+      localStorage.setItem(ACTION_HEIGHT_STORAGE_KEY, String(nextHeight));
+      await OBR.action.setHeight(nextHeight);
+    } catch {
+      // The manifest height remains usable if runtime resizing is unavailable.
+    }
+  };
   const authorityRequest = useRef<string | null>(null);
   const selectedIdRef = useRef<string | null>(null);
   const hydratedItemId = useRef<string | null>(null);
@@ -313,11 +385,12 @@ export default function App() {
       </div>
     </section>}
     {showDebug ? <><div className="debug-emitter-labels"><button className="wide-button" disabled={!connection.sceneReady} onClick={toggleEmitterLabels}>{emitterLabelsVisible ? "Clear emitter labels" : "Label all emitters"}</button>{emitterLabelsVisible && <p className="muted" role="status">Showing {emitterLabelCount} local emitter label{emitterLabelCount === 1 ? "" : "s"}.</p>}</div><DebugView rules={debug} authority={authority} pending={authorityPending} error={authorityError} onTakeControl={() => sendAuthorityCommand("take-control")} onReleaseControl={() => sendAuthorityCommand("release-control")} /></> : selected && !showSettings && connection.role === "GM" ? <>
-      <section className="item-heading"><div className="selected-thumbnail">{isImage(selected) && selected.image.mime.startsWith("image/") ? <img src={selected.image.url} alt="" /> : <span aria-hidden="true">◇</span>}</div><div><span className="eyebrow">Selected item</span><h2>{selected.name || "Unnamed item"}</h2><code>{selected.id}</code></div></section>
-      <section className="content-card"><div className="section-title"><h2 title="Add detectable signal tags. End a tag with a range such as [20] to cap it in scene units.">Emitter</h2><label className="toggle" title="Enable or disable every signal emitted by this item."><input type="checkbox" aria-label="Enable emitter" checked={emitter.enabled} onChange={(event) => setEmitter({ ...emitter, enabled: event.target.checked })} /></label></div><div className="chips">{emitter.signals.map((signal) => <button title={`Remove the ${signal} signal from this item.`} key={signal} className="chip" onClick={() => setEmitter({ ...emitter, signals: emitter.signals.filter((value) => value !== signal) })}>{signal}<span>×</span></button>)}</div><div className="input-row"><SignalCombobox value={signalDraft} options={sceneSignals} onChange={setSignalDraft} onEnter={addSignal} /><button title="Add this signal to the selected item." onClick={addSignal}>Add</button></div></section>
-      <section className="content-card"><div className="section-title"><h2 title="Add detection rules that respond when matching emitter tags are within range.">Detector</h2><label className="toggle" title="Enable or disable every detection rule on this item."><input type="checkbox" aria-label="Enable detector" checked={detector.enabled} onChange={(event) => setDetector({ ...detector, enabled: event.target.checked })} /></label></div>{detector.rules.map((rule, ruleIndex) => <RuleEditor key={rule.id} rule={rule} index={ruleIndex} unit={gridUnit} items={items} party={party} emanationEnabled={emanationEnabled} library={effectLibrary.entries} onSaveRule={() => saveRuleToLibrary(rule)} onSaveEffect={saveEffectToLibrary} onChange={(update) => updateRule(ruleIndex, update)} onEffect={(effectIndex, update) => updateEffect(ruleIndex, effectIndex, update)} onDelete={() => confirmDelete(`Delete Rule ${ruleIndex + 1} and all of its effects?`, () => setDetector({ ...detector, rules: detector.rules.filter((_, i) => i !== ruleIndex) }))} />)}<div className="rule-add-actions"><button className="wide-button" title="Add another detection rule to this item." onClick={() => setDetector({ ...detector, rules: [...detector.rules, newRule()] })}>+ Add detection rule</button><button className={`mini-icon${ruleLibraryOpen ? " active" : ""}`} title={ruleLibrary.entries.length ? "Add a saved rule from your browser-local library." : "Your browser-local rules library is empty."} aria-label="Add rule from the rules library" disabled={!ruleLibrary.entries.length} onClick={() => setRuleLibraryOpen((value) => !value)}><BookIcon /></button></div>{ruleLibraryOpen && <div className="library-picker">{ruleLibrary.entries.map((entry) => <button key={entry.id} title={`Add ${entry.name} and all of its effects.`} onClick={() => { setDetector((current) => ({ ...current, rules: [...current.rules, instantiateLibraryRule(entry)] })); setRuleLibraryOpen(false); }}><span>{entry.name}</span><small>{entry.rule.signal} · {entry.rule.effects.length} effect{entry.rule.effects.length === 1 ? "" : "s"}</small></button>)}</div>}</section>
-      {saveError && <div className="validation-error" role="alert">{saveError}</div>}<div className="autosave-status" role="status">{autosaveStatus === "saving" ? "Saving…" : autosaveStatus === "error" ? "Not saved" : "Saved automatically"}</div>
+      <section className="item-heading sticky-item-heading"><div className="selected-thumbnail">{isImage(selected) && selected.image.mime.startsWith("image/") ? <img src={selected.image.url} alt="" /> : <span aria-hidden="true">◇</span>}</div><div><span className="eyebrow">Selected item</span><h2>{selected.name || "Unnamed item"}</h2><code>{selected.id}</code></div></section>
+      <section className="content-card emitter-card"><div className="section-title"><h2 title="Add detectable signal tags. End a tag with a range such as [20] to cap it in scene units.">Emitter</h2><label className="toggle" title="Enable or disable every signal emitted by this item."><input type="checkbox" aria-label="Enable emitter" checked={emitter.enabled} onChange={(event) => setEmitter({ ...emitter, enabled: event.target.checked })} /></label></div><div className="chips">{emitter.signals.map((signal) => <button title={`Remove the ${signal} signal from this item.`} key={signal} className="chip" onClick={() => setEmitter({ ...emitter, signals: emitter.signals.filter((value) => value !== signal) })}>{signal}<span>×</span></button>)}</div><div className="input-row"><SignalCombobox value={signalDraft} options={sceneSignals} onChange={setSignalDraft} onEnter={addSignal} /><button title="Add this signal to the selected item." onClick={addSignal}>Add</button></div></section>
+      <section className="content-card detector-card"><div className="section-title"><h2 title="Add detection rules that respond when matching emitter tags are within range.">Detector</h2><label className="toggle" title="Enable or disable every detection rule on this item."><input type="checkbox" aria-label="Enable detector" checked={detector.enabled} onChange={(event) => setDetector({ ...detector, enabled: event.target.checked })} /></label></div>{detector.rules.map((rule, ruleIndex) => <RuleEditor key={rule.id} rule={rule} index={ruleIndex} unit={gridUnit} items={items} party={party} emanationEnabled={emanationEnabled} library={effectLibrary.entries} onSaveRule={() => saveRuleToLibrary(rule)} onSaveEffect={saveEffectToLibrary} onChange={(update) => updateRule(ruleIndex, update)} onEffect={(effectIndex, update) => updateEffect(ruleIndex, effectIndex, update)} onDelete={() => confirmDelete(`Delete Rule ${ruleIndex + 1} and all of its effects?`, () => setDetector({ ...detector, rules: detector.rules.filter((_, i) => i !== ruleIndex) }))} />)}<div className="rule-add-actions"><button className="wide-button" title="Add another detection rule to this item." onClick={() => setDetector({ ...detector, rules: [...detector.rules, newRule()] })}>+ Add detection rule</button><button className={`mini-icon${ruleLibraryOpen ? " active" : ""}`} title={ruleLibrary.entries.length ? "Add a saved rule from your browser-local library." : "Your browser-local rules library is empty."} aria-label="Add rule from the rules library" disabled={!ruleLibrary.entries.length} onClick={() => setRuleLibraryOpen((value) => !value)}><BookIcon /></button></div>{ruleLibraryOpen && <div className="library-picker">{ruleLibrary.entries.map((entry) => <button key={entry.id} title={`Add ${entry.name} and all of its effects.`} onClick={() => { setDetector((current) => ({ ...current, rules: [...current.rules, instantiateLibraryRule(entry)] })); setRuleLibraryOpen(false); }}><span>{entry.name}</span><small>{entry.rule.signal} · {entry.rule.effects.length} effect{entry.rule.effects.length === 1 ? "" : "s"}</small></button>)}</div>}</section>
+      {saveError && <div className="validation-error" role="alert">{saveError}</div>}
     </> : null}
+    <footer className="app-footer"><div className="footer-resize-handle" role="separator" tabIndex={0} aria-label="Resize Sting panel" aria-orientation="horizontal" title="Drag to resize the Sting panel" onPointerDown={(event) => void beginActionResize(event)} onKeyDown={(event) => { if (event.key === "ArrowUp" || event.key === "ArrowDown") { event.preventDefault(); void resizeActionBy(event.key === "ArrowUp" ? -20 : 20); } }} /><span>Sting v{RELEASE_VERSION}</span>{selected && !showSettings && !showDebug && connection.role === "GM" && <span role="status">{autosaveStatus === "saving" ? "Saving…" : autosaveStatus === "error" ? "Not saved" : "Saved automatically"}</span>}</footer>
   </main>;
 }
 
@@ -332,7 +405,7 @@ function RuleEditor({ rule, index, unit, items, party, emanationEnabled, library
     <label title="How effect strength changes between the full-strength and outer ranges."><Label tooltip="How effect strength changes between the full-strength and outer ranges.">Falloff</Label><select value={rule.falloff} onChange={(event) => onChange((value) => ({ ...value, falloff: event.target.value as DetectionRuleV1["falloff"] }))}><option value="smoothstep">Smooth</option><option value="linear">Linear</option><option value="logarithmic">Logarithmic</option><option value="binary">Binary</option></select></label>
     <label title="Choose the closest matching emitter or every matching emitter in range."><Label tooltip="Choose the closest matching emitter or every matching emitter in range.">Detection mode</Label><select value={rule.aggregation} onChange={(event) => onChange((value) => ({ ...value, aggregation: event.target.value as DetectionRuleV1["aggregation"] }))}><option value="nearest">Closest signal</option><option value="all">All signals in range</option></select></label>
     <label className="checkbox-field" title="Exclude hidden emitters from this rule's detection results."><Label tooltip="Exclude hidden emitters from this rule's detection results.">Ignore hidden items</Label><span className="toggle"><input type="checkbox" aria-label="Ignore hidden items" checked={rule.ignoreHidden} onChange={(event) => onChange((value) => ({ ...value, ignoreHidden: event.target.checked }))} /></span></label>
-    {!(rule.source?.type === "obr-light" && rule.source.detection === "within-radius") && <DualSliderNumber className="wide" tooltip="Black sets the outer edge where detection reaches zero; blue sets the distance at or below which detection has full strength." label="Detection range" labelContent={<span className="field-label">Detection range{unit ? ` (${unit})` : ""}</span>} minimumValue={rule.range.outer} maximumValue={rule.range.inner} min={0} minimumMin={0.5} maximumMin={0} step={0.5} suffix={unit ? ` ${unit}` : ""} order="descending" minimumEndpointLabel="Outer range" maximumEndpointLabel="Full strength at" onChange={(outer, inner) => onChange((value) => ({ ...value, range: { outer, inner } }))} />}
+    {!(rule.source?.type === "obr-light" && rule.source.detection === "within-radius") && <DualSliderNumber className="wide" tooltip="Black sets the outer edge where detection reaches zero. Blue sets the inclusive inner edge at full strength; closer emitters are not detected by this rule." label="Detection range" labelContent={<span className="field-label">Detection range{unit ? ` (${unit})` : ""}</span>} minimumValue={rule.range.outer} maximumValue={rule.range.inner} min={0} minimumMin={0.5} maximumMin={0} step={0.5} suffix={unit ? ` ${unit}` : ""} order="descending" minimumEndpointLabel="Outer range" maximumEndpointLabel="Full strength at" onChange={(outer, inner) => onChange((value) => ({ ...value, range: { outer, inner } }))} />}
     <details className="advanced-section rule-advanced wide"><summary>Advanced rule settings</summary><div className="advanced-grid">
       {rule.source?.type !== "obr-light" && <label title="Choose how the configured text is compared with source text."><Label>Match Type</Label><select value={rule.matchType} onChange={(event) => onChange((value) => ({ ...value, matchType: event.target.value as DetectionRuleV1["matchType"] }))}><option value="exact">Exact</option><option value="wildcard">Wildcard (*?)</option><option value="regex">Regex</option></select></label>}
       <label className={rule.source?.type === "obr-light" ? "wide" : undefined} title="Items on selected Owlbear Rodeo layers are excluded from this rule."><Label>Exclude Layers</Label><select className="layer-multiselect" multiple value={rule.excludeLayers} onChange={(event) => onChange((value) => ({ ...value, excludeLayers: [...event.target.selectedOptions].map((option) => option.value as Layer) }))}>{OBR_LAYERS.map((layer) => <option key={layer} value={layer}>{layer.replaceAll("_", " ")}</option>)}</select></label>
@@ -459,5 +532,5 @@ export function AuthorityCard({ authority, pending, error, onTakeControl, onRele
 }
 
 function DebugView({ rules, authority, pending, error, onTakeControl, onReleaseControl }: DebugViewProps) {
-  return <section className="content-card debug-view"><h2>Local runtime</h2><p className="muted">Derived state from this client only. Nothing here is stored in scene metadata.</p><AuthorityCard authority={authority} pending={pending} error={error} onTakeControl={onTakeControl} onReleaseControl={onReleaseControl} />{rules.length === 0 ? <div className="notice">No active detector rules.</div> : rules.map((rule) => <article key={`${rule.detectorId}:${rule.ruleId}`}><h3>{rule.detectorName}</h3><code>{rule.signal} · {rule.aggregation === "all" ? "all in range" : "closest"} · {rule.range.outer}</code><dl className="facts"><div><dt>Matches</dt><dd>{rule.matchingEmitterCount}</dd></div><div><dt>Active</dt><dd>{rule.activeEmitterCount}</dd></div></dl>{rule.detections.map((detection, index) => <div className="debug-detection" key={`${detection.emitterName}:${index}`}><strong>{detection.emitterName}</strong><span>{detection.distance.toFixed(2)} · strength {detection.strength.toFixed(3)}</span></div>)}{rule.effects.map((effect, index) => <div className="debug-effect" key={`${effect.effectId}:${effect.runtimeKey ?? index}`}><strong>{effect.providerId ? `${effect.providerId} · ${effect.actionId}` : effect.actionId ? `${effect.type === "mechanical" ? "state" : effect.type} · ${effect.actionId}` : effect.type === "mechanical" ? "state" : effect.type} · {effect.lifecycle}</strong><span>{effect.transition} · {effect.targetType} → {effect.targetName ?? "unresolved"}</span><span>{effect.audience ?? "GM authority"} · {effect.audienceMatch ? "execution client" : "not executing here"}</span><code>{effect.executionStatus ?? effect.localItemId ?? "inactive"}</code></div>)}</article>)}</section>;
+  return <section className="content-card debug-view"><h2>Local runtime</h2><p className="muted">Derived state from this client only. Nothing here is stored in scene metadata.</p><AuthorityCard authority={authority} pending={pending} error={error} onTakeControl={onTakeControl} onReleaseControl={onReleaseControl} />{rules.length === 0 ? <div className="notice">No active detector rules.</div> : rules.map((rule) => <article key={`${rule.detectorId}:${rule.ruleId}`}><h3>{rule.detectorName}</h3><code>{rule.signal} · {rule.aggregation === "all" ? "all in range" : "closest"} · {rule.range.inner}–{rule.range.outer}</code><dl className="facts"><div><dt>Matches</dt><dd>{rule.matchingEmitterCount}</dd></div><div><dt>Active</dt><dd>{rule.activeEmitterCount}</dd></div></dl>{rule.detections.map((detection, index) => <div className="debug-detection" key={`${detection.emitterName}:${index}`}><strong>{detection.emitterName}</strong><span>{detection.distance.toFixed(2)} · strength {detection.strength.toFixed(3)}</span></div>)}{rule.effects.map((effect, index) => <div className="debug-effect" key={`${effect.effectId}:${effect.runtimeKey ?? index}`}><strong>{effect.providerId ? `${effect.providerId} · ${effect.actionId}` : effect.actionId ? `${effect.type === "mechanical" ? "state" : effect.type} · ${effect.actionId}` : effect.type === "mechanical" ? "state" : effect.type} · {effect.lifecycle}</strong><span>{effect.transition} · {effect.targetType} → {effect.targetName ?? "unresolved"}</span><span>{effect.audience ?? "GM authority"} · {effect.audienceMatch ? "execution client" : "not executing here"}</span><code>{effect.executionStatus ?? effect.localItemId ?? "inactive"}</code></div>)}</article>)}</section>;
 }

@@ -16,5 +16,6 @@ export function applyFalloff(raw: number, falloff: Falloff, distance: number, ou
 }
 
 export function calculateStrength(distance: number, outer: number, inner: number, falloff: Falloff): number {
+  if (distance < inner) return 0;
   return applyFalloff(calculateRawStrength(distance, outer, inner), falloff, distance, outer);
 }

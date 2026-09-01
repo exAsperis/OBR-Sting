@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { AuthorityCard } from "../App";
+import { AuthorityCard, newRule } from "../App";
 
 const standby = {
   state: "standby" as const,
@@ -12,6 +12,9 @@ const standby = {
 };
 
 describe("AuthorityCard", () => {
+  it("defaults new detection rules to a zero-unit inner bound", () => {
+    expect(newRule().range).toEqual({ inner: 0, outer: 60 });
+  });
   it("offers takeover on standby and reports errors", () => {
     const take = vi.fn();
     render(<AuthorityCard authority={standby} pending={false} error="Unable to take control." onTakeControl={take} onReleaseControl={() => undefined} />);

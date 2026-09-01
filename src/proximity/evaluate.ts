@@ -50,9 +50,9 @@ export function indexEmittersBySignal(items: Item[]): Map<string, IndexedEmitter
 }
 
 export function selectRuleEvaluations(rule: DetectionRuleV1, candidates: RuleEvaluation[]): RuleEvaluation[] {
-  const ordered = [...candidates].sort((left, right) => (left.distance ?? Infinity) - (right.distance ?? Infinity));
+  const ordered = candidates.filter((candidate) => candidate.strength > 0).sort((left, right) => (left.distance ?? Infinity) - (right.distance ?? Infinity));
   return rule.aggregation === "all"
-    ? ordered.filter((candidate) => candidate.strength > 0)
+    ? ordered
     : ordered.slice(0, 1);
 }
 

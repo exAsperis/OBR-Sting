@@ -1,4 +1,4 @@
-import type { Item } from "@owlbear-rodeo/sdk";
+import type { Item, Light } from "@owlbear-rodeo/sdk";
 import { describe, expect, it } from "vitest";
 import { EMITTER_KEY } from "./constants";
 import { buildRuntimeEffectKey } from "./effects/runtimeKey";
@@ -70,13 +70,22 @@ describe("strength", () => {
     expect(calculateStrength(61, 60, 5, "linear")).toBe(0);
     expect(calculateStrength(60, 60, 5, "linear")).toBe(0);
     expect(calculateStrength(5, 60, 5, "linear")).toBe(1);
-    expect(calculateStrength(2, 60, 5, "linear")).toBe(1);
+    expect(calculateStrength(2, 60, 5, "linear")).toBe(0);
+  });
+  it.each(["linear", "smoothstep", "logarithmic"] as const)("uses the inner value as an inclusive lower bound with %s falloff", (falloff) => {
+    expect(calculateStrength(4.99, 60, 5, falloff)).toBe(0);
+    expect(calculateStrength(5, 60, 5, falloff)).toBe(1);
+    expect(calculateStrength(32.5, 60, 5, falloff)).toBeGreaterThan(0);
+    expect(calculateStrength(32.5, 60, 5, falloff)).toBeLessThan(1);
+    expect(calculateStrength(60, 60, 5, falloff)).toBe(0);
   });
   it("calculates linear and smoothstep midpoints", () => {
     expect(calculateStrength(32.5, 60, 5, "linear")).toBeCloseTo(0.5);
     expect(calculateStrength(32.5, 60, 5, "smoothstep")).toBeCloseTo(0.5);
   });
   it("calculates binary falloff", () => {
+    expect(calculateStrength(4.99, 60, 5, "binary")).toBe(0);
+    expect(calculateStrength(5, 60, 5, "binary")).toBe(1);
     expect(calculateStrength(60, 60, 5, "binary")).toBe(1);
     expect(calculateStrength(60.01, 60, 5, "binary")).toBe(0);
   });
@@ -401,6 +410,11 @@ describe("rule aggregation", () => {
     expect(selected.map((entry) => entry.detectedEmitter?.id)).toEqual(["near"]);
   });
 
+  it("ignores an inactive nearer candidate when choosing the closest detection", () => {
+    const selected = selectRuleEvaluations(rule("nearest-band"), [evaluation("too-close", 2, 0), evaluation("in-band", 10, 0.9)]);
+    expect(selected.map((entry) => entry.detectedEmitter?.id)).toEqual(["in-band"]);
+  });
+
   it("selects every positive-strength candidate in distance order for all mode", () => {
     const allRule = { ...rule("all"), aggregation: "all" as const };
     const selected = selectRuleEvaluations(allRule, [evaluation("far", 70, 0), evaluation("middle", 30, 0.5), evaluation("near", 10, 0.9)]);
@@ -414,9 +428,9 @@ describe("rule aggregation", () => {
     const signalIndex = indexEmittersBySignal(items);
     const graph = buildAttachmentGraph(items);
     const grid = { dpi: 100, type: "SQUARE" as const, measurement: "CHEBYSHEV" as const };
-    await expect(evaluateRule(detector, { ...rule("include"), aggregation: "all" }, signalIndex, graph, 5, grid, "euclidean"))
+    await expect(evaluateRule(detector, { ...rule("include"), range: { inner: 0, outer: 60 }, aggregation: "all" }, signalIndex, graph, 5, grid, "euclidean"))
       .resolves.toMatchObject({ matchingEmitterCount: 2 });
-    await expect(evaluateRule(detector, { ...rule("ignore"), aggregation: "all", ignoreHidden: true }, signalIndex, graph, 5, grid, "euclidean"))
+    await expect(evaluateRule(detector, { ...rule("ignore"), range: { inner: 0, outer: 60 }, aggregation: "all", ignoreHidden: true }, signalIndex, graph, 5, grid, "euclidean"))
       .resolves.toMatchObject({ matchingEmitterCount: 1, evaluations: [{ detectedEmitter: { id: "visible" } }] });
   });
 
@@ -424,7 +438,7 @@ describe("rule aggregation", () => {
     const character = { ...item("character"), metadata: { [EMITTER_KEY]: { version: 1, signals: ["orc"] } } };
     const prop = { ...item("prop"), layer: "PROP" as const, position: { x: 10, y: 0 }, metadata: { [EMITTER_KEY]: { version: 1, signals: ["orc"] } } };
     const items = [detector, character, prop];
-    const result = await evaluateRule(detector, { ...rule("layers"), aggregation: "all", excludeLayers: ["CHARACTER"] }, indexEmittersBySignal(items), buildAttachmentGraph(items), 5, { dpi: 100, type: "SQUARE", measurement: "CHEBYSHEV" }, "euclidean");
+    const result = await evaluateRule(detector, { ...rule("layers"), range: { inner: 0, outer: 60 }, aggregation: "all", excludeLayers: ["CHARACTER"] }, indexEmittersBySignal(items), buildAttachmentGraph(items), 5, { dpi: 100, type: "SQUARE", measurement: "CHEBYSHEV" }, "euclidean");
     expect(result).toMatchObject({ matchingEmitterCount: 1, evaluations: [{ detectedEmitter: { id: "prop" } }] });
   });
 
@@ -474,10 +488,33 @@ describe("rule aggregation", () => {
     expect(result.evaluations.map((entry) => entry.detectedEmitter?.id)).toEqual(["boundary"]);
   });
 
-  it("uses the detector range for strength after the emitter cap admits a match", async () => {
+  it("retains the source match count when the detector range rejects a capped emitter", async () => {
     const emitter = { ...item("capped"), position: { x: 500, y: 0 }, metadata: { [EMITTER_KEY]: { version: 1, signals: ["light[50]"] } } };
     const items = [detector, emitter];
     const result = await evaluateRule(detector, { ...rule("short-detector"), signal: "light", range: { inner: 5, outer: 20 } }, indexEmittersBySignal(items), buildAttachmentGraph(items), 5, { dpi: 100, type: "SQUARE", measurement: "CHEBYSHEV" }, "euclidean");
-    expect(result).toMatchObject({ matchingEmitterCount: 1, evaluations: [{ distance: 25, strength: 0, detectedEmitter: { id: "capped" } }] });
+    expect(result).toMatchObject({ matchingEmitterCount: 1, evaluations: [{ distance: null, strength: 0, detectedEmitter: null }] });
+  });
+
+  it.each(["nearest", "all"] as const)("excludes too-close emitters from %s banded evaluation", async (aggregation) => {
+    const tooClose = { ...item("too-close"), position: { x: 40, y: 0 }, metadata: { [EMITTER_KEY]: { version: 1, signals: ["orc"] } } };
+    const inBand = { ...item("in-band"), position: { x: 200, y: 0 }, metadata: { [EMITTER_KEY]: { version: 1, signals: ["orc"] } } };
+    const items = [detector, tooClose, inBand];
+    const result = await evaluateRule(detector, { ...rule(`band-${aggregation}`), aggregation }, indexEmittersBySignal(items), buildAttachmentGraph(items), 5, { dpi: 100, type: "SQUARE", measurement: "CHEBYSHEV" }, "euclidean");
+    expect(result.matchingEmitterCount).toBe(2);
+    expect(result.evaluations).toMatchObject([{ detectedEmitter: { id: "in-band" }, distance: 10 }]);
+  });
+
+  it("applies the band to distance-based OBR lights but not Within Light Radius rules", async () => {
+    const light = { ...item("light"), type: "LIGHT", position: { x: 40, y: 0 }, attenuationRadius: 100, sourceRadius: 0, falloff: 0.5, innerAngle: 360, outerAngle: 360, lightType: "PRIMARY" } as Light;
+    const sources = { signals: new Map(), lights: [light], items: [] };
+    const graph = buildAttachmentGraph([detector, light]);
+    const grid = { dpi: 100, type: "SQUARE" as const, measurement: "CHEBYSHEV" as const };
+    const distanceRule = { ...rule("light-distance"), source: { type: "obr-light" as const, detection: "distance" as const } };
+    const areaRule = { ...rule("light-area"), source: { type: "obr-light" as const, detection: "within-radius" as const } };
+    await expect(evaluateRule(detector, distanceRule, sources, graph, 5, grid, "euclidean"))
+      .resolves.toMatchObject({ evaluations: [{ detectedEmitter: null, strength: 0 }] });
+    const area = await evaluateRule(detector, areaRule, sources, graph, 5, grid, "euclidean");
+    expect(area.evaluations[0]).toMatchObject({ detectedEmitter: { id: "light" }, distance: 2 });
+    expect(area.evaluations[0].strength).toBeGreaterThan(0);
   });
 });
