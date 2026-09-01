@@ -1,4 +1,4 @@
-import type { Item, Layer, LightType, Player } from "@owlbear-rodeo/sdk";
+import type { ImageContent, ImageGrid, Item, Layer, LightType, Player } from "@owlbear-rodeo/sdk";
 
 export type Falloff = "binary" | "linear" | "smoothstep" | "logarithmic";
 export type ShaderPreset = "glow" | "beam";
@@ -114,6 +114,7 @@ export interface MechanicalFaceEffectDefinitionV1 {
   pivotY: number;
   /** Constant angular velocity in degrees per second. */
   speed: number;
+  reverseOnExit: boolean;
 }
 
 export interface MechanicalVisibilityEffectDefinitionV1 {
@@ -123,11 +124,52 @@ export interface MechanicalVisibilityEffectDefinitionV1 {
   enabled: boolean;
   action: "visibility";
   target: EffectTargetV1;
-  visibility: "hidden" | "shown";
+  visibility: "hidden" | "shown" | "toggle";
   reverseOnExit: boolean;
 }
 
-export type MechanicalEffectDefinitionV1 = MechanicalFaceEffectDefinitionV1 | MechanicalVisibilityEffectDefinitionV1;
+export interface MechanicalLockEffectDefinitionV1 {
+  id: string;
+  name?: string;
+  type: "mechanical";
+  enabled: boolean;
+  action: "lock";
+  target: EffectTargetV1;
+  locked: boolean;
+  toggle?: boolean;
+  reverseOnExit: boolean;
+}
+
+export interface MechanicalSetImageEffectDefinitionV1 {
+  id: string;
+  name?: string;
+  type: "mechanical";
+  enabled: boolean;
+  action: "set-image";
+  target: EffectTargetV1;
+  asset?: { name: string; image: ImageContent; grid: ImageGrid };
+  constrainToOriginalSize: boolean;
+  reverseOnExit: boolean;
+}
+
+export interface MechanicalEmitterEffectDefinitionV1 {
+  id: string;
+  name?: string;
+  type: "mechanical";
+  enabled: boolean;
+  action: "emitter";
+  target: EffectTargetV1;
+  operation: "add" | "remove" | "toggle";
+  signal: string;
+  reverseOnExit: boolean;
+}
+
+export type MechanicalEffectDefinitionV1 =
+  | MechanicalFaceEffectDefinitionV1
+  | MechanicalVisibilityEffectDefinitionV1
+  | MechanicalLockEffectDefinitionV1
+  | MechanicalSetImageEffectDefinitionV1
+  | MechanicalEmitterEffectDefinitionV1;
 
 export interface LightDynamicValueV1 { value: number; range?: DynamicValueRange }
 export interface LightEffectDefinitionV1 {

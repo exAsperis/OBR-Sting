@@ -322,9 +322,10 @@ describe("runtime effect identity", () => {
 
   it("parses Face mechanical effects and rejects invalid configuration", () => {
     const face = { id: "face", type: "mechanical", enabled: true, action: "face", target: { type: "detector" }, faceAngle: 0, pivotX: 0, pivotY: 0, speed: 180 };
-    expect(parseEffectDefinition(face)).toEqual(face);
+    expect(parseEffectDefinition(face)).toEqual({ ...face, reverseOnExit: false });
     const { pivotX: _pivotX, pivotY: _pivotY, ...legacyFace } = face;
-    expect(parseEffectDefinition(legacyFace)).toEqual(face);
+    expect(parseEffectDefinition(legacyFace)).toEqual({ ...face, reverseOnExit: false });
+    expect(parseEffectDefinition({ ...face, reverseOnExit: true })).toMatchObject({ reverseOnExit: true });
     expect(parseEffectDefinition({ ...face, action: "move" })).toBeNull();
     expect(parseEffectDefinition({ ...face, faceAngle: 360 })).toBeNull();
     expect(parseEffectDefinition({ ...face, speed: 14 })).toBeNull();
@@ -337,6 +338,29 @@ describe("runtime effect identity", () => {
     expect(parseEffectDefinition(visibility)).toEqual(visibility);
     expect(parseEffectDefinition({ ...visibility, visibility: "transparent" })).toBeNull();
     expect(parseEffectDefinition({ ...visibility, reverseOnExit: "yes" })).toBeNull();
+    expect(parseEffectDefinition({ ...visibility, visibility: "toggle" })).toMatchObject({ visibility: "toggle" });
+  });
+  it("parses Lock/Unlock state effects and rejects invalid configuration", () => {
+    const lock = { id: "lock", type: "mechanical", enabled: true, action: "lock", target: { type: "detector" }, locked: true, reverseOnExit: true };
+    expect(parseEffectDefinition(lock)).toEqual(lock);
+    expect(parseEffectDefinition({ ...lock, toggle: true })).toEqual({ ...lock, toggle: true });
+    expect(parseEffectDefinition({ ...lock, locked: "yes" })).toBeNull();
+    expect(parseEffectDefinition({ ...lock, reverseOnExit: 1 })).toBeNull();
+  });
+  it("parses configured and pending Set Image state effects", () => {
+    const pending = { id: "image", type: "mechanical", enabled: true, action: "set-image", target: { type: "detector" }, constrainToOriginalSize: true, reverseOnExit: true };
+    const asset = { name: "Wolf", image: { width: 512, height: 256, mime: "image/png", url: "https://example.com/wolf.png" }, grid: { dpi: 256, offset: { x: 256, y: 128 } } };
+    expect(parseEffectDefinition(pending)).toEqual(pending);
+    expect(parseEffectDefinition({ ...pending, asset })).toEqual({ ...pending, asset });
+    expect(parseEffectDefinition({ ...pending, asset: { ...asset, image: { ...asset.image, width: 0 } } })).toBeNull();
+    expect(parseEffectDefinition({ ...pending, asset: { ...asset, grid: { ...asset.grid, dpi: 0 } } })).toBeNull();
+  });
+  it("parses Add/Remove Emitter state effects and permits an unconfigured draft", () => {
+    const emitter = { id: "emitter", type: "mechanical", enabled: true, action: "emitter", target: { type: "detector" }, operation: "add", signal: "alarm[20]", reverseOnExit: true };
+    expect(parseEffectDefinition(emitter)).toEqual(emitter);
+    expect(parseEffectDefinition({ ...emitter, signal: "" })).toEqual({ ...emitter, signal: "" });
+    expect(parseEffectDefinition({ ...emitter, operation: "toggle" })).toMatchObject({ operation: "toggle" });
+    expect(parseEffectDefinition({ ...emitter, operation: "flip" })).toBeNull();
   });
   it("parses Spotlight light effects with Face-style defaults and validation", () => {
     const spotlight = { id: "spotlight", type: "light", enabled: true, action: "spotlight", duration: "temporary", target: { type: "detector" }, audience: { type: "everyone" }, attenuationRadius: { value: 4 } };

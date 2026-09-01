@@ -4,7 +4,7 @@ See [OBR local-light compatibility](docs/local-light-compatibility.md) for the c
 
 Proximity sensing effects triggers.
 
-Sting is a generic, declarative proximity rules engine for Owlbear Rodeo. Scene items can emit arbitrary signal tags; detectors respond with one or more audience-aware local shader effects.
+Sting is a generic, declarative proximity rules engine for Owlbear Rodeo. Scene items can emit arbitrary signal tags; detectors respond with shader, state, light, and integration effects.
 
 ## Modular effects and integrations
 
@@ -52,9 +52,9 @@ Only the GM can configure items. Select one scene item and open **Sting…** fro
 1. Add zero or more emitter signal tags.
 2. Add detector rules with a signal, closest/all detection mode, inner/outer scene-unit range, and smooth, linear, logarithmic, or binary falloff.
 3. Add any number of effects to each rule.
-4. Choose each effect's target, audience, shader preset, color, intensity, animation, center offset, and inner/outer radius.
-5. Optionally link supported shader animation, softness, beam, scale, rotation, offset, and radius controls to signal strength with the `MIN` or `MAX` endpoint controls.
-6. Optionally blend between minimum/full-strength colors, use constant intensity, and always include GMs in a shader effect's audience.
+4. Add shader effects such as Glow/Shadow or Directional Beam, state effects such as Face, Hide/Show, Lock/Unlock, Set Image, or Add/Remove Emitter, and Dynamic Fog light effects.
+5. Choose each effect's target and action-specific settings. Set Image selects replacement artwork from Owlbear and can preserve the target's displayed size.
+6. Optionally link supported shader animation, softness, beam, scale, rotation, offset, and radius controls to signal strength with the `MIN` or `MAX` endpoint controls.
 7. Changes save automatically to item metadata after a short validation delay.
 
 Open **Settings** without selecting an item to choose how Sting measures distance for the scene:
@@ -65,7 +65,7 @@ the optional extension integrations.
 
 The background page evaluates rules on every client even while the editor is closed. Derived proximity state and Effect item IDs are never written to the shared scene.
 
-Shared mechanical effects and single-authority integrations are executed by one healthy
+Shared state effects and single-authority integrations are executed by one healthy
 GM runtime. Sting discovers those runtimes through ephemeral heartbeats and automatically
 fails over after roughly eight seconds when the current authority stops responding. A
 standby GM session shows an amber **STBY** action badge; its Debug view can take control

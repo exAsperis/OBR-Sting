@@ -1,10 +1,11 @@
 import type { Item } from "@owlbear-rodeo/sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DesiredEffect, MechanicalEffectDefinitionV1 } from "../../types";
+import type { DesiredEffect, MechanicalEffectDefinitionV1, MechanicalFaceEffectDefinitionV1 } from "../../types";
 import { fixedSharedAuthority } from "./authority";
 
 const { startItemInteraction, updateItems, getItemBounds, addLocalItems, deleteLocalItems } = vi.hoisted(() => ({ startItemInteraction: vi.fn(), updateItems: vi.fn(), getItemBounds: vi.fn(), addLocalItems: vi.fn(), deleteLocalItems: vi.fn() }));
 vi.mock("@owlbear-rodeo/sdk", () => ({
+  isImage: (entry: Item) => entry.type === "IMAGE",
   buildLine: () => {
     const line: Record<string, unknown> = { id: crypto.randomUUID(), type: "LINE" };
     const builder: Record<string, unknown> = {};
@@ -21,11 +22,16 @@ const item = (id: string, x: number, y: number, rotation = 0): Item => ({
   id, type: "IMAGE", name: id, visible: true, locked: false, createdUserId: "gm", zIndex: 0,
   lastModified: "", lastModifiedUserId: "gm", position: { x, y }, rotation, scale: { x: 1, y: 1 }, metadata: {}, layer: "CHARACTER",
 });
-const effect: MechanicalEffectDefinitionV1 = { id: "face", type: "mechanical", enabled: true, action: "face", target: { type: "detector" }, faceAngle: 0, pivotX: 0, pivotY: 0, speed: 180 };
+const effect: MechanicalFaceEffectDefinitionV1 = { id: "face", type: "mechanical", enabled: true, action: "face", target: { type: "detector" }, faceAngle: 0, pivotX: 0, pivotY: 0, speed: 180, reverseOnExit: false };
 let updatedRotations: number[] = [];
 let updatedPositions: Array<{ x: number; y: number }> = [];
 let persistedRotations: number[] = [];
+let persistedPositions: Array<{ x: number; y: number }> = [];
 let persistedVisibilities: boolean[] = [];
+let persistedLocked: boolean[] = [];
+let persistedImages: Array<{ url: string; scale: { x: number; y: number } }> = [];
+let persistedEmitterMetadata: unknown[] = [];
+const imageItem = (id: string, width = 100, height = 100, dpi = 100): Item => ({ ...item(id, 0, 0), image: { width, height, mime: "image/png", url: `https://example.com/${id}.png` }, grid: { dpi, offset: { x: width / 2, y: height / 2 } }, text: { type: "PLAIN", plainText: "", style: {} }, textItemType: "LABEL" } as Item);
 function context(target: Item, emitter: Item, distance: number, role: "GM" | "PLAYER" = "GM", ids = ["detector", "rule", "face"]): DesiredEffect {
   return {
     effect: { ...effect, id: ids[2] }, runtimeKey: ids.join("/"), target, detectedEmitter: emitter, distance,
@@ -46,10 +52,14 @@ describe("MechanicalEffectExecutor", () => {
     updatedRotations = [];
     updatedPositions = [];
     persistedRotations = [];
+    persistedPositions = [];
     persistedVisibilities = [];
+    persistedLocked = [];
+    persistedImages = [];
+    persistedEmitterMetadata = [];
     getItemBounds.mockResolvedValue({ center: { x: 0, y: 0 }, width: 100, height: 100 });
     startItemInteraction.mockResolvedValue([(recipe: (draft: Item) => void) => { const draft = item("target", 0, 0); recipe(draft); updatedRotations.push(draft.rotation); updatedPositions.push({ ...draft.position }); return draft; }, vi.fn()]);
-    updateItems.mockImplementation(async (_ids: string[], recipe: (drafts: Item[]) => void) => { const draft = item("target", 0, 0); recipe([draft]); persistedRotations.push(draft.rotation); persistedVisibilities.push(draft.visible); });
+    updateItems.mockImplementation(async (_ids: string[], recipe: (drafts: Item[]) => void) => { const draft = imageItem("target"); recipe([draft]); persistedRotations.push(draft.rotation); persistedPositions.push({ ...draft.position }); persistedVisibilities.push(draft.visible); persistedLocked.push(draft.locked); const image = draft as Item & { image?: { url: string }; scale: { x: number; y: number } }; if (image.image) persistedImages.push({ url: image.image.url, scale: { ...image.scale } }); persistedEmitterMetadata.push(structuredClone(draft.metadata["com.ex-asperis.sting/emitter"])); });
   });
   afterEach(() => vi.useRealTimers());
 
@@ -178,7 +188,7 @@ describe("MechanicalEffectExecutor", () => {
     const ctx = visibilityContext(item("target", 0, 0), item("emitter", 10, 0), 10, "shown", false);
     await executor.reconcile({ desired: [ctx], events: [] });
     await executor.reconcile({ desired: [], events: [] });
-    expect(persistedVisibilities).toEqual([true]);
+    expect(persistedVisibilities).toEqual([]);
   });
 
   it("allows a detected emitter to be its own Hide/Show target", async () => {
@@ -188,5 +198,94 @@ describe("MechanicalEffectExecutor", () => {
     const report = await executor.reconcile({ desired: [ctx], events: [] });
     expect(persistedVisibilities).toEqual([false]);
     expect(report.statuses.get(ctx.runtimeKey)).toBe("hidden");
+  });
+
+  it("toggles hidden from the target's entry state and restores that state on exit", async () => {
+    const executor = new MechanicalEffectExecutor(fixedSharedAuthority(true));
+    const target = item("target", 0, 0);
+    target.visible = false;
+    const ctx = visibilityContext(target, item("emitter", 10, 0), 10, "hidden", true);
+    ctx.effect = { ...ctx.effect, visibility: "toggle" } as MechanicalEffectDefinitionV1;
+    await executor.reconcile({ desired: [ctx], events: [] });
+    await executor.reconcile({ desired: [], events: [] });
+    expect(persistedVisibilities.slice(-2)).toEqual([true, false]);
+  });
+
+  it("restores Face position and rotation on threshold exit when enabled", async () => {
+    const executor = new MechanicalEffectExecutor(fixedSharedAuthority(true));
+    const target = item("target", 5, 6, 30);
+    const ctx = context(target, item("emitter", 10, 0), 10);
+    ctx.effect = { ...effect, reverseOnExit: true };
+    await executor.reconcile({ desired: [ctx], events: [] });
+    await executor.reconcile({ desired: [], events: [] });
+    expect(persistedRotations.at(-1)).toBe(30);
+    expect(persistedPositions.at(-1)).toEqual({ x: 5, y: 6 });
+  });
+
+  it("locks on entry and restores the target's actual prior state on exit", async () => {
+    const executor = new MechanicalEffectExecutor(fixedSharedAuthority(true));
+    const ctx = context(item("target", 0, 0), item("emitter", 10, 0), 10);
+    ctx.effect = { id: "lock", type: "mechanical", enabled: true, action: "lock", target: { type: "detector" }, locked: true, reverseOnExit: true };
+    await executor.reconcile({ desired: [ctx], events: [] });
+    await executor.reconcile({ desired: [], events: [] });
+    expect(persistedLocked.slice(-2)).toEqual([true, false]);
+  });
+
+  it("toggles lock from the target's entry state", async () => {
+    const executor = new MechanicalEffectExecutor(fixedSharedAuthority(true));
+    const target = item("target", 0, 0);
+    target.locked = true;
+    const ctx = context(target, item("emitter", 10, 0), 10);
+    ctx.effect = { id: "lock", type: "mechanical", enabled: true, action: "lock", target: { type: "detector" }, locked: false, toggle: true, reverseOnExit: true };
+    await executor.reconcile({ desired: [ctx], events: [] });
+    await executor.reconcile({ desired: [], events: [] });
+    expect(persistedLocked.slice(-2)).toEqual([false, true]);
+  });
+
+  it("sets an image with constrained scale and restores the original asset", async () => {
+    const executor = new MechanicalEffectExecutor(fixedSharedAuthority(true));
+    const target = imageItem("target", 100, 200, 100);
+    const ctx = context(target, item("emitter", 10, 0), 10);
+    ctx.effect = { id: "image", type: "mechanical", enabled: true, action: "set-image", target: { type: "detector" }, asset: { name: "Large", image: { width: 400, height: 100, mime: "image/png", url: "https://example.com/large.png" }, grid: { dpi: 200, offset: { x: 200, y: 50 } } }, constrainToOriginalSize: true, reverseOnExit: true };
+    await executor.reconcile({ desired: [ctx], events: [] });
+    await executor.reconcile({ desired: [], events: [] });
+    expect(persistedImages.at(-2)).toEqual({ url: "https://example.com/large.png", scale: { x: 0.5, y: 4 } });
+    expect(persistedImages.at(-1)).toEqual({ url: "https://example.com/target.png", scale: { x: 1, y: 1 } });
+  });
+
+  it("reports a pending Set Image effect without mutating the target", async () => {
+    const executor = new MechanicalEffectExecutor(fixedSharedAuthority(true));
+    const ctx = context(imageItem("target"), item("emitter", 10, 0), 10);
+    ctx.effect = { id: "image", type: "mechanical", enabled: true, action: "set-image", target: { type: "detector" }, constrainToOriginalSize: true, reverseOnExit: true };
+    const report = await executor.reconcile({ desired: [ctx], events: [] });
+    expect(report.statuses.get(ctx.runtimeKey)).toBe("image-not-selected");
+    expect(updateItems).not.toHaveBeenCalled();
+  });
+
+  it("composes emitter additions and restores the original metadata on exit", async () => {
+    const executor = new MechanicalEffectExecutor(fixedSharedAuthority(true));
+    const target = item("target", 0, 0);
+    target.metadata["com.ex-asperis.sting/emitter"] = { version: 1, enabled: true, signals: ["existing"] };
+    const first = context(target, item("emitter", 10, 0), 10, "GM", ["detector", "rule", "add-a"]);
+    first.effect = { id: "add-a", type: "mechanical", enabled: true, action: "emitter", target: { type: "detector" }, operation: "add", signal: "Alarm [20]", reverseOnExit: true };
+    const second = context(target, item("emitter", 20, 0), 20, "GM", ["detector", "rule", "add-b"]);
+    second.effect = { id: "add-b", type: "mechanical", enabled: true, action: "emitter", target: { type: "detector" }, operation: "add", signal: "warning", reverseOnExit: true };
+    await executor.reconcile({ desired: [first, second], events: [] });
+    await executor.reconcile({ desired: [], events: [] });
+    expect(persistedEmitterMetadata.at(-2)).toEqual({ version: 1, enabled: true, signals: ["existing", "alarm[20]", "warning"] });
+    expect(persistedEmitterMetadata.at(-1)).toEqual({ version: 1, enabled: true, signals: ["existing"] });
+  });
+
+  it("toggles an existing emitter once across all-mode contexts and restores it on exit", async () => {
+    const executor = new MechanicalEffectExecutor(fixedSharedAuthority(true));
+    const target = item("target", 0, 0);
+    target.metadata["com.ex-asperis.sting/emitter"] = { version: 1, enabled: true, signals: ["alarm"] };
+    const first = context(target, item("near", 10, 0), 10, "GM", ["detector", "rule", "toggle"]);
+    first.effect = { id: "toggle", type: "mechanical", enabled: true, action: "emitter", target: { type: "detector" }, operation: "toggle", signal: "alarm", reverseOnExit: true };
+    const second = { ...first, runtimeKey: "detector/rule/toggle/far", detectedEmitter: item("far", 20, 0), distance: 20 };
+    await executor.reconcile({ desired: [first, second], events: [] });
+    await executor.reconcile({ desired: [], events: [] });
+    expect(persistedEmitterMetadata.at(-2)).toEqual({ version: 1, enabled: true, signals: [] });
+    expect(persistedEmitterMetadata.at(-1)).toEqual({ version: 1, enabled: true, signals: ["alarm"] });
   });
 });

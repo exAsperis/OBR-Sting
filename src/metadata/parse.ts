@@ -25,6 +25,15 @@ const record = (value: unknown): value is Record<string, unknown> =>
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const id = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
 const color = (value: unknown): value is string => typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
+const parseImageAsset = (value: unknown): Extract<MechanicalEffectDefinitionV1, { action: "set-image" }>["asset"] | null => {
+  if (!record(value) || typeof value.name !== "string" || !value.name.trim() || !record(value.image) || !record(value.grid) || !record(value.grid.offset)) return null;
+  const image = value.image;
+  const grid = value.grid;
+  const offset = grid.offset as Record<string, unknown>;
+  if (!finite(image.width) || image.width <= 0 || !finite(image.height) || image.height <= 0 || typeof image.mime !== "string" || !image.mime || typeof image.url !== "string" || !image.url) return null;
+  if (!finite(grid.dpi) || grid.dpi <= 0 || !finite(offset.x) || !finite(offset.y)) return null;
+  return { name: value.name.trim(), image: { width: image.width, height: image.height, mime: image.mime, url: image.url }, grid: { dpi: grid.dpi, offset: { x: offset.x, y: offset.y } } };
+};
 const jsonObject = (value: unknown): value is JsonObject => {
   try { return record(value) && JSON.stringify(value) !== undefined; } catch { return false; }
 };
@@ -76,6 +85,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
       const pivotX = value.pivotX ?? 0;
       const pivotY = value.pivotY ?? 0;
       if (!finite(pivotX) || !finite(pivotY) || pivotX < -500 || pivotX > 500 || pivotY < -500 || pivotY > 500) return null;
+      if (value.reverseOnExit !== undefined && typeof value.reverseOnExit !== "boolean") return null;
       return {
         id: value.id,
         ...named,
@@ -87,10 +97,11 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
         pivotX,
         pivotY,
         speed: value.speed,
+        reverseOnExit: value.reverseOnExit ?? false,
       } satisfies MechanicalEffectDefinitionV1;
     }
     if (value.action === "visibility") {
-      if (!["hidden", "shown"].includes(String(value.visibility)) || typeof value.reverseOnExit !== "boolean") return null;
+      if (!["hidden", "shown", "toggle"].includes(String(value.visibility)) || typeof value.reverseOnExit !== "boolean") return null;
       return {
         id: value.id,
         ...named,
@@ -98,9 +109,22 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
         enabled: value.enabled,
         action: "visibility",
         target,
-        visibility: value.visibility as "hidden" | "shown",
+        visibility: value.visibility as "hidden" | "shown" | "toggle",
         reverseOnExit: value.reverseOnExit,
       } satisfies MechanicalEffectDefinitionV1;
+    }
+    if (value.action === "lock") {
+      if (typeof value.locked !== "boolean" || value.toggle !== undefined && typeof value.toggle !== "boolean" || typeof value.reverseOnExit !== "boolean") return null;
+      return { id: value.id, ...named, type: "mechanical", enabled: value.enabled, action: "lock", target, locked: value.locked, ...(value.toggle === true ? { toggle: true } : {}), reverseOnExit: value.reverseOnExit } satisfies MechanicalEffectDefinitionV1;
+    }
+    if (value.action === "set-image") {
+      if (value.asset !== undefined && !parseImageAsset(value.asset)) return null;
+      if (typeof value.constrainToOriginalSize !== "boolean" || typeof value.reverseOnExit !== "boolean") return null;
+      return { id: value.id, ...named, type: "mechanical", enabled: value.enabled, action: "set-image", target, ...(value.asset === undefined ? {} : { asset: parseImageAsset(value.asset)! }), constrainToOriginalSize: value.constrainToOriginalSize, reverseOnExit: value.reverseOnExit } satisfies MechanicalEffectDefinitionV1;
+    }
+    if (value.action === "emitter") {
+      if (!["add", "remove", "toggle"].includes(String(value.operation)) || typeof value.signal !== "string" || typeof value.reverseOnExit !== "boolean") return null;
+      return { id: value.id, ...named, type: "mechanical", enabled: value.enabled, action: "emitter", target, operation: value.operation as "add" | "remove" | "toggle", signal: value.signal, reverseOnExit: value.reverseOnExit } satisfies MechanicalEffectDefinitionV1;
     }
     return null;
   }

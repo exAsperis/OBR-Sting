@@ -30,7 +30,7 @@ slightly displace a glow, shadow, or halo toward or away fromthe emitter. Subtle
 ### Edge indicator
 if the emitter is off-screen, place a marker at the edge of the user's viewport pointing toward it. This feels especially valuable because it communicates something a normal aura absolutely cannot.
 
-## Mechanical effects
+## State effects
 
 ### ❌ Block
 Prevents the detector from moving into the range of the the emitter. Or prevents the emitter from moving into the range of the detector. 

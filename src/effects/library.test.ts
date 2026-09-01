@@ -43,7 +43,7 @@ describe("effects library", () => {
   });
 
   it("round-trips reusable Face effects in the v1 library", () => {
-    const face = { id: "face", type: "mechanical" as const, enabled: true, action: "face" as const, target: { type: "detector" as const }, faceAngle: 45, pivotX: 150, pivotY: -50, speed: 180 };
+    const face = { id: "face", type: "mechanical" as const, enabled: true, action: "face" as const, target: { type: "detector" as const }, faceAngle: 45, pivotX: 150, pivotY: -50, speed: 180, reverseOnExit: true };
     const parsed = parseEffectLibrary({ version: 1, entries: [{ id: "turn", name: "Face threat", effect: face }] });
     expect(parsed.entries[0].effect).toEqual(face);
     expect(instantiateLibraryEffect(parsed.entries[0])).toMatchObject({ type: "mechanical", action: "face", faceAngle: 45, pivotX: 150, pivotY: -50, speed: 180 });
@@ -54,5 +54,14 @@ describe("effects library", () => {
     const parsed = parseEffectLibrary({ version: 1, entries: [{ id: "hide", name: "Hide nearby", effect: visibility }] });
     expect(parsed.entries[0].effect).toEqual(visibility);
     expect(instantiateLibraryEffect(parsed.entries[0])).toMatchObject({ type: "mechanical", action: "visibility", visibility: "hidden", reverseOnExit: true });
+  });
+
+  it("round-trips Set Image assets and Add/Remove Emitter settings", () => {
+    const setImage = { id: "image", type: "mechanical" as const, enabled: true, action: "set-image" as const, target: { type: "detector" as const }, asset: { name: "Wolf", image: { width: 200, height: 100, mime: "image/png", url: "https://example.com/wolf.png" }, grid: { dpi: 100, offset: { x: 100, y: 50 } } }, constrainToOriginalSize: true, reverseOnExit: true };
+    const emitter = { id: "emitter", type: "mechanical" as const, enabled: true, action: "emitter" as const, target: { type: "detector" as const }, operation: "remove" as const, signal: "alarm[20]", reverseOnExit: false };
+    const parsed = parseEffectLibrary({ version: 1, entries: [{ id: "image-entry", name: "Werewolf", effect: setImage }, { id: "emitter-entry", name: "Quiet alarm", effect: emitter }] });
+    expect(parsed.entries.map((entry) => entry.effect)).toEqual([setImage, emitter]);
+    expect(instantiateLibraryEffect(parsed.entries[0])).toMatchObject({ action: "set-image", asset: { name: "Wolf" }, constrainToOriginalSize: true });
+    expect(instantiateLibraryEffect(parsed.entries[1])).toMatchObject({ action: "emitter", operation: "remove", signal: "alarm[20]", reverseOnExit: false });
   });
 });
