@@ -208,6 +208,10 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
         const item = buildEffect()
           .name(`Proximity Signal: ${effect.preset}`)
           .effectType("STANDALONE")
+          // Stage the local effect invisibly. Owlbear can briefly draw a newly
+          // attached item at its default depth before applying its configured
+          // z-index, which otherwise flashes below-target effects above artwork.
+          .visible(false)
           .width(effectLayout.width)
           .height(effectLayout.height)
           .position(effectLayout.position)
@@ -228,6 +232,13 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
           .metadata({ [LOCAL_EFFECT_KEY]: { runtimeKey: context.runtimeKey } })
           .build();
         await OBR.scene.local.addItems([item]);
+        await OBR.scene.local.updateItems<Effect>([item.id], (items) => {
+          for (const added of items) {
+            added.zIndex = effectZIndex;
+            added.layer = effectLayer;
+            added.visible = true;
+          }
+        });
         this.states.set(context.runtimeKey, { localItemId: item.id, strength: context.strength, configHash: hash, preset: effect.preset, layoutHash: nextLayoutHash });
       } else if (Math.abs(existing.strength - context.strength) >= EPSILON || existing.configHash !== hash || existing.layoutHash !== nextLayoutHash) {
         await OBR.scene.local.updateItems<Effect>([existing.localItemId], (items) => {
