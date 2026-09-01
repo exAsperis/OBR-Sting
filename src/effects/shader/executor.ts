@@ -4,7 +4,6 @@ import type { DesiredEffect, ShaderDynamicField, ShaderEffectDefinitionV1, Stren
 import type { EffectDispatchBatch, EffectExecutor, EffectReconcileReport } from "../registry";
 import { resolveShaderGeometry } from "./geometry";
 import { SHADERS } from "./shaders";
-import { stableEffectZIndex } from "./zIndex";
 
 interface RuntimeState {
   localItemId: string;
@@ -141,10 +140,8 @@ export function shaderConfigHash(effect: ShaderEffectDefinitionV1): string {
   return JSON.stringify([effect.preset, effect.shape, effect.placement, effect.color, effect.colorGradient, effect.maxIntensity, effect.intensityStrengthLinked, effect.spread, effect.spreadStrengthLink, effect.dynamicRanges, effect.geometry, effect.beamWidth, effect.beamWidthStrengthLink, effect.beamOriginWidth, effect.animation]);
 }
 
-export function shaderZIndexForTarget(targetZIndex: number, runtimeKey: string, placement: ShaderEffectDefinitionV1["placement"]): number {
-  const tieBreak = (stableEffectZIndex(runtimeKey) - 1_000_000) / 1_000_000;
-  const offset = 0.5 + tieBreak * 0.49;
-  return targetZIndex + (placement === "above" ? offset : -offset);
+export function shaderZIndexForTarget(targetZIndex: number, _runtimeKey: string, placement: ShaderEffectDefinitionV1["placement"]): number {
+  return targetZIndex + (placement === "above" ? 1 : -1);
 }
 
 export function averageDetectionDirections(origin: { x: number; y: number }, detections: Array<{ x: number; y: number }>): { x: number; y: number } {
@@ -197,7 +194,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
       const effectLayout = layout(bounds, scale);
       const effectZIndex = shaderZIndexForTarget(context.target!.zIndex, context.runtimeKey, effect.placement);
       const effectLayer = context.target!.layer;
-      const nextLayoutHash = JSON.stringify([effectLayout, direction, responsiveDirection]);
+      const nextLayoutHash = JSON.stringify([effectLayout, direction, responsiveDirection, effectZIndex, effectLayer]);
       const hash = shaderConfigHash(effect);
       let existing = this.states.get(context.runtimeKey);
       // Owlbear does not reliably recompile SkSL when an existing Effect item's
