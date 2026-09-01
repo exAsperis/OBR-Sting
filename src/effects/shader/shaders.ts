@@ -17,11 +17,15 @@ const configurableAnimation = `
 `;
 
 const softAura = `
-  float feather = clamp(0.10 * spread, 0.005, 0.45);
+  float feather = spread <= 0.0 ? 0.0 : clamp(0.10 * spread, 0.005, 0.45);
   float innerFade = innerRadius <= 0.0001
     ? 1.0
-    : smoothstep(max(0.0, innerRadius - feather), innerRadius, distanceFromCenter);
-  float outerFade = 1.0 - smoothstep(max(innerRadius, outerRadius - feather), outerRadius, distanceFromCenter);
+    : feather <= 0.0
+      ? step(innerRadius, distanceFromCenter)
+      : smoothstep(max(0.0, innerRadius - feather), innerRadius, distanceFromCenter);
+  float outerFade = feather <= 0.0
+    ? 1.0 - step(outerRadius, distanceFromCenter)
+    : 1.0 - smoothstep(max(innerRadius, outerRadius - feather), outerRadius, distanceFromCenter);
   float mask = innerFade * outerFade;
 `;
 
@@ -68,15 +72,25 @@ half4 main(float2 coord) {
 
 const glow = buildShader(softAura, configurableAnimation, 0.62);
 const beamMask = `
-  float feather = clamp(0.025 * spread, 0.008, 0.12);
-  float radialMask = smoothstep(innerRadius, innerRadius + feather, distanceFromCenter)
-    * (1.0 - smoothstep(max(innerRadius, outerRadius - feather), outerRadius, distanceFromCenter));
-  float forward = smoothstep(-feather, feather, dot(centered, beamDirection));
+  float feather = spread <= 0.0 ? 0.0 : clamp(0.025 * spread, 0.008, 0.12);
+  float radialMask = feather <= 0.0
+    ? step(innerRadius, distanceFromCenter) * (1.0 - step(outerRadius, distanceFromCenter))
+    : smoothstep(innerRadius, innerRadius + feather, distanceFromCenter)
+      * (1.0 - smoothstep(max(innerRadius, outerRadius - feather), outerRadius, distanceFromCenter));
+  float forward = feather <= 0.0
+    ? step(0.0, dot(centered, beamDirection))
+    : smoothstep(-feather, feather, dot(centered, beamDirection));
   float angularDistance = acos(clamp(dot(normalize(centered + vec2(0.00001)), beamDirection), -1.0, 1.0));
   float halfWidth = radians(beamWidth * 0.5);
-  float coneMask = 1.0 - smoothstep(max(0.0, halfWidth - feather), halfWidth, angularDistance);
+  float forwardDistance = max(0.0, dot(centered, beamDirection));
+  float beamProgress = clamp(forwardDistance / max(outerRadius, 0.0001), 0.0, 1.0);
+  float originHalfWidth = beamOriginWidth * (1.0 - beamProgress);
+  float expandedHalfWidth = atan(tan(halfWidth) + originHalfWidth / max(forwardDistance, 0.0001));
+  float coneMask = feather <= 0.0
+    ? 1.0 - step(expandedHalfWidth, angularDistance)
+    : 1.0 - smoothstep(max(0.0, expandedHalfWidth - feather), max(0.00001, expandedHalfWidth), angularDistance);
   float mask = radialMask * forward * coneMask;
 `;
-const beam = buildShader(beamMask, configurableAnimation, 0.82, "uniform vec2 beamDirection;\nuniform float beamWidth;");
+const beam = buildShader(beamMask, configurableAnimation, 0.82, "uniform vec2 beamDirection;\nuniform float beamWidth;\nuniform float beamOriginWidth;");
 
 export const SHADERS: Record<ShaderPreset, string> = { glow, beam };

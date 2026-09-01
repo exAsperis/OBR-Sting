@@ -36,7 +36,7 @@ describe("signal-linked shader geometry", () => {
 
   it("uses each field's configurable extrema at zero strength", () => {
     const resolved = resolveStrengthLinkedShaderValues(effect, 0);
-    expect(resolved).toMatchObject({ spread: 0.05, beamWidth: 120, geometry: { offsetX: -100, offsetY: 100, width: 5, height: 400, rotation: -180, innerRadius: 0, outerRadius: 200 } });
+    expect(resolved).toMatchObject({ spread: 0, beamWidth: 120, geometry: { offsetX: -100, offsetY: 100, width: 5, height: 400, rotation: -180, innerRadius: 0, outerRadius: 200 } });
   });
 
   it("returns configured values at full strength", () => {
@@ -51,9 +51,23 @@ describe("signal-linked shader geometry", () => {
     expect(full.find((uniform) => uniform.name === "beamWidth")?.value).toBe(40);
   });
 
+  it("defaults origin width to zero and resolves a dynamic origin width", () => {
+    expect(resolveStrengthLinkedShaderValues(effect, 0.5).beamOriginWidth).toBe(0);
+    const tapered = { ...effect, beamOriginWidth: 100, dynamicRanges: { beamOriginWidth: { minimum: 20, maximum: 100 } } };
+    expect(resolveStrengthLinkedShaderValues(tapered, 0).beamOriginWidth).toBe(20);
+    expect(resolveStrengthLinkedShaderValues(tapered, 0.5).beamOriginWidth).toBe(60);
+    expect(resolveStrengthLinkedShaderValues(tapered, 1).beamOriginWidth).toBe(100);
+    const uniforms = shaderUniforms(tapered, 1, 2, { x: 1, y: 0 });
+    expect(uniforms.find((uniform) => uniform.name === "beamOriginWidth")?.value).toBe(0.5);
+    const targetSizedUniforms = shaderUniforms(tapered, 1, 1, { x: 1, y: 0 });
+    expect(targetSizedUniforms.find((uniform) => uniform.name === "beamOriginWidth")?.value).toBe(1);
+  });
+
   it("invalidates runtime configuration when root-level links change", () => {
     expect(shaderConfigHash(effect)).not.toBe(shaderConfigHash({ ...effect, beamWidthStrengthLink: undefined }));
     expect(shaderConfigHash(effect)).not.toBe(shaderConfigHash({ ...effect, spreadStrengthLink: undefined }));
+    expect(shaderConfigHash(effect)).not.toBe(shaderConfigHash({ ...effect, beamOriginWidth: 50 }));
+    expect(shaderConfigHash(effect)).not.toBe(shaderConfigHash({ ...effect, dynamicRanges: { beamOriginWidth: { minimum: 0, maximum: 100 } } }));
   });
 
   it("keeps linked beam radii ordered", () => {

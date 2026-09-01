@@ -6,7 +6,7 @@ export type ShaderShape = "circle" | "square";
 export type ShaderPlacement = "above" | "below";
 export type ShaderAnimationMode = "none" | "pulse" | "flicker" | "radial-pulse";
 export type StrengthLinkDirection = "min" | "max";
-export type ShaderDynamicField = "intensity" | "softness" | "innerRadius" | "outerRadius" | "beamWidth" | "width" | "height" | "offsetX" | "offsetY" | "responsiveOffset" | "rotation" | "animationRate" | "animationDepth" | "waveWidth";
+export type ShaderDynamicField = "intensity" | "softness" | "innerRadius" | "outerRadius" | "beamWidth" | "beamOriginWidth" | "width" | "height" | "offsetX" | "offsetY" | "responsiveOffset" | "rotation" | "animationRate" | "animationDepth" | "waveWidth";
 export interface DynamicValueRange { minimum: number; maximum: number; enabled?: boolean }
 export type EffectLifecycle = "continuous" | "enter" | "exit" | "nearest-change";
 export type JsonPrimitive = string | number | boolean | null;
@@ -73,6 +73,8 @@ export interface ShaderEffectDefinitionV1 {
   /** Angular width in degrees for directional beam effects. */
   beamWidth?: number;
   beamWidthStrengthLink?: StrengthLinkDirection;
+  /** Width at the beam start as a percentage of the target width. */
+  beamOriginWidth?: number;
   animation?: {
     mode: ShaderAnimationMode;
     rate: number;

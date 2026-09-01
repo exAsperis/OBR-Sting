@@ -16,6 +16,8 @@ describe("shader presets", () => {
     expect(SHADERS.glow).toContain("effectRotation");
     expect(SHADERS.glow).toContain("0.005");
     expect(SHADERS.glow).toContain("0.45");
+    expect(SHADERS.glow).toContain("spread <= 0.0");
+    expect(SHADERS.glow).toContain("step(innerRadius");
   });
 
   it("supports opacity, flicker, and directional radial animation on every shader preset", () => {
@@ -35,5 +37,16 @@ describe("shader presets", () => {
     expect(SHADERS.beam).toContain("beamDirection");
     expect(SHADERS.beam).toContain("beamWidth");
     expect(SHADERS.beam).toContain("angularDistance");
+  });
+
+  it("tapers an optional target-relative origin width toward the beam end", () => {
+    expect(SHADERS.beam).toContain("beamOriginWidth");
+    expect(SHADERS.beam).toContain("beamProgress");
+    expect(SHADERS.beam).toContain("originHalfWidth");
+    expect(SHADERS.beam).toContain("expandedHalfWidth");
+    expect(SHADERS.beam).toContain("spread <= 0.0");
+    expect(SHADERS.beam).toContain("step(expandedHalfWidth");
+    expect(SHADERS.beam).toContain("forwardDistance / max(outerRadius");
+    expect(SHADERS.beam).not.toContain("(forwardDistance - innerRadius)");
   });
 });

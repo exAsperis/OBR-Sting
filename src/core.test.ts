@@ -212,6 +212,22 @@ describe("versioned detector parsing", () => {
     expect(parseEffectDefinition({ ...linked, beamWidthStrengthLink: "middle" })).toBeNull();
     expect(parseEffectDefinition({ ...linked, geometry: { ...linked.geometry, widthStrengthLink: "middle" } })).toBeNull();
   });
+  it("allows zero softness and rejects negative softness", () => {
+    expect(parseEffectDefinition({ ...effect(), spread: 0 })).toMatchObject({ spread: 0 });
+    expect(parseEffectDefinition({ ...effect(), spread: -0.01 })).toBeNull();
+    expect(parseEffectDefinition({ ...effect(), dynamicRanges: { softness: { minimum: 0, maximum: 4 } } }))
+      .toMatchObject({ dynamicRanges: { softness: { minimum: 0, maximum: 4 } } });
+  });
+  it("parses directional beam endpoint and origin widths", () => {
+    expect(parseEffectDefinition({ ...effect(), preset: "beam", beamWidth: 0, beamOriginWidth: 0 }))
+      .toMatchObject({ beamWidth: 0, beamOriginWidth: 0 });
+    expect(parseEffectDefinition({ ...effect(), preset: "beam", beamWidth: 120, beamOriginWidth: 100 }))
+      .toMatchObject({ beamWidth: 120, beamOriginWidth: 100 });
+    expect(parseEffectDefinition({ ...effect(), preset: "beam", beamWidth: -1 })).toBeNull();
+    expect(parseEffectDefinition({ ...effect(), preset: "beam", beamOriginWidth: -1 })).toBeNull();
+    expect(parseEffectDefinition({ ...effect(), preset: "beam", beamOriginWidth: 101 })).toBeNull();
+    expect(parseEffectDefinition({ ...effect(), preset: "beam", beamOriginWidth: "wide" })).toBeNull();
+  });
   it("parses crossed responsive endpoints and migrates legacy REV ranges", () => {
     const baseGeometry = { offsetX: 0, offsetY: 0, responsiveOffset: 20, innerRadius: 20, outerRadius: 100 };
     expect(parseEffectDefinition({ ...effect(), geometry: { ...baseGeometry, responsiveOffsetRange: { minimum: 60, maximum: -20 } } }))

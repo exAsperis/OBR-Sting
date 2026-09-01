@@ -200,10 +200,10 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   if (!finite(value.maxIntensity) || value.maxIntensity < 0 || value.maxIntensity > 2) return null;
   if (value.intensityStrengthLinked !== undefined && typeof value.intensityStrengthLinked !== "boolean") return null;
   if (value.alwaysIncludeGm !== undefined && typeof value.alwaysIncludeGm !== "boolean") return null;
-  if (!finite(value.spread) || value.spread <= 0 || value.spread > 4) return null;
+  if (!finite(value.spread) || value.spread < 0 || value.spread > 4) return null;
   if (value.spreadStrengthLink !== undefined && !["min", "max"].includes(String(value.spreadStrengthLink))) return null;
   const dynamicBounds: Record<ShaderDynamicField, [number, number]> = {
-    intensity: [0, 2], softness: [0.05, 4], innerRadius: [0, 199], outerRadius: [1, 200], beamWidth: [5, 120],
+    intensity: [0, 2], softness: [0, 4], innerRadius: [0, 199], outerRadius: [1, 200], beamWidth: [0, 120], beamOriginWidth: [0, 100],
     width: [5, 400], height: [5, 400], offsetX: [-100, 100], offsetY: [-100, 100], responsiveOffset: [-100, 100],
     rotation: [-180, 180], animationRate: [0, 10], animationDepth: [0, 1], waveWidth: [0.05, 1],
   };
@@ -283,11 +283,16 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   }
   let beamWidth: number | undefined;
   if (value.beamWidth !== undefined) {
-    if (!finite(value.beamWidth) || value.beamWidth < 5 || value.beamWidth > 120) return null;
+    if (!finite(value.beamWidth) || value.beamWidth < 0 || value.beamWidth > 120) return null;
     beamWidth = value.beamWidth;
   }
   if (value.beamWidthStrengthLink !== undefined && !["min", "max"].includes(String(value.beamWidthStrengthLink))) return null;
   if (value.beamWidthStrengthLink !== undefined && value.beamWidth === undefined) return null;
+  let beamOriginWidth: number | undefined;
+  if (value.beamOriginWidth !== undefined) {
+    if (!finite(value.beamOriginWidth) || value.beamOriginWidth < 0 || value.beamOriginWidth > 100) return null;
+    beamOriginWidth = value.beamOriginWidth;
+  }
   return {
     id: value.id,
     ...named,
@@ -315,6 +320,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     ...(geometry ? { geometry } : {}),
     ...(beamWidth !== undefined ? { beamWidth } : {}),
     ...(value.beamWidthStrengthLink !== undefined ? { beamWidthStrengthLink: value.beamWidthStrengthLink as "min" | "max" } : {}),
+    ...(beamOriginWidth !== undefined ? { beamOriginWidth } : {}),
     ...(animation ? { animation } : {}),
   };
 }

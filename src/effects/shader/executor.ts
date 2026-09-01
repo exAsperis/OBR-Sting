@@ -63,8 +63,9 @@ export function resolveStrengthLinkedShaderValues(effect: ShaderEffectDefinition
   geometry.innerRadius = Math.min(geometry.innerRadius, geometry.outerRadius - 1);
   return {
     geometry,
-    spread: resolveDynamicValue(effect, "softness", effect.spread, strength, effect.spreadStrengthLink, 0.05, 4),
-    beamWidth: resolveDynamicValue(effect, "beamWidth", effect.beamWidth ?? 38, strength, effect.beamWidthStrengthLink, 5, 120),
+    spread: resolveDynamicValue(effect, "softness", effect.spread, strength, effect.spreadStrengthLink, 0, 4),
+    beamWidth: resolveDynamicValue(effect, "beamWidth", effect.beamWidth ?? 38, strength, effect.beamWidthStrengthLink, 0, 120),
+    beamOriginWidth: resolveDynamicValue(effect, "beamOriginWidth", effect.beamOriginWidth ?? 0, strength, undefined, 0, 100),
   };
 }
 
@@ -83,7 +84,7 @@ export function resolveEffectIntensity(effect: ShaderEffectDefinitionV1, strengt
 
 function effectScale(effect: ShaderEffectDefinitionV1, resolved: ReturnType<typeof resolveStrengthLinkedShaderValues>): number {
   const { geometry } = resolved;
-  const feather = effect.preset === "beam"
+  const feather = resolved.spread === 0 ? 0 : effect.preset === "beam"
     ? Math.min(0.12, Math.max(0.008, 0.025 * resolved.spread))
     : Math.min(0.45, Math.max(0.005, 0.1 * resolved.spread));
   const axisScale = Math.max(geometry.width, geometry.height) / 100;
@@ -131,12 +132,13 @@ export function shaderUniforms(effect: ShaderEffectDefinitionV1, strength: numbe
     const localDirectionLength = Math.hypot(localDirection.x, localDirection.y) || 1;
     values.push({ name: "beamDirection", value: { x: localDirection.x / localDirectionLength, y: localDirection.y / localDirectionLength } });
     values.push({ name: "beamWidth", value: resolved.beamWidth });
+    values.push({ name: "beamOriginWidth", value: resolved.beamOriginWidth / 100 / scale / (geometry.width / 100) });
   }
   return values;
 }
 
 export function shaderConfigHash(effect: ShaderEffectDefinitionV1): string {
-  return JSON.stringify([effect.preset, effect.shape, effect.placement, effect.color, effect.colorGradient, effect.maxIntensity, effect.intensityStrengthLinked, effect.spread, effect.spreadStrengthLink, effect.dynamicRanges, effect.geometry, effect.beamWidth, effect.beamWidthStrengthLink, effect.animation]);
+  return JSON.stringify([effect.preset, effect.shape, effect.placement, effect.color, effect.colorGradient, effect.maxIntensity, effect.intensityStrengthLinked, effect.spread, effect.spreadStrengthLink, effect.dynamicRanges, effect.geometry, effect.beamWidth, effect.beamWidthStrengthLink, effect.beamOriginWidth, effect.animation]);
 }
 
 export function shaderZIndexForTarget(targetZIndex: number, runtimeKey: string, placement: ShaderEffectDefinitionV1["placement"]): number {
