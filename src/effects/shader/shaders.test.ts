@@ -64,6 +64,21 @@ describe("shader presets", () => {
     expect(SHADERS.radar).toContain("effectRotation");
   });
 
+  it("composes a static grid visualization with 32 world-space marker slots", () => {
+    expect(SHADERS.grid).toContain("markerDataA0");
+    expect(SHADERS.grid).toContain("markerDataA31");
+    expect(SHADERS.grid).toContain("markerDataB31");
+    expect(SHADERS.grid).toContain("markerDataC31");
+    expect(SHADERS.grid).toContain("markerDataD31");
+    expect(SHADERS.grid).toContain("markerColor31");
+    expect(SHADERS.grid).toContain("worldOrigin");
+    expect(SHADERS.grid).toContain("worldRange");
+    expect(SHADERS.grid).toContain("squareGrid");
+    expect(SHADERS.grid).toContain("hexGrid");
+    expect(SHADERS.grid).toContain("isoGrid");
+    expect(SHADERS.grid).not.toContain("sweepPhase");
+  });
+
   it("lets glow range from a crisp ring to a soft aura", () => {
     expect(SHADERS.glow).toContain("innerFade");
     expect(SHADERS.glow).toContain("innerRadius <= 0.0001");

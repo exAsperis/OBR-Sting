@@ -36,6 +36,13 @@ describe("effects library", () => {
     expect(instantiateLibraryEffect(parsed.entries[0])).toMatchObject({ animation: { rate: 3, rateStrengthLink: "max", depthStrengthLink: "min", waveWidthStrengthLink: "max" } });
   });
 
+  it("round-trips Grid visualization settings", () => {
+    const grid = { ...glow, preset: "grid" as const, shape: "square" as const, grid: { showGrid: true } };
+    const parsed = parseEffectLibrary({ version: 1, entries: [{ id: "grid", name: "Tactical grid", effect: grid }] });
+    expect(parsed.entries[0].effect).toMatchObject({ preset: "grid", shape: "square", grid: { showGrid: true } });
+    expect(instantiateLibraryEffect(parsed.entries[0])).toMatchObject({ preset: "grid", grid: { showGrid: true } });
+  });
+
   it("loads browser-local data and tolerates malformed JSON", () => {
     const serialized = JSON.stringify({ version: 1, entries: [{ id: "entry", name: "Blue glow", effect: glow }] });
     expect(loadEffectLibrary({ getItem: () => serialized }, "library").entries).toHaveLength(1);

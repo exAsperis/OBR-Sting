@@ -189,7 +189,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   }
   if (value.type !== "shader") return null;
   const legacyPreset = ["outline", "pulse", "flicker"].includes(String(value.preset)) ? String(value.preset) : null;
-  const presets: ShaderPreset[] = ["glow", "beam", "radar"];
+  const presets: ShaderPreset[] = ["glow", "beam", "radar", "grid"];
   if ((!legacyPreset && !presets.includes(value.preset as ShaderPreset)) || !color(value.color)) return null;
   if (value.colorGradient !== undefined && (!record(value.colorGradient) || !color(value.colorGradient.minColor))) return null;
   const colorGradient = value.colorGradient as { minColor: string } | undefined;
@@ -316,6 +316,14 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     if (!finite(echoFadeDuration) || echoFadeDuration < 0.1 || echoFadeDuration > 30) return null;
     radar = { echoStyle: echoStyle as "circle" | "blob" | "rune", echoSize, distanceScale: distanceScale as "linear" | "logarithmic", decoration: decoration as "none" | "m314" | "modern" | "arcane", sweepTrail, brightness, sweepType: sweepType as "none" | "radial" | "angular", sweepDirection: sweepDirection as NonNullable<ShaderEffectDefinitionV1["radar"]>["sweepDirection"], echoFadeDuration };
   }
+  let grid: ShaderEffectDefinitionV1["grid"];
+  if (value.preset === "grid") {
+    if (value.grid !== undefined && !record(value.grid)) return null;
+    const gridValue = record(value.grid) ? value.grid : {};
+    const showGrid = gridValue.showGrid ?? false;
+    if (typeof showGrid !== "boolean") return null;
+    grid = { showGrid };
+  }
   return {
     id: value.id,
     ...named,
@@ -345,6 +353,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     ...(value.beamWidthStrengthLink !== undefined ? { beamWidthStrengthLink: value.beamWidthStrengthLink as "min" | "max" } : {}),
     ...(beamOriginWidth !== undefined ? { beamOriginWidth } : {}),
     ...(radar ? { radar } : {}),
+    ...(grid ? { grid } : {}),
     ...(animation ? { animation } : {}),
   };
 }

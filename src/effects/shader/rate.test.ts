@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ShaderEffectDefinitionV1 } from "../../types";
-import { averageDetectionDirections, circularPhaseCrossed, radarDistancePosition, radarEchoSize, radarSweepIsAnimated, resolveEffectIntensity, resolveRadarEchoSize, resolveRadarFadeDuration, resolveSignalColor, resolveStrengthLinkedRate, resolveStrengthLinkedShaderValues, resolveStrengthLinkedValue, shaderConfigHash, shaderUniforms } from "./executor";
+import { averageDetectionDirections, circularPhaseCrossed, gridLocalValue, gridTypeValue, gridWorldRange, radarDistancePosition, radarEchoSize, radarSweepIsAnimated, resolveEffectIntensity, resolveRadarEchoSize, resolveRadarFadeDuration, resolveSignalColor, resolveStrengthLinkedRate, resolveStrengthLinkedShaderValues, resolveStrengthLinkedValue, shaderConfigHash, shaderUniforms } from "./executor";
 
 describe("radar helpers", () => {
   const radar: ShaderEffectDefinitionV1 = {
@@ -62,6 +62,18 @@ describe("radar helpers", () => {
   it("excludes static radar mode from all sweep and fade ticking", () => {
     expect(radarSweepIsAnimated({ ...radar, radar: { ...radar.radar!, sweepType: "none" } })).toBe(false);
     expect(radarSweepIsAnimated(radar)).toBe(true);
+  });
+});
+
+describe("grid visualization helpers", () => {
+  it("maps raw world coordinates and sizes uniformly to the configured outer radius", () => {
+    expect(gridWorldRange(60, 100, 5)).toBe(1200);
+    expect(gridLocalValue(600, 1200, 0.8)).toBeCloseTo(0.4);
+    expect(gridLocalValue(200, 1200, 0.8)).toBeCloseTo(0.133333);
+  });
+
+  it("encodes every Owlbear scene grid type", () => {
+    expect(["SQUARE", "HEX_VERTICAL", "HEX_HORIZONTAL", "DIMETRIC", "ISOMETRIC"].map((type) => gridTypeValue(type as Parameters<typeof gridTypeValue>[0]))).toEqual([0, 1, 2, 3, 4]);
   });
 });
 

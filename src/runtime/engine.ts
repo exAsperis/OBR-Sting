@@ -100,8 +100,8 @@ export class ProximityEngine {
           const transition = deriveTransition(previous, current);
           this.ruleStates.set(ruleKey, current);
           for (const effect of rule.effects.filter((entry) => entry.enabled)) {
-            // Radar composites all selected detections into one native effect item.
-            if (effect.type === "shader" && effect.preset === "radar" && evaluation !== result.evaluations[0]) continue;
+            // Radar and Grid composite all selected detections into one native effect item.
+            if (effect.type === "shader" && ["radar", "grid"].includes(effect.preset) && evaluation !== result.evaluations[0]) continue;
             const target = resolveEffectTarget(effect.target, detector, evaluation.detectedEmitter, graph);
             const audienceMatch = effect.type === "mechanical"
               ? this.player.role === "GM"
@@ -116,7 +116,7 @@ export class ProximityEngine {
               effect.type,
               effect.type === "integration" ? effect.providerId : "",
               effect.type === "integration" ? effect.actionId : effect.type === "mechanical" || effect.type === "light" ? effect.action : "",
-              rule.aggregation === "all" && !(effect.type === "shader" && effect.preset === "radar") ? emitterId : "",
+              rule.aggregation === "all" && !(effect.type === "shader" && ["radar", "grid"].includes(effect.preset)) ? emitterId : "",
             ) : null;
             const lifecycle = effect.type === "integration" ? effect.lifecycle : "continuous";
             // Integration authority and delivery policy are provider/action concerns.

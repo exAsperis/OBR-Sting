@@ -200,6 +200,11 @@ describe("versioned detector parsing", () => {
     expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, echoSize: 401 } })).toBeNull();
     expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, sweepTrail: true } })).toMatchObject({ radar: { sweepTrail: 100 } });
   });
+  it("parses grid visualization defaults and configuration", () => {
+    expect(parseEffectDefinition({ ...effect(), preset: "grid" })).toMatchObject({ preset: "grid", grid: { showGrid: false } });
+    expect(parseEffectDefinition({ ...effect(), preset: "grid", shape: "square", grid: { showGrid: true } })).toMatchObject({ preset: "grid", shape: "square", grid: { showGrid: true } });
+    expect(parseEffectDefinition({ ...effect(), preset: "grid", grid: { showGrid: "yes" } })).toBeNull();
+  });
   it("parses optional animation rate strength linking and rejects unknown values", () => {
     expect(parseEffectDefinition({ ...effect(), animation: { mode: "pulse", rate: 2, depth: 0.5, rateStrengthLink: "max" } }))
       .toMatchObject({ animation: { mode: "pulse", rate: 2, depth: 0.5, rateStrengthLink: "max" } });

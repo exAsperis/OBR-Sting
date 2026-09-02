@@ -1,7 +1,7 @@
 import type { ImageContent, ImageGrid, Item, Layer, LightType, Player } from "@owlbear-rodeo/sdk";
 
 export type Falloff = "binary" | "linear" | "smoothstep" | "logarithmic";
-export type ShaderPreset = "glow" | "beam" | "radar";
+export type ShaderPreset = "glow" | "beam" | "radar" | "grid";
 export type ShaderShape = "circle" | "square";
 export type ShaderPlacement = "above" | "below";
 export type ShaderAnimationMode = "none" | "pulse" | "flicker" | "radial-pulse";
@@ -86,6 +86,7 @@ export interface ShaderEffectDefinitionV1 {
     sweepDirection: "outward" | "inward" | "clockwise" | "counterclockwise";
     echoFadeDuration: number;
   };
+  grid?: { showGrid: boolean };
   animation?: {
     mode: ShaderAnimationMode;
     rate: number;

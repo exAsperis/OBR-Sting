@@ -1,9 +1,9 @@
-import OBR, { buildEffect, isLight, type BoundingBox, type Effect, type Item } from "@owlbear-rodeo/sdk";
+import OBR, { buildEffect, isLight, type BoundingBox, type Effect, type GridType, type Item } from "@owlbear-rodeo/sdk";
 import { LOCAL_EFFECT_KEY } from "../../constants";
 import type { DesiredEffect, ShaderDynamicField, ShaderEffectDefinitionV1, StrengthLinkDirection } from "../../types";
 import type { EffectDispatchBatch, EffectExecutor, EffectReconcileReport } from "../registry";
 import { resolveShaderGeometry } from "./geometry";
-import { RADAR_ECHO_CAPACITY, SHADERS } from "./shaders";
+import { GRID_MARKER_CAPACITY, RADAR_ECHO_CAPACITY, SHADERS } from "./shaders";
 
 interface RadarCandidate { id: string; position: { x: number; y: number }; phase: number; size: number; rune: number; color: { x: number; y: number; z: number } }
 interface RadarEcho { position: { x: number; y: number }; refreshedAt: number; size: number; rune: number; color: { x: number; y: number; z: number } }
@@ -45,6 +45,16 @@ export function radarDistancePosition(distance: number, outerRange: number, inne
   const normalized = scale === "logarithmic" ? Math.log10(1 + 9 * linear) : linear;
   return innerRadius + (outerRadius - innerRadius) * normalized;
 }
+
+export function gridWorldRange(outerRange: number, dpi: number, scaleMultiplier: number): number {
+  return outerRange / Math.max(scaleMultiplier, Number.EPSILON) * Math.max(dpi, 1);
+}
+
+export function gridLocalValue(worldValue: number, worldRange: number, outerRadius: number): number {
+  return worldValue / Math.max(worldRange, Number.EPSILON) * outerRadius;
+}
+
+export const gridTypeValue = (type: GridType): number => ({ SQUARE: 0, HEX_VERTICAL: 1, HEX_HORIZONTAL: 2, DIMETRIC: 3, ISOMETRIC: 4 })[type];
 
 export function radarEchoSize(emitterArea: number, targetArea: number, basePercent = 100): number {
   const relativeSize = Math.max(0.012 / 0.028, Math.min(0.12 / 0.028, Math.sqrt(Math.max(1, emitterArea) / Math.max(1, targetArea))));
@@ -197,6 +207,20 @@ export function shaderUniforms(effect: ShaderEffectDefinitionV1, strength: numbe
       values.push({ name: `echoColor${index}`, value: resolveSignalColor(effect, 0) });
     }
   }
+  if (effect.preset === "grid") {
+    values.push({ name: "showGrid", value: effect.grid?.showGrid ? 1 : 0 });
+    values.push({ name: "gridType", value: 0 });
+    values.push({ name: "gridDpi", value: 100 });
+    values.push({ name: "worldRange", value: 100 });
+    values.push({ name: "worldOrigin", value: { x: 0, y: 0 } });
+    for (let index = 0; index < GRID_MARKER_CAPACITY; index += 1) {
+      values.push({ name: `markerDataA${index}`, value: { x: 0, y: 0, z: 0 } });
+      values.push({ name: `markerDataB${index}`, value: { x: 0, y: 0, z: 0 } });
+      values.push({ name: `markerDataC${index}`, value: { x: 0, y: 1, z: 0 } });
+      values.push({ name: `markerDataD${index}`, value: { x: 0, y: Math.PI * 2, z: Math.PI * 2 } });
+      values.push({ name: `markerColor${index}`, value: resolveSignalColor(effect, 0) });
+    }
+  }
   return values;
 }
 
@@ -293,6 +317,8 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
 
   async reconcile(batch: EffectDispatchBatch): Promise<EffectReconcileReport> {
     const desired = batch.desired;
+    const needsGrid = desired.some((entry) => (entry.effect as ShaderEffectDefinitionV1).preset === "grid");
+    const gridScene = needsGrid ? await Promise.all([OBR.scene.grid.getDpi(), OBR.scene.grid.getType(), OBR.scene.grid.getScale()]) : null;
     if (!this.initialized) {
       const stale = (await OBR.scene.local.getItems()).filter((item) => item.metadata[LOCAL_EFFECT_KEY] !== undefined);
       if (stale.length) await OBR.scene.local.deleteItems(stale.map((item) => item.id));
@@ -319,7 +345,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
       const direction = { x: directionVector.x / directionLength, y: directionVector.y / directionLength };
       const responsiveCenters = await Promise.all((context.responsiveEmitters ?? (context.detectedEmitter ? [context.detectedEmitter] : [])).map(itemCenter));
       const responsiveDirection = averageDetectionDirections(bounds.center, responsiveCenters);
-      const radarColorStrength = effect.preset === "radar" ? Math.max(context.strength, ...(context.responsiveDetections ?? []).map((detection) => detection.strength)) : context.strength;
+      const radarColorStrength = ["radar", "grid"].includes(effect.preset) ? Math.max(context.strength, ...(context.responsiveDetections ?? []).map((detection) => detection.strength)) : context.strength;
       const resolved = resolveStrengthLinkedShaderValues(effect, context.strength);
       const scale = effectScale(effect, resolved);
       const effectLayout = layout(bounds, scale);
@@ -382,7 +408,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
             item.position = effectLayout.position;
             item.zIndex = effectZIndex;
             item.layer = effectLayer;
-            if (effect.preset !== "radar" || radarSweepIsAnimated(effect)) item.uniforms = shaderUniforms(effect, context.strength, scale, direction, resolved, responsiveDirection, radarColorStrength);
+            if ((effect.preset !== "radar" || radarSweepIsAnimated(effect)) && effect.preset !== "grid") item.uniforms = shaderUniforms(effect, context.strength, scale, direction, resolved, responsiveDirection, radarColorStrength);
           }
         });
         existing.strength = context.strength;
@@ -439,6 +465,51 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
           });
           await OBR.scene.local.updateItems<Effect>([existing.localItemId], (items) => { for (const item of items) item.uniforms = staticUniforms; });
         }
+      }
+      if (effect.preset === "grid" && existing && gridScene) {
+        const [gridDpi, sceneGridType, gridScale] = gridScene;
+        const origin = await itemCenter(context.detector);
+        const geometry = resolved.geometry;
+        const localOuterRadius = geometry.outerRadius / 100 / scale;
+        const worldRange = gridWorldRange(context.rule.range.outer, gridDpi, gridScale.parsed.multiplier);
+        const detections = [...(context.responsiveDetections ?? [])].sort((left, right) => left.distance - right.distance).slice(0, GRID_MARKER_CAPACITY);
+        const samples = await Promise.all(detections.map(async (detection) => {
+          if (isLight(detection.emitter)) return { center: detection.emitter.position, bounds: null };
+          const itemBounds = await OBR.scene.items.getItemBounds([detection.emitter.id]);
+          return { center: itemBounds.center, bounds: itemBounds };
+        }));
+        const uniforms = shaderUniforms(effect, context.strength, scale, { x: 0, y: -1 }, resolved, { x: 0, y: -1 }, radarColorStrength);
+        const showGrid = uniforms.find((uniform) => uniform.name === "showGrid"); if (showGrid) showGrid.value = effect.grid?.showGrid ? 1 : 0;
+        const type = uniforms.find((uniform) => uniform.name === "gridType"); if (type) type.value = gridTypeValue(sceneGridType);
+        const dpi = uniforms.find((uniform) => uniform.name === "gridDpi"); if (dpi) dpi.value = gridDpi;
+        const range = uniforms.find((uniform) => uniform.name === "worldRange"); if (range) range.value = worldRange;
+        const worldOrigin = uniforms.find((uniform) => uniform.name === "worldOrigin"); if (worldOrigin) worldOrigin.value = origin;
+        detections.forEach((detection, index) => {
+          const emitter = detection.emitter;
+          const sample = samples[index];
+          const markerDataA = uniforms.find((uniform) => uniform.name === `markerDataA${index}`);
+          const markerDataB = uniforms.find((uniform) => uniform.name === `markerDataB${index}`);
+          const markerDataC = uniforms.find((uniform) => uniform.name === `markerDataC${index}`);
+          const markerDataD = uniforms.find((uniform) => uniform.name === `markerDataD${index}`);
+          const markerColor = uniforms.find((uniform) => uniform.name === `markerColor${index}`);
+          const position = {
+            x: gridLocalValue(sample.center.x - origin.x, worldRange, localOuterRadius),
+            y: gridLocalValue(sample.center.y - origin.y, worldRange, localOuterRadius),
+          };
+          if (markerColor) markerColor.value = resolveSignalColor(effect, detection.strength);
+          const markerStrength = resolveEffectIntensity(effect, detection.strength);
+          if (isLight(emitter)) {
+            if (markerDataA) markerDataA.value = { x: emitter.outerAngle >= 359.999 ? 2 : 3, y: position.x, z: position.y };
+            if (markerDataB) markerDataB.value = { x: 0, y: 0, z: gridLocalValue(emitter.attenuationRadius, worldRange, localOuterRadius) };
+            if (markerDataC) markerDataC.value = { x: gridLocalValue(emitter.sourceRadius, worldRange, localOuterRadius), y: Math.max(0.05, emitter.falloff), z: emitter.rotation * Math.PI / 180 };
+            if (markerDataD) markerDataD.value = { x: markerStrength, y: emitter.innerAngle * Math.PI / 180, z: emitter.outerAngle * Math.PI / 180 };
+          } else if (sample.bounds) {
+            if (markerDataA) markerDataA.value = { x: 1, y: position.x, z: position.y };
+            if (markerDataB) markerDataB.value = { x: gridLocalValue(sample.bounds.width / 2, worldRange, localOuterRadius), y: gridLocalValue(sample.bounds.height / 2, worldRange, localOuterRadius), z: 0 };
+            if (markerDataD) markerDataD.value = { x: markerStrength, y: Math.PI * 2, z: Math.PI * 2 };
+          }
+        });
+        await OBR.scene.local.updateItems<Effect>([existing.localItemId], (items) => { for (const item of items) item.uniforms = uniforms; });
       }
     }
     this.ensureRadarTimer();

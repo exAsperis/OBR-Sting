@@ -280,4 +280,81 @@ half4 main(float2 coord) {
   return half4(rgb, alpha);
 }`;
 
-export const SHADERS: Record<ShaderPreset, string> = { glow, beam, radar };
+export const GRID_MARKER_CAPACITY = 32;
+const gridMarkerUniforms = Array.from({ length: GRID_MARKER_CAPACITY }, (_, index) => `uniform vec3 markerDataA${index};\nuniform vec3 markerDataB${index};\nuniform vec3 markerDataC${index};\nuniform vec3 markerDataD${index};\nuniform vec3 markerColor${index};`).join("\n");
+const gridMarkerLayers = Array.from({ length: GRID_MARKER_CAPACITY }, (_, index) => `
+  vec2 markerDelta${index} = local - markerDataA${index}.yz;
+  float markerRect${index} = step(abs(markerDelta${index}.x), markerDataB${index}.x) * step(abs(markerDelta${index}.y), markerDataB${index}.y);
+  float markerCos${index} = cos(markerDataC${index}.z);
+  float markerSin${index} = sin(markerDataC${index}.z);
+  vec2 markerLightPoint${index} = vec2(markerCos${index} * markerDelta${index}.x + markerSin${index} * markerDelta${index}.y, -markerSin${index} * markerDelta${index}.x + markerCos${index} * markerDelta${index}.y);
+  float markerDistance${index} = length(markerLightPoint${index});
+  float markerRadial${index} = 1.0 - smoothstep(markerDataC${index}.x, max(markerDataC${index}.x + 0.0001, markerDataB${index}.z), markerDistance${index});
+  markerRadial${index} = pow(max(markerRadial${index}, 0.0), max(markerDataC${index}.y, 0.05));
+  float markerAngle${index} = abs(atan(markerLightPoint${index}.x, -markerLightPoint${index}.y));
+  float markerCone${index} = markerRadial${index} * (1.0 - smoothstep(markerDataD${index}.z * 0.5 - 0.015, markerDataD${index}.z * 0.5 + 0.015, markerAngle${index}));
+  markerCone${index} *= mix(0.72, 1.0, 1.0 - smoothstep(markerDataD${index}.y * 0.5 - 0.015, markerDataD${index}.y * 0.5 + 0.015, markerAngle${index}));
+  float markerMask${index} = markerDataA${index}.x < 0.5 ? 0.0 : markerDataA${index}.x < 1.5 ? markerRect${index} : markerDataA${index}.x < 2.5 ? markerRadial${index} : markerCone${index};
+  float markerAlpha${index} = markerMask${index} * markerDataD${index}.x;
+  if (markerAlpha${index} > markerAlpha) { markerAlpha = markerAlpha${index}; markerRgb = markerColor${index}; }
+`).join("\n");
+
+const grid = `
+uniform vec2 size;
+uniform vec3 signalColor;
+uniform float strength;
+uniform float spread;
+uniform float shapeMode;
+uniform vec2 centerOffset;
+uniform float innerRadius;
+uniform float outerRadius;
+uniform vec2 effectSize;
+uniform float effectRotation;
+uniform float showGrid;
+uniform float gridType;
+uniform float gridDpi;
+uniform float worldRange;
+uniform vec2 worldOrigin;
+${gridMarkerUniforms}
+
+float gridLine(float coordinate, float spacing) {
+  float lineDistance = abs(fract(coordinate / max(spacing, 1.0) + 0.5) - 0.5) * spacing;
+  return 1.0 - smoothstep(0.35, 0.85, lineDistance);
+}
+
+half4 main(float2 coord) {
+  vec2 centered = (coord / size - vec2(0.5)) * 2.0 - centerOffset;
+  float rotationCos = cos(effectRotation);
+  float rotationSin = sin(effectRotation);
+  vec2 local = vec2(rotationCos * centered.x + rotationSin * centered.y, -rotationSin * centered.x + rotationCos * centered.y) / max(effectSize, vec2(0.05));
+  float circleDistance = length(local);
+  float squareDistance = max(abs(local.x), abs(local.y));
+  float distanceFromCenter = mix(circleDistance, squareDistance, step(0.5, shapeMode));
+  float feather = spread <= 0.0 ? 0.001 : clamp(0.02 * spread, 0.001, 0.10);
+  float innerMask = innerRadius <= 0.0001 ? 1.0 : smoothstep(max(0.0, innerRadius - feather), innerRadius, distanceFromCenter);
+  float clipMask = innerMask * (1.0 - smoothstep(max(innerRadius, outerRadius - feather), outerRadius, distanceFromCenter));
+  vec2 worldPoint = worldOrigin + local * worldRange / max(outerRadius, 0.0001);
+  float squareGrid = max(gridLine(worldPoint.x, gridDpi), gridLine(worldPoint.y, gridDpi));
+  float isoWidth = gridDpi * mix(2.0, 1.732051, step(3.5, gridType));
+  float isoU = worldPoint.y + worldPoint.x * gridDpi / isoWidth;
+  float isoV = worldPoint.y - worldPoint.x * gridDpi / isoWidth;
+  float isoGrid = max(gridLine(isoU, gridDpi), gridLine(isoV, gridDpi));
+  vec2 hexPoint = (gridType < 1.5 ? worldPoint : worldPoint.yx) / max(gridDpi, 1.0);
+  vec2 hexRepeat = vec2(1.0, 1.732051);
+  vec2 hexA = mod(hexPoint, hexRepeat) - hexRepeat * 0.5;
+  vec2 hexB = mod(hexPoint - hexRepeat * 0.5, hexRepeat) - hexRepeat * 0.5;
+  vec2 hexCell = dot(hexA, hexA) < dot(hexB, hexB) ? hexA : hexB;
+  float hexEdgeDistance = abs(0.5 - max(abs(hexCell.x) * 0.866025 + abs(hexCell.y) * 0.5, abs(hexCell.y))) * gridDpi;
+  float hexGrid = 1.0 - smoothstep(0.35, 0.85, hexEdgeDistance);
+  float sceneGrid = gridType < 0.5 ? squareGrid : gridType < 2.5 ? hexGrid : isoGrid;
+  float markerAlpha = 0.0;
+  vec3 markerRgb = signalColor;
+  ${gridMarkerLayers}
+  markerAlpha = clamp(markerAlpha, 0.0, 1.0) * clipMask;
+  float gridAlpha = sceneGrid * showGrid * 0.24 * clipMask;
+  float alpha = max(markerAlpha, gridAlpha);
+  vec3 rgb = markerAlpha >= gridAlpha ? markerRgb : signalColor;
+  return half4(half3(rgb) * alpha, alpha);
+}`;
+
+export const SHADERS: Record<ShaderPreset, string> = { glow, beam, radar, grid };
