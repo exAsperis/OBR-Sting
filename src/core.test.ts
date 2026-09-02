@@ -190,6 +190,7 @@ describe("versioned detector parsing", () => {
     expect(parseEffectDefinition(configured)).toMatchObject(configured);
     expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, decoration: "aliens" } })).toMatchObject({ radar: { decoration: "m314" } });
     expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, decoration: "modern" } })).toMatchObject({ radar: { decoration: "modern" } });
+    expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, decoration: "arcane" } })).toMatchObject({ radar: { decoration: "arcane" } });
     expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, sweepDirection: "inward" } })).toBeNull();
     expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, echoFadeDuration: 31 } })).toBeNull();
     expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, distanceScale: "exponential" } })).toBeNull();

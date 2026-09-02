@@ -186,11 +186,25 @@ half4 main(float2 coord) {
   float modernTickLength = max(localPixel * 4.0, radialSpan * 0.025);
   float modernTicks = (1.0 - smoothstep(0.0, localPixel * 0.45, modernTickDistance)) * (1.0 - smoothstep(modernTickLength, modernTickLength + localPixel, abs(local.x))) * modernNorth;
   float modernDecoration = max(max(modernThinRings, modernOuterRing), max(modernVertical, modernTicks));
+  float arcaneOuterRing = 1.0 - smoothstep(localPixel * 0.5, localPixel * 1.5, abs(distanceFromCenter - outerRadius));
+  float arcaneInnerRing = 1.0 - smoothstep(0.0, localPixel * 0.45, abs(distanceFromCenter - innerRadius));
+  vec2 arcaneSquare0Point = vec2(0.707107 * local.x - 0.707107 * local.y, 0.707107 * local.x + 0.707107 * local.y);
+  vec2 arcaneSquare30Point = vec2(0.965926 * local.x - 0.258819 * local.y, 0.258819 * local.x + 0.965926 * local.y);
+  vec2 arcaneSquare60Point = vec2(0.965926 * local.x + 0.258819 * local.y, -0.258819 * local.x + 0.965926 * local.y);
+  float arcaneSquareExtent = outerRadius * 0.707107;
+  float arcaneSquareDistance = min(
+    abs(max(abs(arcaneSquare0Point.x), abs(arcaneSquare0Point.y)) - arcaneSquareExtent),
+    min(abs(max(abs(arcaneSquare30Point.x), abs(arcaneSquare30Point.y)) - arcaneSquareExtent), abs(max(abs(arcaneSquare60Point.x), abs(arcaneSquare60Point.y)) - arcaneSquareExtent))
+  );
+  float arcaneSquares = 1.0 - smoothstep(localPixel * 0.5, localPixel * 1.5, arcaneSquareDistance);
+  float arcaneDecoration = max(max(arcaneOuterRing, arcaneInnerRing), arcaneSquares);
   float m314Enabled = step(0.5, decorationMode) * (1.0 - step(1.5, decorationMode));
-  float modernEnabled = step(1.5, decorationMode);
-  float decoration = max(m314Enabled * discMask * m314Decoration, modernEnabled * modernDecoration);
+  float modernEnabled = step(1.5, decorationMode) * (1.0 - step(2.5, decorationMode));
+  float arcaneEnabled = step(2.5, decorationMode);
+  float decoration = max(max(m314Enabled * discMask * m314Decoration, modernEnabled * modernDecoration), arcaneEnabled * arcaneDecoration);
   float interlace = mix(0.62, 1.0, step(0.5, fract(floor(coord.y) * 0.5)));
-  float decorationAlpha = decoration * 0.72 * interlace;
+  float crtEnabled = m314Enabled + modernEnabled;
+  float decorationAlpha = decoration * 0.72 * mix(1.0, interlace, crtEnabled);
   float activeAlpha = max(sweepAlpha, echoAlpha);
   float alpha = clamp(max(activeAlpha, decorationAlpha), 0.0, 1.0);
   float activeColorWeight = sweepAlpha >= echoAlpha ? sweepColorWeight : echoColorMix;

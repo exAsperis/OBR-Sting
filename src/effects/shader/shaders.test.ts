@@ -32,7 +32,13 @@ describe("shader presets", () => {
     expect(SHADERS.radar).toContain("localPixel * 1.8333");
     expect(SHADERS.radar).toContain("float interlace");
     expect(SHADERS.radar).toContain("floor(coord.y)");
-    expect(SHADERS.radar).toContain("decoration * 0.72 * interlace");
+    expect(SHADERS.radar).toContain("arcaneOuterRing");
+    expect(SHADERS.radar).toContain("arcaneInnerRing");
+    expect(SHADERS.radar).toContain("arcaneSquare0Point");
+    expect(SHADERS.radar).toContain("arcaneSquare30Point");
+    expect(SHADERS.radar).toContain("arcaneSquare60Point");
+    expect(SHADERS.radar).toContain("float crtEnabled = m314Enabled + modernEnabled");
+    expect(SHADERS.radar).toContain("mix(1.0, interlace, crtEnabled)");
     expect(SHADERS.radar).toContain("trailEnabled");
     expect(SHADERS.radar).toContain("trailDistance");
     expect(SHADERS.radar).toContain("trailSpan = 0.5 * trailEnabled");
