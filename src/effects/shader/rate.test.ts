@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ShaderEffectDefinitionV1 } from "../../types";
-import { averageDetectionDirections, circularPhaseCrossed, radarDistancePosition, radarEchoSize, resolveEffectIntensity, resolveRadarEchoSize, resolveRadarFadeDuration, resolveSignalColor, resolveStrengthLinkedRate, resolveStrengthLinkedShaderValues, resolveStrengthLinkedValue, shaderConfigHash, shaderUniforms } from "./executor";
+import { averageDetectionDirections, circularPhaseCrossed, radarDistancePosition, radarEchoSize, radarSweepIsAnimated, resolveEffectIntensity, resolveRadarEchoSize, resolveRadarFadeDuration, resolveSignalColor, resolveStrengthLinkedRate, resolveStrengthLinkedShaderValues, resolveStrengthLinkedValue, shaderConfigHash, shaderUniforms } from "./executor";
 
 describe("radar helpers", () => {
   const radar: ShaderEffectDefinitionV1 = {
@@ -46,6 +46,18 @@ describe("radar helpers", () => {
     expect(modernUniforms.find((entry) => entry.name === "decorationMode")?.value).toBe(2);
     const arcaneUniforms = shaderUniforms({ ...radar, radar: { ...radar.radar!, decoration: "arcane" } }, 1, 1, { x: 0, y: -1 });
     expect(arcaneUniforms.find((entry) => entry.name === "decorationMode")?.value).toBe(3);
+    const staticUniforms = shaderUniforms({ ...radar, radar: { ...radar.radar!, sweepType: "none" } }, 1, 1, { x: 0, y: -1 });
+    expect(staticUniforms.find((entry) => entry.name === "sweepType")?.value).toBe(-1);
+    const runeUniforms = shaderUniforms({ ...radar, radar: { ...radar.radar!, echoStyle: "rune" } }, 1, 1, { x: 0, y: -1 });
+    expect(runeUniforms.find((entry) => entry.name === "echoStyle")?.value).toBe(2);
+    expect(runeUniforms.find((entry) => entry.name === "echoRune0")?.value).toBe(0);
+    expect(runeUniforms.find((entry) => entry.name === "echoRune6")?.value).toBe(6);
+    expect(runeUniforms.find((entry) => entry.name === "echoRune11")?.value).toBe(1);
+  });
+
+  it("excludes static radar mode from all sweep and fade ticking", () => {
+    expect(radarSweepIsAnimated({ ...radar, radar: { ...radar.radar!, sweepType: "none" } })).toBe(false);
+    expect(radarSweepIsAnimated(radar)).toBe(true);
   });
 });
 

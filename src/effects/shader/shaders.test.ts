@@ -13,10 +13,17 @@ describe("shader presets", () => {
   it("composes a configurable radar with sweep and 32 echo slots", () => {
     expect(SHADERS.radar).toContain("sweepPhase");
     expect(SHADERS.radar).toContain("sweepType");
+    expect(SHADERS.radar).toContain("sweepEnabled = step(-0.5, sweepType)");
     expect(SHADERS.radar).toContain("echoStyle");
     expect(SHADERS.radar).toContain("echoPosition0");
     expect(SHADERS.radar).toContain("echoPosition31");
     expect(SHADERS.radar).toContain("echoSize31");
+    expect(SHADERS.radar).toContain("echoRune31");
+    expect(SHADERS.radar).toContain("float runeSegment");
+    expect(SHADERS.radar).toContain("float runeDistance");
+    expect(SHADERS.radar).toContain("echoRuneCore31");
+    expect(SHADERS.radar).toContain("echoRuneGlow31");
+    expect(SHADERS.radar).toContain("glyph < 8.5");
     expect(SHADERS.radar).toContain("decorationMode");
     expect(SHADERS.radar).toContain("ringDistance");
     expect(SHADERS.radar).toContain("innerBand");

@@ -94,12 +94,18 @@ const beamMask = `
 const beam = buildShader(beamMask, configurableAnimation, 0.82, "uniform vec2 beamDirection;\nuniform float beamWidth;\nuniform float beamOriginWidth;");
 
 export const RADAR_ECHO_CAPACITY = 32;
-const radarEchoUniforms = Array.from({ length: RADAR_ECHO_CAPACITY }, (_, index) => `uniform vec2 echoPosition${index};\nuniform float echoIntensity${index};\nuniform float echoSize${index};`).join("\n");
+const radarEchoUniforms = Array.from({ length: RADAR_ECHO_CAPACITY }, (_, index) => `uniform vec2 echoPosition${index};\nuniform float echoIntensity${index};\nuniform float echoSize${index};\nuniform float echoRune${index};`).join("\n");
 const radarEchoLayers = Array.from({ length: RADAR_ECHO_CAPACITY }, (_, index) => `
   float echoDistance${index} = length(local - echoPosition${index});
+  vec2 echoRunePoint${index} = (local - echoPosition${index}) / max(echoSize${index}, 0.0001);
+  float echoRuneDistance${index} = runeDistance(echoRunePoint${index}, echoRune${index});
+  float echoRuneCore${index} = 1.0 - smoothstep(0.075, 0.13, echoRuneDistance${index});
+  float echoRuneGlow${index} = exp(-echoRuneDistance${index} * echoRuneDistance${index} / 0.035) * 0.32;
   float echo${index} = echoStyle < 0.5
     ? 1.0 - smoothstep(echoSize${index} * 0.72, echoSize${index}, echoDistance${index})
-    : exp(-echoDistance${index} * echoDistance${index} / max(echoSize${index} * echoSize${index} * 0.45, 0.000001));
+    : echoStyle < 1.5
+      ? exp(-echoDistance${index} * echoDistance${index} / max(echoSize${index} * echoSize${index} * 0.45, 0.000001))
+      : max(echoRuneCore${index}, echoRuneGlow${index});
   float echoContribution${index} = echo${index} * echoIntensity${index};
   echoes = max(echoes, echoContribution${index});
   echoColorWeight = max(echoColorWeight, echoContribution${index} * echoIntensity${index});`).join("\n");
@@ -125,6 +131,61 @@ uniform float outerRadius;
 uniform vec2 effectSize;
 uniform float effectRotation;
 ${radarEchoUniforms}
+
+float runeSegment(vec2 point, vec2 start, vec2 end) {
+  vec2 fromStart = point - start;
+  vec2 segment = end - start;
+  return length(fromStart - segment * clamp(dot(fromStart, segment) / max(dot(segment, segment), 0.0001), 0.0, 1.0));
+}
+
+float runeDistance(vec2 point, float glyph) {
+  float distanceToRune = 10.0;
+  if (glyph < 0.5) {
+    distanceToRune = min(runeSegment(point, vec2(-0.58, -0.58), vec2(0.0, 0.62)), runeSegment(point, vec2(0.0, 0.62), vec2(0.58, -0.58)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.34, -0.18), vec2(0.34, -0.18)));
+  } else if (glyph < 1.5) {
+    distanceToRune = min(runeSegment(point, vec2(0.35, -0.62), vec2(-0.28, -0.10)), runeSegment(point, vec2(-0.28, -0.10), vec2(0.30, 0.08)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(0.30, 0.08), vec2(-0.38, 0.62)));
+  } else if (glyph < 2.5) {
+    distanceToRune = runeSegment(point, vec2(0.0, -0.62), vec2(0.0, 0.62));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(0.0, -0.30), vec2(-0.48, -0.55)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(0.0, -0.30), vec2(0.48, -0.55)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.34, 0.32), vec2(0.34, 0.32)));
+  } else if (glyph < 3.5) {
+    distanceToRune = min(runeSegment(point, vec2(-0.48, -0.58), vec2(0.48, 0.58)), runeSegment(point, vec2(0.48, -0.58), vec2(-0.48, 0.58)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.48, -0.58), vec2(0.48, -0.58)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.48, 0.58), vec2(0.48, 0.58)));
+  } else if (glyph < 4.5) {
+    distanceToRune = min(runeSegment(point, vec2(0.0, -0.62), vec2(0.52, -0.05)), runeSegment(point, vec2(0.52, -0.05), vec2(0.0, 0.62)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(0.0, 0.62), vec2(-0.52, -0.05)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.52, -0.05), vec2(0.0, -0.62)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.34, 0.30), vec2(0.34, -0.30)));
+  } else if (glyph < 5.5) {
+    distanceToRune = runeSegment(point, vec2(0.0, 0.62), vec2(0.0, -0.08));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(0.0, -0.08), vec2(-0.52, -0.58)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(0.0, -0.08), vec2(0.52, -0.58)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.34, 0.30), vec2(0.34, 0.30)));
+  } else if (glyph < 6.5) {
+    distanceToRune = min(runeSegment(point, vec2(-0.50, -0.58), vec2(0.32, -0.18)), runeSegment(point, vec2(0.32, -0.18), vec2(-0.30, 0.18)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.30, 0.18), vec2(0.50, 0.58)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.42, 0.02), vec2(0.42, 0.02)));
+  } else if (glyph < 7.5) {
+    distanceToRune = min(runeSegment(point, vec2(0.45, -0.55), vec2(-0.38, -0.30)), runeSegment(point, vec2(-0.38, -0.30), vec2(-0.38, 0.30)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.38, 0.30), vec2(0.45, 0.55)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.10, 0.0), vec2(0.52, 0.0)));
+  } else if (glyph < 8.5) {
+    distanceToRune = min(runeSegment(point, vec2(0.0, -0.65), vec2(0.44, -0.12)), runeSegment(point, vec2(0.44, -0.12), vec2(0.0, 0.42)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(0.0, 0.42), vec2(-0.44, -0.12)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.44, -0.12), vec2(0.0, -0.65)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(0.0, 0.42), vec2(0.0, 0.65)));
+  } else {
+    distanceToRune = runeSegment(point, vec2(0.0, -0.62), vec2(0.0, 0.62));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(0.0, -0.28), vec2(-0.50, 0.12)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(0.0, 0.28), vec2(0.50, -0.12)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.38, -0.48), vec2(0.38, 0.48)));
+  }
+  return distanceToRune;
+}
 
 half4 main(float2 coord) {
   vec2 centered = (coord / size - vec2(0.5)) * 2.0 - centerOffset;
@@ -152,7 +213,8 @@ half4 main(float2 coord) {
   float echoes = 0.0;
   float echoColorWeight = 0.0;
   ${radarEchoLayers}
-  float sweepSignal = max(sweep, trail);
+  float sweepEnabled = step(-0.5, sweepType);
+  float sweepSignal = max(sweep, trail) * sweepEnabled;
   float sweepColorWeight = max(sweep, trail * trailFade) / max(sweepSignal, 0.0001);
   float echoColorMix = echoColorWeight / max(echoes, 0.0001);
   float sweepAlpha = sweepSignal * depth * strength * discMask;

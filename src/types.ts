@@ -76,13 +76,13 @@ export interface ShaderEffectDefinitionV1 {
   /** Width at the beam start as a percentage of the target width. */
   beamOriginWidth?: number;
   radar?: {
-    echoStyle: "circle" | "blob";
+    echoStyle: "circle" | "blob" | "rune";
     echoSize: number;
     distanceScale: "linear" | "logarithmic";
     decoration: "none" | "m314" | "modern" | "arcane";
     sweepTrail: number;
     brightness: number;
-    sweepType: "radial" | "angular";
+    sweepType: "none" | "radial" | "angular";
     sweepDirection: "outward" | "inward" | "clockwise" | "counterclockwise";
     echoFadeDuration: number;
   };

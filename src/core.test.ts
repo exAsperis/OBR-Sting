@@ -185,12 +185,13 @@ describe("versioned detector parsing", () => {
     expect(parseEffectDefinition({ ...radial, animation: { ...radial.animation, waveWidth: 2 } })).toBeNull();
   });
   it("parses radar defaults, configuration, and dynamic echo fade", () => {
-    expect(parseEffectDefinition({ ...effect(), preset: "radar" })).toMatchObject({ preset: "radar", radar: { echoStyle: "circle", echoSize: 100, distanceScale: "linear", decoration: "none", sweepTrail: 0, brightness: 0.35, sweepType: "radial", sweepDirection: "outward", echoFadeDuration: 3 } });
+    expect(parseEffectDefinition({ ...effect(), preset: "radar" })).toMatchObject({ preset: "radar", radar: { echoStyle: "circle", echoSize: 100, distanceScale: "linear", decoration: "none", sweepTrail: 0, brightness: 0.35, sweepType: "none", sweepDirection: "outward", echoFadeDuration: 3 } });
     const configured = { ...effect(), preset: "radar", shape: "square", radar: { echoStyle: "blob", echoSize: 175, distanceScale: "logarithmic", decoration: "m314", sweepTrail: 65, brightness: 0.7, sweepType: "angular", sweepDirection: "counterclockwise", echoFadeDuration: 7 }, dynamicRanges: { echoFadeDuration: { minimum: 1, maximum: 12 }, radarBrightness: { minimum: 0.1, maximum: 0.9 }, radarSweepTrail: { minimum: 20, maximum: 80 }, radarEchoSize: { minimum: 50, maximum: 250 } } };
     expect(parseEffectDefinition(configured)).toMatchObject(configured);
     expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, decoration: "aliens" } })).toMatchObject({ radar: { decoration: "m314" } });
     expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, decoration: "modern" } })).toMatchObject({ radar: { decoration: "modern" } });
     expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, decoration: "arcane" } })).toMatchObject({ radar: { decoration: "arcane" } });
+    expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, echoStyle: "rune" } })).toMatchObject({ radar: { echoStyle: "rune" } });
     expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, sweepDirection: "inward" } })).toBeNull();
     expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, echoFadeDuration: 31 } })).toBeNull();
     expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, distanceScale: "exponential" } })).toBeNull();

@@ -5,8 +5,8 @@ import type { EffectDispatchBatch, EffectExecutor, EffectReconcileReport } from 
 import { resolveShaderGeometry } from "./geometry";
 import { RADAR_ECHO_CAPACITY, SHADERS } from "./shaders";
 
-interface RadarCandidate { id: string; position: { x: number; y: number }; phase: number; size: number }
-interface RadarEcho { position: { x: number; y: number }; refreshedAt: number; size: number }
+interface RadarCandidate { id: string; position: { x: number; y: number }; phase: number; size: number; rune: number }
+interface RadarEcho { position: { x: number; y: number }; refreshedAt: number; size: number; rune: number }
 interface RadarRuntime {
   candidates: RadarCandidate[];
   echoes: Map<string, RadarEcho>;
@@ -28,7 +28,11 @@ interface RuntimeState {
 
 const EPSILON = 0.005;
 const itemCenter = async (item: Item): Promise<{ x: number; y: number }> => isLight(item) ? item.position : (await OBR.scene.items.getItemBounds([item.id])).center;
-export const DEFAULT_RADAR = { echoStyle: "circle", echoSize: 100, distanceScale: "linear", decoration: "none", sweepTrail: 0, brightness: 0.35, sweepType: "radial", sweepDirection: "outward", echoFadeDuration: 3 } as const;
+export const DEFAULT_RADAR = { echoStyle: "circle", echoSize: 100, distanceScale: "linear", decoration: "none", sweepTrail: 0, brightness: 0.35, sweepType: "none", sweepDirection: "outward", echoFadeDuration: 3 } as const;
+
+export function radarSweepIsAnimated(effect: ShaderEffectDefinitionV1): boolean {
+  return (effect.radar?.sweepType ?? DEFAULT_RADAR.sweepType) !== "none";
+}
 
 export function circularPhaseCrossed(previous: number, current: number, target: number): boolean {
   if (current >= previous) return target > previous && target <= current;
@@ -178,9 +182,9 @@ export function shaderUniforms(effect: ShaderEffectDefinitionV1, strength: numbe
       if (index >= 0) values.splice(index, 1);
     }
     values.push({ name: "sweepPhase", value: 0 });
-    values.push({ name: "sweepType", value: effect.radar?.sweepType === "angular" ? 1 : 0 });
+    values.push({ name: "sweepType", value: effect.radar?.sweepType === "none" ? -1 : effect.radar?.sweepType === "angular" ? 1 : 0 });
     values.push({ name: "sweepDirection", value: ["inward", "counterclockwise"].includes(effect.radar?.sweepDirection ?? "outward") ? -1 : 1 });
-    values.push({ name: "echoStyle", value: effect.radar?.echoStyle === "blob" ? 1 : 0 });
+    values.push({ name: "echoStyle", value: effect.radar?.echoStyle === "rune" ? 2 : effect.radar?.echoStyle === "blob" ? 1 : 0 });
     values.push({ name: "decorationMode", value: ({ none: 0, m314: 1, modern: 2, arcane: 3 } as const)[effect.radar?.decoration ?? "none"] });
     values.push({ name: "trailEnabled", value: resolveDynamicValue(effect, "radarSweepTrail", effect.radar?.sweepTrail ?? DEFAULT_RADAR.sweepTrail, strength, undefined, 0, 100) / 100 });
     values.push({ name: "brightness", value: resolveDynamicValue(effect, "radarBrightness", effect.radar?.brightness ?? DEFAULT_RADAR.brightness, strength, undefined, 0, 1) });
@@ -188,6 +192,7 @@ export function shaderUniforms(effect: ShaderEffectDefinitionV1, strength: numbe
       values.push({ name: `echoPosition${index}`, value: { x: 0, y: 0 } });
       values.push({ name: `echoIntensity${index}`, value: 0 });
       values.push({ name: `echoSize${index}`, value: 0.028 });
+      values.push({ name: `echoRune${index}`, value: index % 10 });
     }
   }
   return values;
@@ -222,12 +227,12 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
   private radarTicking = false;
 
   private ensureRadarTimer(): void {
-    if (this.radarTimer !== undefined || ![...this.states.values()].some((state) => state.radar)) return;
+    if (this.radarTimer !== undefined || ![...this.states.values()].some((state) => state.radar && radarSweepIsAnimated(state.radar.effect))) return;
     this.radarTimer = window.setInterval(() => void this.tickRadars(), 50);
   }
 
   private stopRadarTimerIfIdle(): void {
-    if (this.radarTimer === undefined || [...this.states.values()].some((state) => state.radar)) return;
+    if (this.radarTimer === undefined || [...this.states.values()].some((state) => state.radar && radarSweepIsAnimated(state.radar.effect))) return;
     window.clearInterval(this.radarTimer);
     this.radarTimer = undefined;
   }
@@ -247,11 +252,12 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
       for (const [key, state] of this.states) {
         const radar = state.radar;
         if (!radar) continue;
+        if (!radarSweepIsAnimated(radar.effect)) continue;
         const phase = this.radarPhase(radar, now);
         const reverse = ["inward", "counterclockwise"].includes(radar.effect.radar?.sweepDirection ?? "outward");
         for (const candidate of radar.candidates) {
           const crossed = reverse ? circularPhaseCrossed(phase, radar.lastPhase, candidate.phase) : circularPhaseCrossed(radar.lastPhase, phase, candidate.phase);
-          if (crossed) radar.echoes.set(candidate.id, { position: candidate.position, refreshedAt: now, size: candidate.size });
+          if (crossed) radar.echoes.set(candidate.id, { position: candidate.position, refreshedAt: now, size: candidate.size, rune: candidate.rune });
         }
         radar.lastPhase = phase;
         const fade = resolveRadarFadeDuration(radar.effect, radar.strength) * 1000;
@@ -265,9 +271,11 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
           const position = uniforms.find((uniform) => uniform.name === `echoPosition${index}`);
           const intensity = uniforms.find((uniform) => uniform.name === `echoIntensity${index}`);
           const size = uniforms.find((uniform) => uniform.name === `echoSize${index}`);
+          const rune = uniforms.find((uniform) => uniform.name === `echoRune${index}`);
           if (position) position.value = echo.position;
           if (intensity) intensity.value = Math.max(0, 1 - (now - echo.refreshedAt) / fade);
           if (size) size.value = echo.size;
+          if (rune) rune.value = echo.rune;
         });
         await OBR.scene.local.updateItems<Effect>([state.localItemId], (items) => { for (const item of items) item.uniforms = uniforms; });
       }
@@ -287,7 +295,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
       this.initialized = true;
     }
     const active = new Set(desired.map((entry) => entry.runtimeKey));
-    const obsolete = [...this.states.entries()].filter(([key, state]) => !active.has(key) && !state.radar);
+    const obsolete = [...this.states.entries()].filter(([key, state]) => !active.has(key) && (!state.radar || (state.radar.effect.radar?.sweepType ?? DEFAULT_RADAR.sweepType) === "none"));
     if (obsolete.length) {
       await OBR.scene.local.deleteItems(obsolete.map(([, state]) => state.localItemId));
       for (const [key] of obsolete) this.states.delete(key);
@@ -369,7 +377,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
             item.position = effectLayout.position;
             item.zIndex = effectZIndex;
             item.layer = effectLayer;
-            item.uniforms = shaderUniforms(effect, context.strength, scale, direction, resolved, responsiveDirection);
+            if (effect.preset !== "radar" || radarSweepIsAnimated(effect)) item.uniforms = shaderUniforms(effect, context.strength, scale, direction, resolved, responsiveDirection);
           }
         });
         existing.strength = context.strength;
@@ -396,11 +404,33 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
           const position = { x: unit.x * radius / shapeMetric, y: unit.y * radius / shapeMetric };
           const phase = sweepType === "radial" ? Math.max(0, Math.min(1, detection.distance / context.rule.range.outer)) : ((Math.atan2(position.x, -position.y) / (Math.PI * 2)) + 1) % 1;
           const echoSize = resolveRadarEchoSize(effect, detection.strength, samples[index].area, targetArea);
-          return { id: detection.emitter.id, position, phase, size: echoSize };
+          return { id: detection.emitter.id, position, phase, size: echoSize, rune: index % 10 };
         });
+        const previousSweepType = existing.radar.effect.radar?.sweepType ?? DEFAULT_RADAR.sweepType;
+        if (previousSweepType === "none" && sweepType !== "none") {
+          existing.radar.echoes.clear();
+          existing.radar.lastPhase = 0;
+          existing.radar.phaseOrigin = performance.now();
+        }
         existing.radar.effect = effect;
         existing.radar.strength = context.strength;
         existing.radar.scale = scale;
+        if (sweepType === "none") {
+          const now = performance.now();
+          existing.radar.echoes = new Map(existing.radar.candidates.map((candidate) => [candidate.id, { position: candidate.position, refreshedAt: now, size: candidate.size, rune: candidate.rune }]));
+          const staticUniforms = shaderUniforms(effect, context.strength, scale, { x: 0, y: -1 }, resolved);
+          [...existing.radar.echoes.values()].forEach((echo, index) => {
+            const position = staticUniforms.find((uniform) => uniform.name === `echoPosition${index}`);
+            const intensity = staticUniforms.find((uniform) => uniform.name === `echoIntensity${index}`);
+            const size = staticUniforms.find((uniform) => uniform.name === `echoSize${index}`);
+            const rune = staticUniforms.find((uniform) => uniform.name === `echoRune${index}`);
+            if (position) position.value = echo.position;
+            if (intensity) intensity.value = 1;
+            if (size) size.value = echo.size;
+            if (rune) rune.value = echo.rune;
+          });
+          await OBR.scene.local.updateItems<Effect>([existing.localItemId], (items) => { for (const item of items) item.uniforms = staticUniforms; });
+        }
       }
     }
     this.ensureRadarTimer();
