@@ -181,7 +181,7 @@ export function shaderUniforms(effect: ShaderEffectDefinitionV1, strength: numbe
     values.push({ name: "sweepType", value: effect.radar?.sweepType === "angular" ? 1 : 0 });
     values.push({ name: "sweepDirection", value: ["inward", "counterclockwise"].includes(effect.radar?.sweepDirection ?? "outward") ? -1 : 1 });
     values.push({ name: "echoStyle", value: effect.radar?.echoStyle === "blob" ? 1 : 0 });
-    values.push({ name: "decorationMode", value: ({ none: 0, aliens: 1, modern: 2 } as const)[effect.radar?.decoration ?? "none"] });
+    values.push({ name: "decorationMode", value: ({ none: 0, m314: 1, modern: 2 } as const)[effect.radar?.decoration ?? "none"] });
     values.push({ name: "trailEnabled", value: resolveDynamicValue(effect, "radarSweepTrail", effect.radar?.sweepTrail ?? DEFAULT_RADAR.sweepTrail, strength, undefined, 0, 100) / 100 });
     values.push({ name: "brightness", value: resolveDynamicValue(effect, "radarBrightness", effect.radar?.brightness ?? DEFAULT_RADAR.brightness, strength, undefined, 0, 1) });
     for (let index = 0; index < RADAR_ECHO_CAPACITY; index += 1) {

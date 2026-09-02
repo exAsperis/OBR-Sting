@@ -6,7 +6,7 @@ describe("radar helpers", () => {
   const radar: ShaderEffectDefinitionV1 = {
     id: "radar", type: "shader", enabled: true, target: { type: "detector" }, audience: { type: "everyone" },
     preset: "radar", shape: "square", placement: "above", color: "#00ff88", maxIntensity: 0.5, spread: 1,
-    radar: { echoStyle: "blob", echoSize: 100, distanceScale: "logarithmic", decoration: "aliens", sweepTrail: 100, brightness: 0.4, sweepType: "angular", sweepDirection: "counterclockwise", echoFadeDuration: 5 },
+    radar: { echoStyle: "blob", echoSize: 100, distanceScale: "logarithmic", decoration: "m314", sweepTrail: 100, brightness: 0.4, sweepType: "angular", sweepDirection: "counterclockwise", echoFadeDuration: 5 },
     dynamicRanges: { echoFadeDuration: { minimum: 2, maximum: 8 }, radarBrightness: { minimum: 0.2, maximum: 0.8 }, radarSweepTrail: { minimum: 20, maximum: 80 }, radarEchoSize: { minimum: 50, maximum: 200 } },
   };
 

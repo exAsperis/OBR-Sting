@@ -28,8 +28,11 @@ describe("shader presets", () => {
     expect(SHADERS.radar).toContain("modernVertical");
     expect(SHADERS.radar).toContain("modernTicks");
     expect(SHADERS.radar).toContain("localPixel * 0.45");
-    expect(SHADERS.radar).toContain("localPixel * 3.5");
-    expect(SHADERS.radar).toContain("localPixel * 4.5");
+    expect(SHADERS.radar).toContain("localPixel * 0.8333");
+    expect(SHADERS.radar).toContain("localPixel * 1.8333");
+    expect(SHADERS.radar).toContain("float interlace");
+    expect(SHADERS.radar).toContain("floor(coord.y)");
+    expect(SHADERS.radar).toContain("decoration * 0.72 * interlace");
     expect(SHADERS.radar).toContain("trailEnabled");
     expect(SHADERS.radar).toContain("trailDistance");
     expect(SHADERS.radar).toContain("trailSpan = 0.5 * trailEnabled");

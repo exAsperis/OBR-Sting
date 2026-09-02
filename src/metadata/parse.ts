@@ -301,19 +301,20 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     const echoStyle = radarValue.echoStyle ?? "circle";
     const echoSize = radarValue.echoSize ?? 100;
     const distanceScale = radarValue.distanceScale ?? "linear";
-    const decoration = radarValue.decoration ?? "none";
+    const decorationValue = radarValue.decoration ?? "none";
+    const decoration = decorationValue === "aliens" ? "m314" : decorationValue;
     const rawSweepTrail = radarValue.sweepTrail ?? 0;
     const sweepTrail = typeof rawSweepTrail === "boolean" ? (rawSweepTrail ? 100 : 0) : rawSweepTrail;
     const brightness = radarValue.brightness ?? 0.35;
     const sweepType = radarValue.sweepType ?? "radial";
     const sweepDirection = radarValue.sweepDirection ?? (sweepType === "angular" ? "clockwise" : "outward");
     const echoFadeDuration = radarValue.echoFadeDuration ?? 3;
-    if (!["circle", "blob"].includes(String(echoStyle)) || !finite(echoSize) || echoSize < 10 || echoSize > 400 || !["linear", "logarithmic"].includes(String(distanceScale)) || !["none", "aliens", "modern"].includes(String(decoration)) || !["radial", "angular"].includes(String(sweepType))) return null;
+    if (!["circle", "blob"].includes(String(echoStyle)) || !finite(echoSize) || echoSize < 10 || echoSize > 400 || !["linear", "logarithmic"].includes(String(distanceScale)) || !["none", "m314", "modern"].includes(String(decoration)) || !["radial", "angular"].includes(String(sweepType))) return null;
     if (!finite(sweepTrail) || sweepTrail < 0 || sweepTrail > 100 || !finite(brightness) || brightness < 0 || brightness > 1) return null;
     if (!["outward", "inward", "clockwise", "counterclockwise"].includes(String(sweepDirection))) return null;
     if ((sweepType === "radial") !== ["outward", "inward"].includes(String(sweepDirection))) return null;
     if (!finite(echoFadeDuration) || echoFadeDuration < 0.1 || echoFadeDuration > 30) return null;
-    radar = { echoStyle: echoStyle as "circle" | "blob", echoSize, distanceScale: distanceScale as "linear" | "logarithmic", decoration: decoration as "none" | "aliens" | "modern", sweepTrail, brightness, sweepType: sweepType as "radial" | "angular", sweepDirection: sweepDirection as NonNullable<ShaderEffectDefinitionV1["radar"]>["sweepDirection"], echoFadeDuration };
+    radar = { echoStyle: echoStyle as "circle" | "blob", echoSize, distanceScale: distanceScale as "linear" | "logarithmic", decoration: decoration as "none" | "m314" | "modern", sweepTrail, brightness, sweepType: sweepType as "radial" | "angular", sweepDirection: sweepDirection as NonNullable<ShaderEffectDefinitionV1["radar"]>["sweepDirection"], echoFadeDuration };
   }
   return {
     id: value.id,

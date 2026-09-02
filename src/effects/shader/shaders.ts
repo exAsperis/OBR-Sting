@@ -167,7 +167,7 @@ half4 main(float2 coord) {
   float outerSegmentAngle = 1.0 - step(0.30, fract(angularPosition + 0.56));
   float innerSegment = smoothstep(0.215, 0.225, radialPosition) * (1.0 - smoothstep(0.275, 0.285, radialPosition)) * innerSegmentAngle;
   float outerSegment = smoothstep(0.90, 0.91, radialPosition) * (1.0 - smoothstep(0.97, 0.98, radialPosition)) * outerSegmentAngle;
-  float aliensDecoration = max(max(spokes, rings * arcGate), max(innerBand, max(innerSegment, outerSegment)));
+  float m314Decoration = max(max(spokes, rings * arcGate), max(innerBand, max(innerSegment, outerSegment)));
   float localPixel = 2.0 / max(min(size.x * effectSize.x, size.y * effectSize.y), 1.0);
   float radialSpan = max(outerRadius - innerRadius, 0.0001);
   float modernThinRingDistance = min(
@@ -175,7 +175,7 @@ half4 main(float2 coord) {
     min(abs(distanceFromCenter - (innerRadius + radialSpan * 0.50)), abs(distanceFromCenter - (innerRadius + radialSpan * 0.75)))
   );
   float modernThinRings = 1.0 - smoothstep(0.0, localPixel * 0.45, modernThinRingDistance);
-  float modernOuterRing = 1.0 - smoothstep(localPixel * 3.5, localPixel * 4.5, abs(distanceFromCenter - outerRadius));
+  float modernOuterRing = 1.0 - smoothstep(localPixel * 0.8333, localPixel * 1.8333, abs(distanceFromCenter - outerRadius));
   float modernNorth = 1.0 - step(0.0, local.y);
   float modernRadialBounds = step(innerRadius, distanceFromCenter) * step(distanceFromCenter, outerRadius);
   float modernVertical = (1.0 - smoothstep(0.0, localPixel * 0.45, abs(local.x))) * modernNorth * modernRadialBounds;
@@ -186,10 +186,11 @@ half4 main(float2 coord) {
   float modernTickLength = max(localPixel * 4.0, radialSpan * 0.025);
   float modernTicks = (1.0 - smoothstep(0.0, localPixel * 0.45, modernTickDistance)) * (1.0 - smoothstep(modernTickLength, modernTickLength + localPixel, abs(local.x))) * modernNorth;
   float modernDecoration = max(max(modernThinRings, modernOuterRing), max(modernVertical, modernTicks));
-  float aliensEnabled = step(0.5, decorationMode) * (1.0 - step(1.5, decorationMode));
+  float m314Enabled = step(0.5, decorationMode) * (1.0 - step(1.5, decorationMode));
   float modernEnabled = step(1.5, decorationMode);
-  float decoration = max(aliensEnabled * discMask * aliensDecoration, modernEnabled * modernDecoration);
-  float decorationAlpha = decoration * 0.72;
+  float decoration = max(m314Enabled * discMask * m314Decoration, modernEnabled * modernDecoration);
+  float interlace = mix(0.62, 1.0, step(0.5, fract(floor(coord.y) * 0.5)));
+  float decorationAlpha = decoration * 0.72 * interlace;
   float activeAlpha = max(sweepAlpha, echoAlpha);
   float alpha = clamp(max(activeAlpha, decorationAlpha), 0.0, 1.0);
   float activeColorWeight = sweepAlpha >= echoAlpha ? sweepColorWeight : echoColorMix;
