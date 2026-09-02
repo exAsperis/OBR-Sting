@@ -37,6 +37,15 @@ describe("DualSliderNumber", () => {
     expect(screen.getAllByRole("slider")).toHaveLength(2);
   });
 
+  it("focuses the first entry and offers cancel and apply actions", () => {
+    const onChange = vi.fn();
+    render(<DualSliderNumber label="Responsive offset" labelContent={<span>Responsive offset</span>} minimumValue={-20} maximumValue={60} min={-100} max={100} step={1} onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit Responsive offset: -20 to 60" }));
+    expect(document.activeElement).toBe(screen.getByRole("spinbutton", { name: "Edit Responsive offset at minimum detection" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel editing Responsive offset" }));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it("constrains descending endpoints from crossing", () => {
     const onChange = vi.fn();
     render(<DualSliderNumber label="Detection range" labelContent={<span>Detection range</span>} minimumValue={60} maximumValue={5} min={0} step={0.5} order="descending" minimumEndpointLabel="Outer range" maximumEndpointLabel="Full strength at" onChange={onChange} />);

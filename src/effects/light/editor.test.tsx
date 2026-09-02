@@ -33,7 +33,7 @@ describe("LightEffectEditor duration", () => {
     renderEditor(effect("spotlight"));
     expect(screen.getByText("Face")).not.toBeNull();
     expect(screen.getByText("Speed")).not.toBeNull();
-    expect(screen.getByText("Light target")).not.toBeNull();
+    expect(screen.getByText("Effect target")).not.toBeNull();
     expect(screen.queryByRole("option", { name: "Detected emitter(s)" })).toBeNull();
     expect(screen.queryByText("Radius (scene units)")).toBeNull();
     expect(screen.getByText("Duration")).not.toBeNull();

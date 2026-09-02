@@ -43,4 +43,19 @@ describe("SliderNumber", () => {
     expect(onChange).toHaveBeenCalledWith(35);
     expect(screen.getByRole("slider", { name: "Responsive offset" })).toBeTruthy();
   });
+
+  it("focuses the entry field and provides cancel and apply buttons", () => {
+    const onChange = vi.fn();
+    render(<SliderNumber label="Rate" value={1} min={0} max={10} step={0.1} onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit Rate: 1" }));
+    const input = screen.getByRole("spinbutton", { name: "Edit Rate" });
+    expect(document.activeElement).toBe(input);
+    fireEvent.change(input, { target: { value: "2.5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel editing Rate" }));
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Edit Rate: 1" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Edit Rate" }), { target: { value: "2.5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply Rate" }));
+    expect(onChange).toHaveBeenCalledWith(2.5);
+  });
 });

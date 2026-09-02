@@ -37,14 +37,23 @@ export function SliderNumber({ label, labelContent, value, min, max, step, input
     }
     setEditing(false);
   };
+  const cancel = () => {
+    setDraft(String(value));
+    setEditing(false);
+  };
+  const editor = (className: string) => <div className={`numeric-editor ${className}`} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) commit(); }}>
+    <input type="number" min={min} max={max} step={inputStep} value={draft} autoFocus onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") commit(); if (event.key === "Escape") { event.preventDefault(); cancel(); } }} aria-label={`Edit ${label}`} />
+    <button type="button" className="numeric-editor-action cancel" title="Cancel" aria-label={`Cancel editing ${label}`} onClick={cancel}>❌</button>
+    <button type="button" className="numeric-editor-action confirm" title="Apply" aria-label={`Apply ${label}`} onClick={commit}>✔️</button>
+  </div>;
 
   return <div className={`numeric-control${className ? ` ${className}` : ""}`} title={tooltip}>
     <div className="numeric-heading">{labelContent ?? <span className="field-label">{label}</span>}{editing && !editReplacesSlider
-      ? <input className="numeric-direct-input" type="number" min={min} max={max} step={inputStep} value={draft} autoFocus onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(event.target.value)} onBlur={commit} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") { event.preventDefault(); setDraft(String(value)); setEditing(false); } }} aria-label={`Edit ${label}`} />
+      ? editor("numeric-direct-editor")
       : <button className="numeric-value" type="button" onClick={() => setEditing(true)} aria-label={`Edit ${label}: ${value}`}>{value.toFixed(decimals)}{suffix}</button>}
     </div>
     {editing && editReplacesSlider
-      ? <input className="range-direct-input" type="number" min={min} max={max} step={inputStep} value={draft} autoFocus onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(event.target.value)} onBlur={commit} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") { event.preventDefault(); setDraft(String(value)); setEditing(false); } }} aria-label={`Edit ${label}`} />
+      ? editor("range-direct-editor")
       : <input type="range" min={min} max={sliderMax} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} aria-label={label} />}
   </div>;
 }
