@@ -188,6 +188,7 @@ describe("versioned detector parsing", () => {
     expect(parseEffectDefinition({ ...effect(), preset: "radar" })).toMatchObject({ preset: "radar", radar: { echoStyle: "circle", echoSize: 100, distanceScale: "linear", decoration: "none", sweepTrail: 0, brightness: 0.35, sweepType: "radial", sweepDirection: "outward", echoFadeDuration: 3 } });
     const configured = { ...effect(), preset: "radar", shape: "square", radar: { echoStyle: "blob", echoSize: 175, distanceScale: "logarithmic", decoration: "aliens", sweepTrail: 65, brightness: 0.7, sweepType: "angular", sweepDirection: "counterclockwise", echoFadeDuration: 7 }, dynamicRanges: { echoFadeDuration: { minimum: 1, maximum: 12 }, radarBrightness: { minimum: 0.1, maximum: 0.9 }, radarSweepTrail: { minimum: 20, maximum: 80 }, radarEchoSize: { minimum: 50, maximum: 250 } } };
     expect(parseEffectDefinition(configured)).toMatchObject(configured);
+    expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, decoration: "modern" } })).toMatchObject({ radar: { decoration: "modern" } });
     expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, sweepDirection: "inward" } })).toBeNull();
     expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, echoFadeDuration: 31 } })).toBeNull();
     expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, distanceScale: "exponential" } })).toBeNull();

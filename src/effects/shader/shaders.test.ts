@@ -23,6 +23,13 @@ describe("shader presets", () => {
     expect(SHADERS.radar).toContain("innerSegmentAngle");
     expect(SHADERS.radar).toContain("outerSegmentAngle");
     expect(SHADERS.radar).toContain("step(0.30");
+    expect(SHADERS.radar).toContain("modernThinRings");
+    expect(SHADERS.radar).toContain("modernOuterRing");
+    expect(SHADERS.radar).toContain("modernVertical");
+    expect(SHADERS.radar).toContain("modernTicks");
+    expect(SHADERS.radar).toContain("localPixel * 0.45");
+    expect(SHADERS.radar).toContain("localPixel * 3.5");
+    expect(SHADERS.radar).toContain("localPixel * 4.5");
     expect(SHADERS.radar).toContain("trailEnabled");
     expect(SHADERS.radar).toContain("trailDistance");
     expect(SHADERS.radar).toContain("trailSpan = 0.5 * trailEnabled");

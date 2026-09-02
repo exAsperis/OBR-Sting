@@ -79,7 +79,7 @@ export interface ShaderEffectDefinitionV1 {
     echoStyle: "circle" | "blob";
     echoSize: number;
     distanceScale: "linear" | "logarithmic";
-    decoration: "none" | "aliens";
+    decoration: "none" | "aliens" | "modern";
     sweepTrail: number;
     brightness: number;
     sweepType: "radial" | "angular";

@@ -42,6 +42,8 @@ describe("radar helpers", () => {
     expect(uniforms.find((entry) => entry.name === "decorationMode")?.value).toBe(1);
     expect(uniforms.find((entry) => entry.name === "trailEnabled")?.value).toBe(0.8);
     expect(uniforms.find((entry) => entry.name === "brightness")?.value).toBe(0.8);
+    const modernUniforms = shaderUniforms({ ...radar, radar: { ...radar.radar!, decoration: "modern" } }, 1, 1, { x: 0, y: -1 });
+    expect(modernUniforms.find((entry) => entry.name === "decorationMode")?.value).toBe(2);
   });
 });
 
