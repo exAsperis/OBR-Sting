@@ -102,8 +102,9 @@ describe("grid visualization helpers", () => {
   });
 
   it("includes Grid image visibility in shader configuration hashing", () => {
-    const base: ShaderEffectDefinitionV1 = { id: "grid", type: "shader", enabled: true, target: { type: "detector" }, audience: { type: "everyone" }, preset: "grid", shape: "circle", placement: "above", color: "#00ff88", maxIntensity: 1, spread: 1, grid: { showGrid: false, showImages: false } };
-    expect(shaderConfigHash(base)).not.toBe(shaderConfigHash({ ...base, grid: { showGrid: false, showImages: true } }));
+    const base: ShaderEffectDefinitionV1 = { id: "grid", type: "shader", enabled: true, target: { type: "detector" }, audience: { type: "everyone" }, preset: "grid", shape: "circle", placement: "above", color: "#00ff88", maxIntensity: 1, spread: 1, grid: { showGrid: false, showImages: false, imageBackgrounds: false } };
+    expect(shaderConfigHash(base)).not.toBe(shaderConfigHash({ ...base, grid: { showGrid: false, showImages: true, imageBackgrounds: false } }));
+    expect(shaderConfigHash(base)).not.toBe(shaderConfigHash({ ...base, grid: { showGrid: false, showImages: false, imageBackgrounds: true } }));
   });
 });
 

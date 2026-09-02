@@ -284,7 +284,10 @@ export const GRID_MARKER_CAPACITY = 32;
 const gridMarkerUniforms = Array.from({ length: GRID_MARKER_CAPACITY }, (_, index) => `uniform vec3 markerDataA${index};\nuniform vec3 markerDataB${index};\nuniform vec3 markerDataC${index};\nuniform vec3 markerDataD${index};\nuniform vec3 markerColor${index};`).join("\n");
 const gridMarkerLayers = Array.from({ length: GRID_MARKER_CAPACITY }, (_, index) => `
   vec2 markerDelta${index} = local - markerDataA${index}.yz;
-  float markerRect${index} = step(abs(markerDelta${index}.x), markerDataB${index}.x) * step(abs(markerDelta${index}.y), markerDataB${index}.y);
+  float markerRectDistance${index} = max(abs(markerDelta${index}.x) - markerDataB${index}.x, abs(markerDelta${index}.y) - markerDataB${index}.y);
+  float markerRectScale${index} = max(0.0001, min(markerDataB${index}.x, markerDataB${index}.y));
+  float markerRectFeather${index} = clamp(markerRectScale${index} * spread * 0.12, 0.0001, markerRectScale${index} * 0.9);
+  float markerRect${index} = spread <= 0.0 ? step(markerRectDistance${index}, 0.0) : 1.0 - smoothstep(-markerRectFeather${index}, markerRectFeather${index}, markerRectDistance${index});
   float markerCos${index} = cos(markerDataC${index}.z);
   float markerSin${index} = sin(markerDataC${index}.z);
   vec2 markerLightPoint${index} = vec2(markerCos${index} * markerDelta${index}.x + markerSin${index} * markerDelta${index}.y, -markerSin${index} * markerDelta${index}.x + markerCos${index} * markerDelta${index}.y);

@@ -555,6 +555,15 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
               y: gridLocalValue(sample.bounds.height / 2, worldRange, localOuterRadius),
             }, geometry, scale, effect.shape);
             if (imageLayout.visible) desiredImages.set(emitter.id, { emitter, layout: imageLayout });
+            if (effect.grid?.imageBackgrounds) {
+              const squareHalfSize = Math.max(
+                gridLocalValue(sample.bounds.width / 2, worldRange, localOuterRadius),
+                gridLocalValue(sample.bounds.height / 2, worldRange, localOuterRadius),
+              );
+              if (markerDataA) markerDataA.value = { x: 1, y: position.x, z: position.y };
+              if (markerDataB) markerDataB.value = { x: squareHalfSize, y: squareHalfSize, z: 0 };
+              if (markerDataD) markerDataD.value = { x: markerStrength, y: Math.PI * 2, z: Math.PI * 2 };
+            }
           } else if (sample.bounds) {
             if (markerDataA) markerDataA.value = { x: 1, y: position.x, z: position.y };
             if (markerDataB) markerDataB.value = { x: gridLocalValue(sample.bounds.width / 2, worldRange, localOuterRadius), y: gridLocalValue(sample.bounds.height / 2, worldRange, localOuterRadius), z: 0 };

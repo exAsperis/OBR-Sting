@@ -322,8 +322,9 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     const gridValue = record(value.grid) ? value.grid : {};
     const showGrid = gridValue.showGrid ?? false;
     const showImages = gridValue.showImages ?? false;
-    if (typeof showGrid !== "boolean" || typeof showImages !== "boolean") return null;
-    grid = { showGrid, showImages };
+    const imageBackgrounds = gridValue.imageBackgrounds ?? gridValue.hologram ?? false;
+    if (typeof showGrid !== "boolean" || typeof showImages !== "boolean" || typeof imageBackgrounds !== "boolean") return null;
+    grid = { showGrid, showImages, imageBackgrounds };
   }
   return {
     id: value.id,

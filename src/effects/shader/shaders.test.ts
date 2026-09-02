@@ -78,8 +78,12 @@ describe("shader presets", () => {
     expect(SHADERS.grid).toContain("isoGrid");
     expect(SHADERS.grid).toContain("gridStroke(float distanceToLine)");
     expect(SHADERS.grid).toContain("smoothstep(0.525, 1.275");
+    expect(SHADERS.grid).toContain("markerRectFeather0");
+    expect(SHADERS.grid).toContain("markerRectScale31 * spread * 0.12");
+    expect(SHADERS.grid).toContain("spread <= 0.0 ? step(markerRectDistance0");
     expect(SHADERS.grid).not.toContain("sweepPhase");
   });
+
 
   it("lets glow range from a crisp ring to a soft aura", () => {
     expect(SHADERS.glow).toContain("innerFade");
