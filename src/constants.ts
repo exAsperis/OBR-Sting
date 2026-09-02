@@ -22,3 +22,6 @@ export const AUTHORITY_OVERRIDE_KEY = `${EXTENSION_ID}/authority-override`;
 export const AUTHORITY_PRESENCE_CHANNEL = `${EXTENSION_ID}/authority/presence`;
 export const AUTHORITY_CONTROL_CHANNEL = `${EXTENSION_ID}/authority/control`;
 export const AUTHORITY_STATUS_CHANNEL = `${EXTENSION_ID}/authority/status`;
+/** Public, GM-only integration API for other Owlbear Rodeo extensions. */
+export const PUBLIC_API_CHANNEL = `${EXTENSION_ID}/message`;
+export const PUBLIC_API_RESULT_SUFFIX = "/sting-result";

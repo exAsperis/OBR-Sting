@@ -71,6 +71,43 @@ fails over after roughly eight seconds when the current authority stops respondi
 standby GM session shows an amber **STBY** action badge; its Debug view can take control
 for the lifetime of that connection or return authority to automatic election.
 
+## Public integration API
+
+Other extensions can ask Sting to add or remove emitter tags and named detection rules.
+The API is local to the current browser and only accepts requests when that client is a
+GM. Owlbear item-update permissions still apply. Saved rules are read from that GM's
+browser-local Sting Rules Library; the API cannot create or edit library entries and
+does not accept ad-hoc rule or effect definitions.
+
+Send requests to `com.ex-asperis.sting/message` with destination `LOCAL`:
+
+```ts
+const source = "com.example.my-extension";
+const requestId = crypto.randomUUID();
+
+await OBR.broadcast.sendMessage("com.ex-asperis.sting/message", {
+  version: 1,
+  requestId,
+  source,
+  type: "ADD_DETECTION_RULES",
+  sources: [itemId],
+  rules: ["Alarm"],
+}, { destination: "LOCAL" });
+
+const unsubscribe = OBR.broadcast.onMessage(`${source}/sting-result`, (event) => {
+  if (event.data.requestId === requestId) console.log(event.data);
+});
+```
+
+Request types are `ADD_EMITTER_TAGS` and `REMOVE_EMITTER_TAGS`, with `sources` and
+`tags` arrays, and `ADD_DETECTION_RULES` and `REMOVE_DETECTION_RULES`, with `sources`
+and `rules` arrays. Names are trimmed and matched case-sensitively. Repeated values in
+one request are deduplicated. Adding a tag or named rule already present on an item is
+reported as `EMITTER_TAG_EXISTS` or `DETECTION_RULE_EXISTS`; other valid additions in
+the same request still proceed. Each response is sent to `${source}/sting-result` with
+`version: 1`, `type: "STING_API_RESULT"`, the original request ID and type, a `success`,
+`partial`, or `failure` status, and `successes` and `failures` arrays.
+
 ## Verification
 
 ```sh

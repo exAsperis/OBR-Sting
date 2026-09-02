@@ -4,11 +4,13 @@ import { ProximityEngine } from "./engine";
 import { parseSceneSettings } from "../settings";
 import { clearSelectedFacePivots, syncSelectedFacePivots } from "./pivotDebug";
 import { applyAuthorityBadge, AuthorityCoordinator } from "./authority";
+import { registerStingPublicApi } from "./publicApi";
 
 OBR.onReady(async () => {
   const [role, connectionId, initialParty] = await Promise.all([OBR.player.getRole(), OBR.player.getConnectionId(), OBR.party.getPlayers()]);
   const initialPlayer = { id: OBR.player.id, role, connectionId };
   const authority = new AuthorityCoordinator(initialPlayer, initialParty);
+  const stopPublicApi = registerStingPublicApi();
   const engine = new ProximityEngine(authority);
   let stopItems: (() => void) | undefined;
   let stopGrid: (() => void) | undefined;
@@ -92,6 +94,7 @@ OBR.onReady(async () => {
     stopPlayer();
     stopParty();
     stopAuthority();
+    stopPublicApi();
     window.removeEventListener("storage", integrationChanged);
     void OBR.contextMenu.remove(CONTEXT_MENU_ID);
     void engine.clear();
