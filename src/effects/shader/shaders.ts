@@ -321,7 +321,7 @@ uniform vec2 worldOrigin;
 ${gridMarkerUniforms}
 
 float gridStroke(float distanceToLine) {
-  return 1.0 - smoothstep(0.525, 1.275, distanceToLine);
+  return 1.0 - smoothstep(3.0, 6.0, distanceToLine);
 }
 
 float gridLine(float coordinate, float spacing) {
