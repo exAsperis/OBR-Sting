@@ -77,7 +77,7 @@ describe("shader presets", () => {
     expect(SHADERS.grid).toContain("hexGrid");
     expect(SHADERS.grid).toContain("isoGrid");
     expect(SHADERS.grid).toContain("gridStroke(float distanceToLine)");
-    expect(SHADERS.grid).toContain("smoothstep(0.525, 1.275");
+    expect(SHADERS.grid).toContain("smoothstep(3.0, 6.0");
     expect(SHADERS.grid).toContain("markerRectFeather0");
     expect(SHADERS.grid).toContain("markerRectScale31 * spread * 0.12");
     expect(SHADERS.grid).toContain("spread <= 0.0 ? step(markerRectDistance0");
@@ -95,6 +95,15 @@ describe("shader presets", () => {
     expect(SHADERS.glow).toContain("0.45");
     expect(SHADERS.glow).toContain("spread <= 0.0");
     expect(SHADERS.glow).toContain("step(innerRadius");
+  });
+
+  it("masks segmented glows in effect-local angular wedges", () => {
+    expect(SHADERS.glow).toContain("uniform float segmentCount");
+    expect(SHADERS.glow).toContain("uniform float segmentAlignment");
+    expect(SHADERS.glow).toContain("uniform vec2 signalDirection");
+    expect(SHADERS.glow).toContain("if (segmentCount > 1.5)");
+    expect(SHADERS.glow).toContain("floor(mod(signalAngle + alignmentOffset, TAU) / wedgeWidth)");
+    expect(SHADERS.glow).toContain("angularFeather");
   });
 
   it("supports opacity, flicker, and directional radial animation on glow and beam", () => {

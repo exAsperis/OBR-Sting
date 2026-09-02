@@ -225,6 +225,11 @@ export function shaderUniforms(effect: ShaderEffectDefinitionV1, strength: numbe
     values.push({ name: "beamWidth", value: resolved.beamWidth });
     values.push({ name: "beamOriginWidth", value: resolved.beamOriginWidth / 100 / scale / (geometry.width / 100) });
   }
+  if (effect.preset === "glow") {
+    values.push({ name: "segmentCount", value: effect.glow?.segments ?? 1 });
+    values.push({ name: "segmentAlignment", value: effect.glow?.segmentAlignment === "boundary" ? 1 : 0 });
+    values.push({ name: "signalDirection", value: direction });
+  }
   if (effect.preset === "radar") {
     for (const name of ["rate", "animationMode", "radialDirection"]) {
       const index = values.findIndex((uniform) => uniform.name === name);
@@ -263,7 +268,7 @@ export function shaderUniforms(effect: ShaderEffectDefinitionV1, strength: numbe
 }
 
 export function shaderConfigHash(effect: ShaderEffectDefinitionV1): string {
-  return JSON.stringify([effect.preset, effect.shape, effect.placement, effect.color, effect.colorGradient, effect.maxIntensity, effect.intensityStrengthLinked, effect.spread, effect.spreadStrengthLink, effect.dynamicRanges, effect.geometry, effect.beamWidth, effect.beamWidthStrengthLink, effect.beamOriginWidth, effect.radar, effect.grid, effect.animation]);
+  return JSON.stringify([effect.preset, effect.shape, effect.placement, effect.color, effect.colorGradient, effect.maxIntensity, effect.intensityStrengthLinked, effect.spread, effect.spreadStrengthLink, effect.dynamicRanges, effect.geometry, effect.beamWidth, effect.beamWidthStrengthLink, effect.beamOriginWidth, effect.glow, effect.radar, effect.grid, effect.animation]);
 }
 
 export function shaderZIndexForTarget(targetZIndex: number, _runtimeKey: string, placement: ShaderEffectDefinitionV1["placement"]): number {

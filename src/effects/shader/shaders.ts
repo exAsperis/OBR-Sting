@@ -70,7 +70,28 @@ half4 main(float2 coord) {
 }`;
 }
 
-const glow = buildShader(softAura, configurableAnimation, 0.62);
+const segmentedGlowMask = `${softAura}
+  if (segmentCount > 1.5) {
+    const float TAU = 6.28318530718;
+    float wedgeWidth = TAU / segmentCount;
+    float alignmentOffset = segmentAlignment < 0.5 ? wedgeWidth * 0.5 : 0.0;
+    vec2 localSignalDirection = vec2(
+      rotationCos * signalDirection.x + rotationSin * signalDirection.y,
+      -rotationSin * signalDirection.x + rotationCos * signalDirection.y
+    ) / max(effectSize, vec2(0.05));
+    localSignalDirection = length(localSignalDirection) > 0.00001 ? normalize(localSignalDirection) : vec2(0.0, -1.0);
+    vec2 pixelDirection = length(centered) > 0.00001 ? normalize(centered) : vec2(0.0, -1.0);
+    float signalAngle = mod(atan(localSignalDirection.x, -localSignalDirection.y) + TAU, TAU);
+    float pixelAngle = mod(atan(pixelDirection.x, -pixelDirection.y) + TAU, TAU);
+    float signalSegment = floor(mod(signalAngle + alignmentOffset, TAU) / wedgeWidth);
+    float segmentCenter = (signalSegment + 0.5) * wedgeWidth - alignmentOffset;
+    float angularDistance = abs(atan(sin(pixelAngle - segmentCenter), cos(pixelAngle - segmentCenter)));
+    float angularFeather = min(0.006, wedgeWidth * 0.08);
+    float segmentMask = 1.0 - smoothstep(wedgeWidth * 0.5 - angularFeather, wedgeWidth * 0.5, angularDistance);
+    mask *= segmentMask;
+  }
+`;
+const glow = buildShader(segmentedGlowMask, configurableAnimation, 0.62, "uniform float segmentCount;\nuniform float segmentAlignment;\nuniform vec2 signalDirection;");
 const beamMask = `
   float feather = spread <= 0.0 ? 0.0 : clamp(0.025 * spread, 0.008, 0.12);
   float radialMask = feather <= 0.0

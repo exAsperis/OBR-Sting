@@ -293,6 +293,16 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     if (!finite(value.beamOriginWidth) || value.beamOriginWidth < 0 || value.beamOriginWidth > 100) return null;
     beamOriginWidth = value.beamOriginWidth;
   }
+  let glow: ShaderEffectDefinitionV1["glow"];
+  if ((legacyPreset ? "glow" : value.preset) === "glow") {
+    if (value.glow !== undefined && !record(value.glow)) return null;
+    const glowValue = record(value.glow) ? value.glow : {};
+    const segments = glowValue.segments ?? 1;
+    const segmentAlignment = glowValue.segmentAlignment ?? "center";
+    if (!finite(segments) || !Number.isInteger(segments) || segments < 1 || segments > 30) return null;
+    if (!["center", "boundary"].includes(String(segmentAlignment))) return null;
+    glow = { segments, segmentAlignment: segmentAlignment as "center" | "boundary" };
+  }
   let radar: ShaderEffectDefinitionV1["radar"];
   if (value.preset === "radar") {
     const candidate = value.radar;
@@ -354,6 +364,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     ...(beamWidth !== undefined ? { beamWidth } : {}),
     ...(value.beamWidthStrengthLink !== undefined ? { beamWidthStrengthLink: value.beamWidthStrengthLink as "min" | "max" } : {}),
     ...(beamOriginWidth !== undefined ? { beamOriginWidth } : {}),
+    ...(glow ? { glow } : {}),
     ...(radar ? { radar } : {}),
     ...(grid ? { grid } : {}),
     ...(animation ? { animation } : {}),

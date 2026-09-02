@@ -167,6 +167,15 @@ describe("versioned detector parsing", () => {
     expect(parseEffectDefinition({ ...effect(), placement: "inside" })).toBeNull();
   });
 
+  it("defaults and validates Glow segment configuration", () => {
+    expect(parseEffectDefinition(effect())).toMatchObject({ glow: { segments: 1, segmentAlignment: "center" } });
+    expect(parseEffectDefinition({ ...effect(), glow: { segments: 30, segmentAlignment: "boundary" } })).toMatchObject({ glow: { segments: 30, segmentAlignment: "boundary" } });
+    expect(parseEffectDefinition({ ...effect(), glow: { segments: 0, segmentAlignment: "center" } })).toBeNull();
+    expect(parseEffectDefinition({ ...effect(), glow: { segments: 31, segmentAlignment: "center" } })).toBeNull();
+    expect(parseEffectDefinition({ ...effect(), glow: { segments: 2.5, segmentAlignment: "center" } })).toBeNull();
+    expect(parseEffectDefinition({ ...effect(), glow: { segments: 3, segmentAlignment: "diagonal" } })).toBeNull();
+  });
+
   it("migrates legacy outlines to crisp glows", () => {
     const parsed = parseEffectDefinition({ ...effect(), preset: "outline", maxIntensity: 1, spread: 1.25 });
     expect(parsed).toMatchObject({ preset: "glow", spread: 0.15 });

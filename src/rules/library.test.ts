@@ -4,7 +4,7 @@ import { instantiateLibraryRule, loadRuleLibrary, parseRuleLibrary } from "./lib
 const rule = {
   id: "template-rule", name: "Torch warning", enabled: true, signal: "light", matchType: "exact" as const, excludeLayers: [], range: { outer: 60, inner: 5 },
   aggregation: "all" as const, ignoreHidden: true, falloff: "smoothstep" as const,
-  effects: [{ id: "template-effect", type: "shader" as const, enabled: true, target: { type: "detector" as const }, audience: { type: "everyone" as const }, preset: "glow" as const, shape: "circle" as const, placement: "above" as const, color: "#55aaff", maxIntensity: 1, spread: 1 }],
+  effects: [{ id: "template-effect", type: "shader" as const, enabled: true, target: { type: "detector" as const }, audience: { type: "everyone" as const }, preset: "glow" as const, shape: "circle" as const, placement: "above" as const, color: "#55aaff", maxIntensity: 1, spread: 1, glow: { segments: 1, segmentAlignment: "center" as const } }],
 };
 
 describe("rules library", () => {

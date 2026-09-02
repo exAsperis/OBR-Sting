@@ -75,6 +75,10 @@ export interface ShaderEffectDefinitionV1 {
   beamWidthStrengthLink?: StrengthLinkDirection;
   /** Width at the beam start as a percentage of the target width. */
   beamOriginWidth?: number;
+  glow?: {
+    segments: number;
+    segmentAlignment: "center" | "boundary";
+  };
   radar?: {
     echoStyle: "circle" | "blob" | "rune";
     echoSize: number;

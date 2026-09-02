@@ -8,6 +8,7 @@ const glow = {
   target: { type: "detector" as const },
   audience: { type: "everyone" as const },
   preset: "glow" as const,
+  glow: { segments: 1, segmentAlignment: "center" as const },
   shape: "circle" as const,
   placement: "above" as const,
   color: "#55aaff",

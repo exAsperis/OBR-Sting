@@ -253,6 +253,32 @@ describe("generic shader dynamic ranges", () => {
   });
 });
 
+describe("segmented glow uniforms", () => {
+  const glow: ShaderEffectDefinitionV1 = {
+    id: "segments", type: "shader", enabled: true, target: { type: "detector" }, audience: { type: "everyone" },
+    preset: "glow", shape: "circle", placement: "above", color: "#55aaff", maxIntensity: 1, spread: 1,
+    glow: { segments: 12, segmentAlignment: "boundary" },
+  };
+
+  it("passes segment configuration and the per-detection direction", () => {
+    const uniforms = shaderUniforms(glow, 0.5, 1, { x: 0.6, y: -0.8 });
+    expect(uniforms.find((uniform) => uniform.name === "segmentCount")?.value).toBe(12);
+    expect(uniforms.find((uniform) => uniform.name === "segmentAlignment")?.value).toBe(1);
+    expect(uniforms.find((uniform) => uniform.name === "signalDirection")?.value).toEqual({ x: 0.6, y: -0.8 });
+  });
+
+  it("defaults to the unmasked single centered segment", () => {
+    const uniforms = shaderUniforms({ ...glow, glow: undefined }, 1, 1, { x: 0, y: -1 });
+    expect(uniforms.find((uniform) => uniform.name === "segmentCount")?.value).toBe(1);
+    expect(uniforms.find((uniform) => uniform.name === "segmentAlignment")?.value).toBe(0);
+  });
+
+  it("includes Glow segmentation in configuration hashing", () => {
+    expect(shaderConfigHash(glow)).not.toBe(shaderConfigHash({ ...glow, glow: { ...glow.glow!, segments: 11 } }));
+    expect(shaderConfigHash(glow)).not.toBe(shaderConfigHash({ ...glow, glow: { ...glow.glow!, segmentAlignment: "center" } }));
+  });
+});
+
 describe("signal-linked color and intensity", () => {
   const effect: ShaderEffectDefinitionV1 = {
     id: "color", type: "shader", enabled: true, target: { type: "detector" }, audience: { type: "everyone" },
