@@ -94,7 +94,7 @@ const beamMask = `
 const beam = buildShader(beamMask, configurableAnimation, 0.82, "uniform vec2 beamDirection;\nuniform float beamWidth;\nuniform float beamOriginWidth;");
 
 export const RADAR_ECHO_CAPACITY = 32;
-const radarEchoUniforms = Array.from({ length: RADAR_ECHO_CAPACITY }, (_, index) => `uniform vec2 echoPosition${index};\nuniform float echoIntensity${index};\nuniform float echoSize${index};\nuniform float echoRune${index};`).join("\n");
+const radarEchoUniforms = Array.from({ length: RADAR_ECHO_CAPACITY }, (_, index) => `uniform vec2 echoPosition${index};\nuniform float echoIntensity${index};\nuniform float echoSize${index};\nuniform float echoRune${index};\nuniform vec3 echoColor${index};`).join("\n");
 const radarEchoLayers = Array.from({ length: RADAR_ECHO_CAPACITY }, (_, index) => `
   float echoDistance${index} = length(local - echoPosition${index});
   vec2 echoRunePoint${index} = (local - echoPosition${index}) / max(echoSize${index}, 0.0001);
@@ -107,8 +107,11 @@ const radarEchoLayers = Array.from({ length: RADAR_ECHO_CAPACITY }, (_, index) =
       ? exp(-echoDistance${index} * echoDistance${index} / max(echoSize${index} * echoSize${index} * 0.45, 0.000001))
       : max(echoRuneCore${index}, echoRuneGlow${index});
   float echoContribution${index} = echo${index} * echoIntensity${index};
-  echoes = max(echoes, echoContribution${index});
-  echoColorWeight = max(echoColorWeight, echoContribution${index} * echoIntensity${index});`).join("\n");
+  if (echoContribution${index} > echoes) {
+    echoes = echoContribution${index};
+    echoBaseColor = echoColor${index};
+    echoColorWeight = echoContribution${index} * echoIntensity${index};
+  }`).join("\n");
 
 const radar = `
 uniform vec2 size;
@@ -212,6 +215,7 @@ half4 main(float2 coord) {
   float trail = step(0.0001, trailSpan) * step(trailDistance, trailSpan) * max(0.0, trailFade);
   float echoes = 0.0;
   float echoColorWeight = 0.0;
+  vec3 echoBaseColor = signalColor;
   ${radarEchoLayers}
   float sweepEnabled = step(-0.5, sweepType);
   float sweepSignal = max(sweep, trail) * sweepEnabled;
@@ -269,8 +273,9 @@ half4 main(float2 coord) {
   float decorationAlpha = decoration * 0.72 * mix(1.0, interlace, crtEnabled);
   float activeAlpha = max(sweepAlpha, echoAlpha);
   float alpha = clamp(max(activeAlpha, decorationAlpha), 0.0, 1.0);
-  float activeColorWeight = sweepAlpha >= echoAlpha ? sweepColorWeight : echoColorMix;
-  vec3 activeColor = mix(signalColor, vec3(1.0), clamp(brightness * activeColorWeight, 0.0, 1.0));
+  vec3 sweepActiveColor = mix(signalColor, vec3(1.0), clamp(brightness * sweepColorWeight, 0.0, 1.0));
+  vec3 echoActiveColor = mix(echoBaseColor, vec3(1.0), clamp(brightness * echoColorMix, 0.0, 1.0));
+  vec3 activeColor = sweepAlpha >= echoAlpha ? sweepActiveColor : echoActiveColor;
   half3 rgb = half3(activeAlpha >= decorationAlpha ? activeColor : signalColor) * alpha;
   return half4(rgb, alpha);
 }`;

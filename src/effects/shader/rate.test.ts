@@ -53,6 +53,10 @@ describe("radar helpers", () => {
     expect(runeUniforms.find((entry) => entry.name === "echoRune0")?.value).toBe(0);
     expect(runeUniforms.find((entry) => entry.name === "echoRune6")?.value).toBe(6);
     expect(runeUniforms.find((entry) => entry.name === "echoRune11")?.value).toBe(1);
+    const gradientRadar = { ...radar, colorGradient: { minColor: "#000000" } };
+    const strongestColorUniforms = shaderUniforms(gradientRadar, 0.2, 1, { x: 0, y: -1 }, undefined, undefined, 0.8);
+    expect(strongestColorUniforms.find((entry) => entry.name === "signalColor")?.value).toEqual(resolveSignalColor(gradientRadar, 0.8));
+    expect(strongestColorUniforms.find((entry) => entry.name === "echoColor31")).toBeDefined();
   });
 
   it("excludes static radar mode from all sweep and fade ticking", () => {

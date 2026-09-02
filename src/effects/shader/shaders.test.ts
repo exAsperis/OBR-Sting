@@ -19,10 +19,14 @@ describe("shader presets", () => {
     expect(SHADERS.radar).toContain("echoPosition31");
     expect(SHADERS.radar).toContain("echoSize31");
     expect(SHADERS.radar).toContain("echoRune31");
+    expect(SHADERS.radar).toContain("echoColor31");
     expect(SHADERS.radar).toContain("float runeSegment");
     expect(SHADERS.radar).toContain("float runeDistance");
     expect(SHADERS.radar).toContain("echoRuneCore31");
     expect(SHADERS.radar).toContain("echoRuneGlow31");
+    expect(SHADERS.radar).toContain("vec3 echoBaseColor");
+    expect(SHADERS.radar).toContain("vec3 sweepActiveColor");
+    expect(SHADERS.radar).toContain("vec3 echoActiveColor");
     expect(SHADERS.radar).toContain("glyph < 8.5");
     expect(SHADERS.radar).toContain("decorationMode");
     expect(SHADERS.radar).toContain("ringDistance");
@@ -53,7 +57,8 @@ describe("shader presets", () => {
     expect(SHADERS.radar).toContain("mix(signalColor, vec3(1.0)");
     expect(SHADERS.radar).toContain("echoColorWeight");
     expect(SHADERS.radar).toContain("trail * trailFade");
-    expect(SHADERS.radar).toContain("brightness * activeColorWeight");
+    expect(SHADERS.radar).toContain("brightness * sweepColorWeight");
+    expect(SHADERS.radar).toContain("brightness * echoColorMix");
     expect(SHADERS.radar).not.toContain("float background");
     expect(SHADERS.radar).toContain("squareDistance");
     expect(SHADERS.radar).toContain("effectRotation");

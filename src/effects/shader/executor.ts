@@ -5,8 +5,8 @@ import type { EffectDispatchBatch, EffectExecutor, EffectReconcileReport } from 
 import { resolveShaderGeometry } from "./geometry";
 import { RADAR_ECHO_CAPACITY, SHADERS } from "./shaders";
 
-interface RadarCandidate { id: string; position: { x: number; y: number }; phase: number; size: number; rune: number }
-interface RadarEcho { position: { x: number; y: number }; refreshedAt: number; size: number; rune: number }
+interface RadarCandidate { id: string; position: { x: number; y: number }; phase: number; size: number; rune: number; color: { x: number; y: number; z: number } }
+interface RadarEcho { position: { x: number; y: number }; refreshedAt: number; size: number; rune: number; color: { x: number; y: number; z: number } }
 interface RadarRuntime {
   candidates: RadarCandidate[];
   echoes: Map<string, RadarEcho>;
@@ -14,6 +14,7 @@ interface RadarRuntime {
   phaseOrigin: number;
   effect: ShaderEffectDefinitionV1;
   strength: number;
+  colorStrength: number;
   scale: number;
 }
 
@@ -144,11 +145,11 @@ function layout(bounds: BoundingBox, scale: number) {
   };
 }
 
-export function shaderUniforms(effect: ShaderEffectDefinitionV1, strength: number, scale: number, direction: { x: number; y: number }, resolved = resolveStrengthLinkedShaderValues(effect, strength), responsiveDirection = direction) {
+export function shaderUniforms(effect: ShaderEffectDefinitionV1, strength: number, scale: number, direction: { x: number; y: number }, resolved = resolveStrengthLinkedShaderValues(effect, strength), responsiveDirection = direction, colorStrength = strength) {
   const { geometry } = resolved;
   const animationModes = { none: 0, pulse: 1, flicker: 2, "radial-pulse": 3 } as const;
   const values = [
-    { name: "signalColor", value: resolveSignalColor(effect, strength) },
+    { name: "signalColor", value: resolveSignalColor(effect, colorStrength) },
     { name: "strength", value: resolveEffectIntensity(effect, strength) },
     { name: "rate", value: resolveDynamicValue(effect, "animationRate", effect.animation?.rate ?? 1, strength, effect.animation?.rateStrengthLink, 0, 10) },
     { name: "depth", value: resolveDynamicValue(effect, "animationDepth", effect.animation?.depth ?? 0, strength, effect.animation?.depthStrengthLink, 0, 1) },
@@ -193,6 +194,7 @@ export function shaderUniforms(effect: ShaderEffectDefinitionV1, strength: numbe
       values.push({ name: `echoIntensity${index}`, value: 0 });
       values.push({ name: `echoSize${index}`, value: 0.028 });
       values.push({ name: `echoRune${index}`, value: index % 10 });
+      values.push({ name: `echoColor${index}`, value: resolveSignalColor(effect, 0) });
     }
   }
   return values;
@@ -257,14 +259,14 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
         const reverse = ["inward", "counterclockwise"].includes(radar.effect.radar?.sweepDirection ?? "outward");
         for (const candidate of radar.candidates) {
           const crossed = reverse ? circularPhaseCrossed(phase, radar.lastPhase, candidate.phase) : circularPhaseCrossed(radar.lastPhase, phase, candidate.phase);
-          if (crossed) radar.echoes.set(candidate.id, { position: candidate.position, refreshedAt: now, size: candidate.size, rune: candidate.rune });
+          if (crossed) radar.echoes.set(candidate.id, { position: candidate.position, refreshedAt: now, size: candidate.size, rune: candidate.rune, color: candidate.color });
         }
         radar.lastPhase = phase;
         const fade = resolveRadarFadeDuration(radar.effect, radar.strength) * 1000;
         for (const [id, echo] of radar.echoes) if (now - echo.refreshedAt >= fade) radar.echoes.delete(id);
         if (!radar.candidates.length && !radar.echoes.size) { expired.push(key); continue; }
         const resolved = resolveStrengthLinkedShaderValues(radar.effect, radar.strength);
-        const uniforms = shaderUniforms(radar.effect, radar.strength, radar.scale, { x: 0, y: -1 }, resolved);
+        const uniforms = shaderUniforms(radar.effect, radar.strength, radar.scale, { x: 0, y: -1 }, resolved, { x: 0, y: -1 }, radar.colorStrength);
         const phaseUniform = uniforms.find((uniform) => uniform.name === "sweepPhase");
         if (phaseUniform) phaseUniform.value = phase;
         [...radar.echoes.values()].slice(0, RADAR_ECHO_CAPACITY).forEach((echo, index) => {
@@ -272,10 +274,12 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
           const intensity = uniforms.find((uniform) => uniform.name === `echoIntensity${index}`);
           const size = uniforms.find((uniform) => uniform.name === `echoSize${index}`);
           const rune = uniforms.find((uniform) => uniform.name === `echoRune${index}`);
+          const color = uniforms.find((uniform) => uniform.name === `echoColor${index}`);
           if (position) position.value = echo.position;
           if (intensity) intensity.value = Math.max(0, 1 - (now - echo.refreshedAt) / fade);
           if (size) size.value = echo.size;
           if (rune) rune.value = echo.rune;
+          if (color) color.value = echo.color;
         });
         await OBR.scene.local.updateItems<Effect>([state.localItemId], (items) => { for (const item of items) item.uniforms = uniforms; });
       }
@@ -315,6 +319,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
       const direction = { x: directionVector.x / directionLength, y: directionVector.y / directionLength };
       const responsiveCenters = await Promise.all((context.responsiveEmitters ?? (context.detectedEmitter ? [context.detectedEmitter] : [])).map(itemCenter));
       const responsiveDirection = averageDetectionDirections(bounds.center, responsiveCenters);
+      const radarColorStrength = effect.preset === "radar" ? Math.max(context.strength, ...(context.responsiveDetections ?? []).map((detection) => detection.strength)) : context.strength;
       const resolved = resolveStrengthLinkedShaderValues(effect, context.strength);
       const scale = effectScale(effect, resolved);
       const effectLayout = layout(bounds, scale);
@@ -349,7 +354,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
           .disableAttachmentBehavior(["SCALE", "ROTATION"])
           .zIndex(effectZIndex)
           .sksl(SHADERS[effect.preset])
-          .uniforms(shaderUniforms(effect, context.strength, scale, direction, resolved, responsiveDirection))
+          .uniforms(shaderUniforms(effect, context.strength, scale, direction, resolved, responsiveDirection, radarColorStrength))
           .blendMode("SRC_OVER")
           .locked(true)
           .disableHit(true)
@@ -366,7 +371,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
           }
         });
         const now = performance.now();
-        const radar = effect.preset === "radar" ? { candidates: [], echoes: new Map<string, RadarEcho>(), lastPhase: 0, phaseOrigin: now, effect, strength: context.strength, scale } satisfies RadarRuntime : undefined;
+        const radar = effect.preset === "radar" ? { candidates: [], echoes: new Map<string, RadarEcho>(), lastPhase: 0, phaseOrigin: now, effect, strength: context.strength, colorStrength: radarColorStrength, scale } satisfies RadarRuntime : undefined;
         this.states.set(context.runtimeKey, { localItemId: item.id, strength: context.strength, configHash: hash, preset: effect.preset, layoutHash: nextLayoutHash, ...(radar ? { radar } : {}) });
         existing = this.states.get(context.runtimeKey);
       } else if (Math.abs(existing.strength - context.strength) >= EPSILON || existing.configHash !== hash || existing.layoutHash !== nextLayoutHash) {
@@ -377,7 +382,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
             item.position = effectLayout.position;
             item.zIndex = effectZIndex;
             item.layer = effectLayer;
-            if (effect.preset !== "radar" || radarSweepIsAnimated(effect)) item.uniforms = shaderUniforms(effect, context.strength, scale, direction, resolved, responsiveDirection);
+            if (effect.preset !== "radar" || radarSweepIsAnimated(effect)) item.uniforms = shaderUniforms(effect, context.strength, scale, direction, resolved, responsiveDirection, radarColorStrength);
           }
         });
         existing.strength = context.strength;
@@ -404,7 +409,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
           const position = { x: unit.x * radius / shapeMetric, y: unit.y * radius / shapeMetric };
           const phase = sweepType === "radial" ? Math.max(0, Math.min(1, detection.distance / context.rule.range.outer)) : ((Math.atan2(position.x, -position.y) / (Math.PI * 2)) + 1) % 1;
           const echoSize = resolveRadarEchoSize(effect, detection.strength, samples[index].area, targetArea);
-          return { id: detection.emitter.id, position, phase, size: echoSize, rune: index % 10 };
+          return { id: detection.emitter.id, position, phase, size: echoSize, rune: index % 10, color: resolveSignalColor(effect, detection.strength) };
         });
         const previousSweepType = existing.radar.effect.radar?.sweepType ?? DEFAULT_RADAR.sweepType;
         if (previousSweepType === "none" && sweepType !== "none") {
@@ -414,20 +419,23 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
         }
         existing.radar.effect = effect;
         existing.radar.strength = context.strength;
+        existing.radar.colorStrength = radarColorStrength;
         existing.radar.scale = scale;
         if (sweepType === "none") {
           const now = performance.now();
-          existing.radar.echoes = new Map(existing.radar.candidates.map((candidate) => [candidate.id, { position: candidate.position, refreshedAt: now, size: candidate.size, rune: candidate.rune }]));
-          const staticUniforms = shaderUniforms(effect, context.strength, scale, { x: 0, y: -1 }, resolved);
+          existing.radar.echoes = new Map(existing.radar.candidates.map((candidate) => [candidate.id, { position: candidate.position, refreshedAt: now, size: candidate.size, rune: candidate.rune, color: candidate.color }]));
+          const staticUniforms = shaderUniforms(effect, context.strength, scale, { x: 0, y: -1 }, resolved, { x: 0, y: -1 }, radarColorStrength);
           [...existing.radar.echoes.values()].forEach((echo, index) => {
             const position = staticUniforms.find((uniform) => uniform.name === `echoPosition${index}`);
             const intensity = staticUniforms.find((uniform) => uniform.name === `echoIntensity${index}`);
             const size = staticUniforms.find((uniform) => uniform.name === `echoSize${index}`);
             const rune = staticUniforms.find((uniform) => uniform.name === `echoRune${index}`);
+            const color = staticUniforms.find((uniform) => uniform.name === `echoColor${index}`);
             if (position) position.value = echo.position;
             if (intensity) intensity.value = 1;
             if (size) size.value = echo.size;
             if (rune) rune.value = echo.rune;
+            if (color) color.value = echo.color;
           });
           await OBR.scene.local.updateItems<Effect>([existing.localItemId], (items) => { for (const item of items) item.uniforms = staticUniforms; });
         }
