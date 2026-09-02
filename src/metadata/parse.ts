@@ -189,7 +189,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   }
   if (value.type !== "shader") return null;
   const legacyPreset = ["outline", "pulse", "flicker"].includes(String(value.preset)) ? String(value.preset) : null;
-  const presets: ShaderPreset[] = ["glow", "beam"];
+  const presets: ShaderPreset[] = ["glow", "beam", "radar"];
   if ((!legacyPreset && !presets.includes(value.preset as ShaderPreset)) || !color(value.color)) return null;
   if (value.colorGradient !== undefined && (!record(value.colorGradient) || !color(value.colorGradient.minColor))) return null;
   const colorGradient = value.colorGradient as { minColor: string } | undefined;
@@ -205,7 +205,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   const dynamicBounds: Record<ShaderDynamicField, [number, number]> = {
     intensity: [0, 2], softness: [0, 4], innerRadius: [0, 199], outerRadius: [1, 200], beamWidth: [0, 120], beamOriginWidth: [0, 100],
     width: [5, 400], height: [5, 400], offsetX: [-100, 100], offsetY: [-100, 100], responsiveOffset: [-100, 100],
-    rotation: [-180, 180], animationRate: [0, 10], animationDepth: [0, 1], waveWidth: [0.05, 1],
+    rotation: [-180, 180], animationRate: [0, 10], animationDepth: [0, 1], waveWidth: [0, 1], echoFadeDuration: [0.1, 30], radarBrightness: [0, 1], radarSweepTrail: [0, 100], radarEchoSize: [10, 400],
   };
   const dynamicRanges: Partial<Record<ShaderDynamicField, DynamicValueRange>> = {};
   if (value.dynamicRanges !== undefined) {
@@ -265,7 +265,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     const modes: ShaderAnimationMode[] = ["none", "pulse", "flicker", "radial-pulse"];
     if (value.animation.mode !== undefined && !modes.includes(value.animation.mode as ShaderAnimationMode)) return null;
     if (value.animation.radialDirection !== undefined && !["outward", "inward"].includes(String(value.animation.radialDirection))) return null;
-    if (value.animation.waveWidth !== undefined && (!finite(value.animation.waveWidth) || value.animation.waveWidth < 0.05 || value.animation.waveWidth > 1)) return null;
+    if (value.animation.waveWidth !== undefined && (!finite(value.animation.waveWidth) || value.animation.waveWidth < 0 || value.animation.waveWidth > 1)) return null;
     if (value.animation.waveWidthStrengthLink !== undefined && !["min", "max"].includes(String(value.animation.waveWidthStrengthLink))) return null;
     if (value.animation.waveWidthStrengthLink !== undefined && value.animation.waveWidth === undefined) return null;
     animation = {
@@ -292,6 +292,28 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   if (value.beamOriginWidth !== undefined) {
     if (!finite(value.beamOriginWidth) || value.beamOriginWidth < 0 || value.beamOriginWidth > 100) return null;
     beamOriginWidth = value.beamOriginWidth;
+  }
+  let radar: ShaderEffectDefinitionV1["radar"];
+  if (value.preset === "radar") {
+    const candidate = value.radar;
+    if (candidate !== undefined && !record(candidate)) return null;
+    const radarValue = record(candidate) ? candidate : {};
+    const echoStyle = radarValue.echoStyle ?? "circle";
+    const echoSize = radarValue.echoSize ?? 100;
+    const distanceScale = radarValue.distanceScale ?? "linear";
+    const decoration = radarValue.decoration ?? "none";
+    const rawSweepTrail = radarValue.sweepTrail ?? 0;
+    const sweepTrail = typeof rawSweepTrail === "boolean" ? (rawSweepTrail ? 100 : 0) : rawSweepTrail;
+    const brightness = radarValue.brightness ?? 0.35;
+    const sweepType = radarValue.sweepType ?? "radial";
+    const sweepDirection = radarValue.sweepDirection ?? (sweepType === "angular" ? "clockwise" : "outward");
+    const echoFadeDuration = radarValue.echoFadeDuration ?? 3;
+    if (!["circle", "blob"].includes(String(echoStyle)) || !finite(echoSize) || echoSize < 10 || echoSize > 400 || !["linear", "logarithmic"].includes(String(distanceScale)) || !["none", "aliens"].includes(String(decoration)) || !["radial", "angular"].includes(String(sweepType))) return null;
+    if (!finite(sweepTrail) || sweepTrail < 0 || sweepTrail > 100 || !finite(brightness) || brightness < 0 || brightness > 1) return null;
+    if (!["outward", "inward", "clockwise", "counterclockwise"].includes(String(sweepDirection))) return null;
+    if ((sweepType === "radial") !== ["outward", "inward"].includes(String(sweepDirection))) return null;
+    if (!finite(echoFadeDuration) || echoFadeDuration < 0.1 || echoFadeDuration > 30) return null;
+    radar = { echoStyle: echoStyle as "circle" | "blob", echoSize, distanceScale: distanceScale as "linear" | "logarithmic", decoration: decoration as "none" | "aliens", sweepTrail, brightness, sweepType: sweepType as "radial" | "angular", sweepDirection: sweepDirection as NonNullable<ShaderEffectDefinitionV1["radar"]>["sweepDirection"], echoFadeDuration };
   }
   return {
     id: value.id,
@@ -321,6 +343,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     ...(beamWidth !== undefined ? { beamWidth } : {}),
     ...(value.beamWidthStrengthLink !== undefined ? { beamWidthStrengthLink: value.beamWidthStrengthLink as "min" | "max" } : {}),
     ...(beamOriginWidth !== undefined ? { beamOriginWidth } : {}),
+    ...(radar ? { radar } : {}),
     ...(animation ? { animation } : {}),
   };
 }

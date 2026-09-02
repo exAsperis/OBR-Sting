@@ -1,6 +1,49 @@
 import { describe, expect, it } from "vitest";
 import type { ShaderEffectDefinitionV1 } from "../../types";
-import { averageDetectionDirections, resolveEffectIntensity, resolveSignalColor, resolveStrengthLinkedRate, resolveStrengthLinkedShaderValues, resolveStrengthLinkedValue, shaderConfigHash, shaderUniforms } from "./executor";
+import { averageDetectionDirections, circularPhaseCrossed, radarDistancePosition, radarEchoSize, resolveEffectIntensity, resolveRadarEchoSize, resolveRadarFadeDuration, resolveSignalColor, resolveStrengthLinkedRate, resolveStrengthLinkedShaderValues, resolveStrengthLinkedValue, shaderConfigHash, shaderUniforms } from "./executor";
+
+describe("radar helpers", () => {
+  const radar: ShaderEffectDefinitionV1 = {
+    id: "radar", type: "shader", enabled: true, target: { type: "detector" }, audience: { type: "everyone" },
+    preset: "radar", shape: "square", placement: "above", color: "#00ff88", maxIntensity: 0.5, spread: 1,
+    radar: { echoStyle: "blob", echoSize: 100, distanceScale: "logarithmic", decoration: "aliens", sweepTrail: 100, brightness: 0.4, sweepType: "angular", sweepDirection: "counterclockwise", echoFadeDuration: 5 },
+    dynamicRanges: { echoFadeDuration: { minimum: 2, maximum: 8 }, radarBrightness: { minimum: 0.2, maximum: 0.8 }, radarSweepTrail: { minimum: 20, maximum: 80 }, radarEchoSize: { minimum: 50, maximum: 200 } },
+  };
+
+  it("maps zero and maximum detection distance to the configured radii", () => {
+    expect(radarDistancePosition(0, 60, 0.2, 1)).toBe(0.2);
+    expect(radarDistancePosition(30, 60, 0.2, 1)).toBeCloseTo(0.6);
+    expect(radarDistancePosition(60, 60, 0.2, 1)).toBe(1);
+    expect(radarDistancePosition(30, 60, 0.2, 1, "logarithmic")).toBeGreaterThan(0.6);
+  });
+
+  it("detects ordinary and wrapped sweep crossings", () => {
+    expect(circularPhaseCrossed(0.1, 0.4, 0.25)).toBe(true);
+    expect(circularPhaseCrossed(0.9, 0.1, 0.98)).toBe(true);
+    expect(circularPhaseCrossed(0.9, 0.1, 0.5)).toBe(false);
+  });
+
+  it("scales echo footprints with detected item area and clamps extremes", () => {
+    expect(radarEchoSize(100, 100)).toBeCloseTo(0.028);
+    expect(radarEchoSize(400, 100)).toBeCloseTo(0.056);
+    expect(radarEchoSize(0.01, 10000)).toBeCloseTo(0.012);
+    expect(radarEchoSize(1000000, 1)).toBeCloseTo(0.12);
+    expect(radarEchoSize(100, 100, 200)).toBeCloseTo(0.056);
+    expect(resolveRadarEchoSize(radar, 0, 100, 100)).toBeCloseTo(0.014);
+    expect(resolveRadarEchoSize(radar, 1, 100, 100)).toBeCloseTo(0.056);
+  });
+
+  it("resolves dynamic fade duration and radar uniforms", () => {
+    expect(resolveRadarFadeDuration(radar, 0.5)).toBe(5);
+    const uniforms = shaderUniforms(radar, 1, 1, { x: 0, y: -1 });
+    expect(uniforms.find((entry) => entry.name === "echoStyle")?.value).toBe(1);
+    expect(uniforms.find((entry) => entry.name === "echoPosition31")).toBeDefined();
+    expect(uniforms.find((entry) => entry.name === "echoSize31")?.value).toBe(0.028);
+    expect(uniforms.find((entry) => entry.name === "decorationMode")?.value).toBe(1);
+    expect(uniforms.find((entry) => entry.name === "trailEnabled")?.value).toBe(0.8);
+    expect(uniforms.find((entry) => entry.name === "brightness")?.value).toBe(0.8);
+  });
+});
 
 describe("signal-linked animation rate", () => {
   it("keeps an unlinked rate constant", () => {
@@ -173,10 +216,10 @@ describe("bounded signal-linked values", () => {
     expect(resolveStrengthLinkedValue(0.6, "min", 1, 0, 1)).toBeCloseTo(0.6);
   });
 
-  it("interpolates wave width across its 0.05–1 range", () => {
-    expect(resolveStrengthLinkedValue(0.25, "max", 0, 0.05, 1)).toBe(0.05);
-    expect(resolveStrengthLinkedValue(0.25, "max", 0.5, 0.05, 1)).toBeCloseTo(0.15);
-    expect(resolveStrengthLinkedValue(0.25, "min", 0.5, 0.05, 1)).toBeCloseTo(0.625);
-    expect(resolveStrengthLinkedValue(0.25, "min", 1, 0.05, 1)).toBeCloseTo(0.25);
+  it("interpolates wave width across its 0–1 range", () => {
+    expect(resolveStrengthLinkedValue(0.25, "max", 0, 0, 1)).toBe(0);
+    expect(resolveStrengthLinkedValue(0.25, "max", 0.5, 0, 1)).toBeCloseTo(0.125);
+    expect(resolveStrengthLinkedValue(0.25, "min", 0.5, 0, 1)).toBeCloseTo(0.625);
+    expect(resolveStrengthLinkedValue(0.25, "min", 1, 0, 1)).toBeCloseTo(0.25);
   });
 });

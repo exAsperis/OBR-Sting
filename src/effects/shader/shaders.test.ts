@@ -3,9 +3,37 @@ import { SHADERS } from "./shaders";
 
 describe("shader presets", () => {
   it("uses premultiplied alpha so masked pixels stay transparent", () => {
-    for (const shader of Object.values(SHADERS)) {
+    for (const shader of [SHADERS.glow, SHADERS.beam]) {
       expect(shader).toContain("half3(signalColor) * alpha");
     }
+    expect(SHADERS.radar).toContain("half3 rgb =");
+    expect(SHADERS.radar).toContain("* alpha;");
+  });
+
+  it("composes a configurable radar with sweep and 32 echo slots", () => {
+    expect(SHADERS.radar).toContain("sweepPhase");
+    expect(SHADERS.radar).toContain("sweepType");
+    expect(SHADERS.radar).toContain("echoStyle");
+    expect(SHADERS.radar).toContain("echoPosition0");
+    expect(SHADERS.radar).toContain("echoPosition31");
+    expect(SHADERS.radar).toContain("echoSize31");
+    expect(SHADERS.radar).toContain("decorationMode");
+    expect(SHADERS.radar).toContain("ringDistance");
+    expect(SHADERS.radar).toContain("innerBand");
+    expect(SHADERS.radar).toContain("innerSegmentAngle");
+    expect(SHADERS.radar).toContain("outerSegmentAngle");
+    expect(SHADERS.radar).toContain("step(0.30");
+    expect(SHADERS.radar).toContain("trailEnabled");
+    expect(SHADERS.radar).toContain("trailDistance");
+    expect(SHADERS.radar).toContain("trailSpan = 0.5 * trailEnabled");
+    expect(SHADERS.radar).toContain("log(1.0 + 9.0 * trailProgress)");
+    expect(SHADERS.radar).toContain("mix(signalColor, vec3(1.0)");
+    expect(SHADERS.radar).toContain("echoColorWeight");
+    expect(SHADERS.radar).toContain("trail * trailFade");
+    expect(SHADERS.radar).toContain("brightness * activeColorWeight");
+    expect(SHADERS.radar).not.toContain("float background");
+    expect(SHADERS.radar).toContain("squareDistance");
+    expect(SHADERS.radar).toContain("effectRotation");
   });
 
   it("lets glow range from a crisp ring to a soft aura", () => {
@@ -20,8 +48,8 @@ describe("shader presets", () => {
     expect(SHADERS.glow).toContain("step(innerRadius");
   });
 
-  it("supports opacity, flicker, and directional radial animation on every shader preset", () => {
-    for (const shader of Object.values(SHADERS)) {
+  it("supports opacity, flicker, and directional radial animation on glow and beam", () => {
+    for (const shader of [SHADERS.glow, SHADERS.beam]) {
       expect(shader).toContain("animationMode");
       expect(shader).toContain("sin(time * rate");
       expect(shader).toContain("float noise");

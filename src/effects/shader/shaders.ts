@@ -93,4 +93,89 @@ const beamMask = `
 `;
 const beam = buildShader(beamMask, configurableAnimation, 0.82, "uniform vec2 beamDirection;\nuniform float beamWidth;\nuniform float beamOriginWidth;");
 
-export const SHADERS: Record<ShaderPreset, string> = { glow, beam };
+export const RADAR_ECHO_CAPACITY = 32;
+const radarEchoUniforms = Array.from({ length: RADAR_ECHO_CAPACITY }, (_, index) => `uniform vec2 echoPosition${index};\nuniform float echoIntensity${index};\nuniform float echoSize${index};`).join("\n");
+const radarEchoLayers = Array.from({ length: RADAR_ECHO_CAPACITY }, (_, index) => `
+  float echoDistance${index} = length(local - echoPosition${index});
+  float echo${index} = echoStyle < 0.5
+    ? 1.0 - smoothstep(echoSize${index} * 0.72, echoSize${index}, echoDistance${index})
+    : exp(-echoDistance${index} * echoDistance${index} / max(echoSize${index} * echoSize${index} * 0.45, 0.000001));
+  float echoContribution${index} = echo${index} * echoIntensity${index};
+  echoes = max(echoes, echoContribution${index});
+  echoColorWeight = max(echoColorWeight, echoContribution${index} * echoIntensity${index});`).join("\n");
+
+const radar = `
+uniform vec2 size;
+uniform vec3 signalColor;
+uniform float strength;
+uniform float depth;
+uniform float sweepPhase;
+uniform float sweepType;
+uniform float sweepDirection;
+uniform float waveWidth;
+uniform float spread;
+uniform float shapeMode;
+uniform float echoStyle;
+uniform float decorationMode;
+uniform float trailEnabled;
+uniform float brightness;
+uniform vec2 centerOffset;
+uniform float innerRadius;
+uniform float outerRadius;
+uniform vec2 effectSize;
+uniform float effectRotation;
+${radarEchoUniforms}
+
+half4 main(float2 coord) {
+  vec2 centered = (coord / size - vec2(0.5)) * 2.0 - centerOffset;
+  float rotationCos = cos(effectRotation);
+  float rotationSin = sin(effectRotation);
+  vec2 local = vec2(rotationCos * centered.x + rotationSin * centered.y, -rotationSin * centered.x + rotationCos * centered.y) / max(effectSize, vec2(0.05));
+  float circleDistance = length(local);
+  float squareDistance = max(abs(local.x), abs(local.y));
+  float distanceFromCenter = mix(circleDistance, squareDistance, step(0.5, shapeMode));
+  float feather = spread <= 0.0 ? 0.002 : clamp(0.04 * spread, 0.002, 0.18);
+  float innerMask = innerRadius <= 0.0001 ? 1.0 : smoothstep(max(0.0, innerRadius - feather), innerRadius, distanceFromCenter);
+  float discMask = innerMask * (1.0 - smoothstep(max(innerRadius, outerRadius - feather), outerRadius, distanceFromCenter));
+  float radialPosition = clamp((distanceFromCenter - innerRadius) / max(outerRadius - innerRadius, 0.0001), 0.0, 1.0);
+  float angularPosition = fract(atan(local.x, -local.y) / 6.283185 + 1.0);
+  float linePosition = mix(radialPosition, angularPosition, step(0.5, sweepType));
+  float lineDistance = abs(linePosition - sweepPhase);
+  if (sweepType > 0.5) lineDistance = min(lineDistance, 1.0 - lineDistance);
+  float lineFeather = max(0.004, waveWidth * 0.08);
+  float sweep = 1.0 - smoothstep(waveWidth * 0.5, waveWidth * 0.5 + lineFeather, lineDistance);
+  float trailDistance = sweepDirection > 0.0 ? fract(sweepPhase - linePosition + 1.0) : fract(linePosition - sweepPhase + 1.0);
+  float trailSpan = 0.5 * trailEnabled;
+  float trailProgress = clamp(trailDistance / max(trailSpan, 0.0001), 0.0, 1.0);
+  float trailFade = 1.0 - log(1.0 + 9.0 * trailProgress) / log(10.0);
+  float trail = step(0.0001, trailSpan) * step(trailDistance, trailSpan) * max(0.0, trailFade);
+  float echoes = 0.0;
+  float echoColorWeight = 0.0;
+  ${radarEchoLayers}
+  float sweepSignal = max(sweep, trail);
+  float sweepColorWeight = max(sweep, trail * trailFade) / max(sweepSignal, 0.0001);
+  float echoColorMix = echoColorWeight / max(echoes, 0.0001);
+  float sweepAlpha = sweepSignal * depth * strength * discMask;
+  float echoAlpha = echoes * strength * discMask;
+  float ringDistance = min(min(abs(radialPosition - 0.34), abs(radialPosition - 0.67)), abs(radialPosition - 0.995));
+  float rings = 1.0 - smoothstep(0.004, 0.008, ringDistance);
+  float spokeDistance = abs(fract(angularPosition * 12.0 + 0.5) - 0.5);
+  float spokes = (1.0 - smoothstep(0.018, 0.032, spokeDistance)) * step(0.32, radialPosition);
+  float arcGate = step(0.16, abs(sin(angularPosition * 18.849555)));
+  float innerBand = 1.0 - smoothstep(0.19, 0.205, radialPosition);
+  float innerSegmentAngle = 1.0 - step(0.30, fract(angularPosition + 0.08));
+  float outerSegmentAngle = 1.0 - step(0.30, fract(angularPosition + 0.56));
+  float innerSegment = smoothstep(0.215, 0.225, radialPosition) * (1.0 - smoothstep(0.275, 0.285, radialPosition)) * innerSegmentAngle;
+  float outerSegment = smoothstep(0.90, 0.91, radialPosition) * (1.0 - smoothstep(0.97, 0.98, radialPosition)) * outerSegmentAngle;
+  float aliensDecoration = max(max(spokes, rings * arcGate), max(innerBand, max(innerSegment, outerSegment)));
+  float decoration = decorationMode * discMask * aliensDecoration;
+  float decorationAlpha = decoration * 0.72;
+  float activeAlpha = max(sweepAlpha, echoAlpha);
+  float alpha = clamp(max(activeAlpha, decorationAlpha), 0.0, 1.0);
+  float activeColorWeight = sweepAlpha >= echoAlpha ? sweepColorWeight : echoColorMix;
+  vec3 activeColor = mix(signalColor, vec3(1.0), clamp(brightness * activeColorWeight, 0.0, 1.0));
+  half3 rgb = half3(activeAlpha >= decorationAlpha ? activeColor : signalColor) * alpha;
+  return half4(rgb, alpha);
+}`;
+
+export const SHADERS: Record<ShaderPreset, string> = { glow, beam, radar };

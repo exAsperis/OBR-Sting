@@ -1,12 +1,12 @@
 import type { ImageContent, ImageGrid, Item, Layer, LightType, Player } from "@owlbear-rodeo/sdk";
 
 export type Falloff = "binary" | "linear" | "smoothstep" | "logarithmic";
-export type ShaderPreset = "glow" | "beam";
+export type ShaderPreset = "glow" | "beam" | "radar";
 export type ShaderShape = "circle" | "square";
 export type ShaderPlacement = "above" | "below";
 export type ShaderAnimationMode = "none" | "pulse" | "flicker" | "radial-pulse";
 export type StrengthLinkDirection = "min" | "max";
-export type ShaderDynamicField = "intensity" | "softness" | "innerRadius" | "outerRadius" | "beamWidth" | "beamOriginWidth" | "width" | "height" | "offsetX" | "offsetY" | "responsiveOffset" | "rotation" | "animationRate" | "animationDepth" | "waveWidth";
+export type ShaderDynamicField = "intensity" | "softness" | "innerRadius" | "outerRadius" | "beamWidth" | "beamOriginWidth" | "width" | "height" | "offsetX" | "offsetY" | "responsiveOffset" | "rotation" | "animationRate" | "animationDepth" | "waveWidth" | "echoFadeDuration" | "radarBrightness" | "radarSweepTrail" | "radarEchoSize";
 export interface DynamicValueRange { minimum: number; maximum: number; enabled?: boolean }
 export type EffectLifecycle = "continuous" | "enter" | "exit" | "nearest-change";
 export type JsonPrimitive = string | number | boolean | null;
@@ -75,6 +75,17 @@ export interface ShaderEffectDefinitionV1 {
   beamWidthStrengthLink?: StrengthLinkDirection;
   /** Width at the beam start as a percentage of the target width. */
   beamOriginWidth?: number;
+  radar?: {
+    echoStyle: "circle" | "blob";
+    echoSize: number;
+    distanceScale: "linear" | "logarithmic";
+    decoration: "none" | "aliens";
+    sweepTrail: number;
+    brightness: number;
+    sweepType: "radial" | "angular";
+    sweepDirection: "outward" | "inward" | "clockwise" | "counterclockwise";
+    echoFadeDuration: number;
+  };
   animation?: {
     mode: ShaderAnimationMode;
     rate: number;
@@ -266,6 +277,8 @@ export interface EffectExecutionContext extends RuleEvaluation {
   audienceMatch: boolean;
   /** Active detections used to derive aggregate directional shader behavior. */
   responsiveEmitters?: Item[];
+  /** Selected detections used by a composite radar shader. */
+  responsiveDetections?: Array<{ emitter: Item; distance: number; strength: number }>;
 }
 
 export interface DesiredEffect extends EffectExecutionContext {

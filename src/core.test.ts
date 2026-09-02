@@ -181,7 +181,20 @@ describe("versioned detector parsing", () => {
   it("parses radial pulse direction and wave width", () => {
     const radial = { ...effect(), animation: { mode: "radial-pulse", rate: 1.5, depth: 0.8, radialDirection: "inward", waveWidth: 0.3 } };
     expect(parseEffectDefinition(radial)).toMatchObject(radial);
+    expect(parseEffectDefinition({ ...radial, animation: { ...radial.animation, waveWidth: 0 } })).toMatchObject({ animation: { waveWidth: 0 } });
     expect(parseEffectDefinition({ ...radial, animation: { ...radial.animation, waveWidth: 2 } })).toBeNull();
+  });
+  it("parses radar defaults, configuration, and dynamic echo fade", () => {
+    expect(parseEffectDefinition({ ...effect(), preset: "radar" })).toMatchObject({ preset: "radar", radar: { echoStyle: "circle", echoSize: 100, distanceScale: "linear", decoration: "none", sweepTrail: 0, brightness: 0.35, sweepType: "radial", sweepDirection: "outward", echoFadeDuration: 3 } });
+    const configured = { ...effect(), preset: "radar", shape: "square", radar: { echoStyle: "blob", echoSize: 175, distanceScale: "logarithmic", decoration: "aliens", sweepTrail: 65, brightness: 0.7, sweepType: "angular", sweepDirection: "counterclockwise", echoFadeDuration: 7 }, dynamicRanges: { echoFadeDuration: { minimum: 1, maximum: 12 }, radarBrightness: { minimum: 0.1, maximum: 0.9 }, radarSweepTrail: { minimum: 20, maximum: 80 }, radarEchoSize: { minimum: 50, maximum: 250 } } };
+    expect(parseEffectDefinition(configured)).toMatchObject(configured);
+    expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, sweepDirection: "inward" } })).toBeNull();
+    expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, echoFadeDuration: 31 } })).toBeNull();
+    expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, distanceScale: "exponential" } })).toBeNull();
+    expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, brightness: 2 } })).toBeNull();
+    expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, sweepTrail: 101 } })).toBeNull();
+    expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, echoSize: 401 } })).toBeNull();
+    expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, sweepTrail: true } })).toMatchObject({ radar: { sweepTrail: 100 } });
   });
   it("parses optional animation rate strength linking and rejects unknown values", () => {
     expect(parseEffectDefinition({ ...effect(), animation: { mode: "pulse", rate: 2, depth: 0.5, rateStrengthLink: "max" } }))
