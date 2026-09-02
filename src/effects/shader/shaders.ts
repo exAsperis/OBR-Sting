@@ -317,9 +317,13 @@ uniform float worldRange;
 uniform vec2 worldOrigin;
 ${gridMarkerUniforms}
 
+float gridStroke(float distanceToLine) {
+  return 1.0 - smoothstep(0.525, 1.275, distanceToLine);
+}
+
 float gridLine(float coordinate, float spacing) {
   float lineDistance = abs(fract(coordinate / max(spacing, 1.0) + 0.5) - 0.5) * spacing;
-  return 1.0 - smoothstep(0.35, 0.85, lineDistance);
+  return gridStroke(lineDistance);
 }
 
 half4 main(float2 coord) {
@@ -345,7 +349,7 @@ half4 main(float2 coord) {
   vec2 hexB = mod(hexPoint - hexRepeat * 0.5, hexRepeat) - hexRepeat * 0.5;
   vec2 hexCell = dot(hexA, hexA) < dot(hexB, hexB) ? hexA : hexB;
   float hexEdgeDistance = abs(0.5 - max(abs(hexCell.x) * 0.866025 + abs(hexCell.y) * 0.5, abs(hexCell.y))) * gridDpi;
-  float hexGrid = 1.0 - smoothstep(0.35, 0.85, hexEdgeDistance);
+  float hexGrid = gridStroke(hexEdgeDistance);
   float sceneGrid = gridType < 0.5 ? squareGrid : gridType < 2.5 ? hexGrid : isoGrid;
   float markerAlpha = 0.0;
   vec3 markerRgb = signalColor;

@@ -86,7 +86,7 @@ export interface ShaderEffectDefinitionV1 {
     sweepDirection: "outward" | "inward" | "clockwise" | "counterclockwise";
     echoFadeDuration: number;
   };
-  grid?: { showGrid: boolean };
+  grid?: { showGrid: boolean; showImages: boolean };
   animation?: {
     mode: ShaderAnimationMode;
     rate: number;

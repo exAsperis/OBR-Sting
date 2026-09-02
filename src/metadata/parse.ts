@@ -321,8 +321,9 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     if (value.grid !== undefined && !record(value.grid)) return null;
     const gridValue = record(value.grid) ? value.grid : {};
     const showGrid = gridValue.showGrid ?? false;
-    if (typeof showGrid !== "boolean") return null;
-    grid = { showGrid };
+    const showImages = gridValue.showImages ?? false;
+    if (typeof showGrid !== "boolean" || typeof showImages !== "boolean") return null;
+    grid = { showGrid, showImages };
   }
   return {
     id: value.id,

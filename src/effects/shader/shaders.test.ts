@@ -76,6 +76,8 @@ describe("shader presets", () => {
     expect(SHADERS.grid).toContain("squareGrid");
     expect(SHADERS.grid).toContain("hexGrid");
     expect(SHADERS.grid).toContain("isoGrid");
+    expect(SHADERS.grid).toContain("gridStroke(float distanceToLine)");
+    expect(SHADERS.grid).toContain("smoothstep(0.525, 1.275");
     expect(SHADERS.grid).not.toContain("sweepPhase");
   });
 

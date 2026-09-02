@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ShaderEffectDefinitionV1 } from "../../types";
-import { averageDetectionDirections, circularPhaseCrossed, gridLocalValue, gridTypeValue, gridWorldRange, radarDistancePosition, radarEchoSize, radarSweepIsAnimated, resolveEffectIntensity, resolveRadarEchoSize, resolveRadarFadeDuration, resolveSignalColor, resolveStrengthLinkedRate, resolveStrengthLinkedShaderValues, resolveStrengthLinkedValue, shaderConfigHash, shaderUniforms } from "./executor";
+import { averageDetectionDirections, circularPhaseCrossed, gridImageLayout, gridLocalValue, gridTypeValue, gridWorldRange, radarDistancePosition, radarEchoSize, radarSweepIsAnimated, resolveEffectIntensity, resolveRadarEchoSize, resolveRadarFadeDuration, resolveSignalColor, resolveStrengthLinkedRate, resolveStrengthLinkedShaderValues, resolveStrengthLinkedValue, shaderConfigHash, shaderUniforms } from "./executor";
 
 describe("radar helpers", () => {
   const radar: ShaderEffectDefinitionV1 = {
@@ -74,6 +74,36 @@ describe("grid visualization helpers", () => {
 
   it("encodes every Owlbear scene grid type", () => {
     expect(["SQUARE", "HEX_VERTICAL", "HEX_HORIZONTAL", "DIMETRIC", "ISOMETRIC"].map((type) => gridTypeValue(type as Parameters<typeof gridTypeValue>[0]))).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it("projects image bounds through Grid dimensions, offsets, and rotation", () => {
+    const projected = gridImageLayout(
+      { width: 400, height: 200, position: { x: 100, y: 50 } },
+      { x: 0.25, y: 0 },
+      { x: 0.1, y: 0.05 },
+      { offsetX: 10, offsetY: -20, responsiveOffset: 0, innerRadius: 0, outerRadius: 100, width: 200, height: 50, rotation: 90 },
+      1,
+      "circle",
+    );
+    expect(projected.center.x).toBeCloseTo(320);
+    expect(projected.center.y).toBeCloseTo(180);
+    expect(projected.width).toBeCloseTo(160);
+    expect(projected.height).toBeCloseTo(10);
+    expect(projected.rotation).toBe(90);
+    expect(projected.visible).toBe(true);
+  });
+
+  it("uses center-only circle and square clipping for Grid images", () => {
+    const geometry = { offsetX: 0, offsetY: 0, responsiveOffset: 0, innerRadius: 25, outerRadius: 100, width: 100, height: 100, rotation: 0 };
+    const layout = { width: 100, height: 100, position: { x: 0, y: 0 } };
+    expect(gridImageLayout(layout, { x: 0.2, y: 0 }, { x: 1, y: 1 }, geometry, 1, "circle").visible).toBe(false);
+    expect(gridImageLayout(layout, { x: 0.8, y: 0.8 }, { x: 1, y: 1 }, geometry, 1, "circle").visible).toBe(false);
+    expect(gridImageLayout(layout, { x: 0.8, y: 0.8 }, { x: 1, y: 1 }, geometry, 1, "square").visible).toBe(true);
+  });
+
+  it("includes Grid image visibility in shader configuration hashing", () => {
+    const base: ShaderEffectDefinitionV1 = { id: "grid", type: "shader", enabled: true, target: { type: "detector" }, audience: { type: "everyone" }, preset: "grid", shape: "circle", placement: "above", color: "#00ff88", maxIntensity: 1, spread: 1, grid: { showGrid: false, showImages: false } };
+    expect(shaderConfigHash(base)).not.toBe(shaderConfigHash({ ...base, grid: { showGrid: false, showImages: true } }));
   });
 });
 

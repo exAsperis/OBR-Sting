@@ -37,10 +37,10 @@ describe("effects library", () => {
   });
 
   it("round-trips Grid visualization settings", () => {
-    const grid = { ...glow, preset: "grid" as const, shape: "square" as const, grid: { showGrid: true } };
+    const grid = { ...glow, preset: "grid" as const, shape: "square" as const, grid: { showGrid: true, showImages: true } };
     const parsed = parseEffectLibrary({ version: 1, entries: [{ id: "grid", name: "Tactical grid", effect: grid }] });
-    expect(parsed.entries[0].effect).toMatchObject({ preset: "grid", shape: "square", grid: { showGrid: true } });
-    expect(instantiateLibraryEffect(parsed.entries[0])).toMatchObject({ preset: "grid", grid: { showGrid: true } });
+    expect(parsed.entries[0].effect).toMatchObject({ preset: "grid", shape: "square", grid: { showGrid: true, showImages: true } });
+    expect(instantiateLibraryEffect(parsed.entries[0])).toMatchObject({ preset: "grid", grid: { showGrid: true, showImages: true } });
   });
 
   it("loads browser-local data and tolerates malformed JSON", () => {

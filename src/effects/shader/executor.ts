@@ -1,4 +1,4 @@
-import OBR, { buildEffect, isLight, type BoundingBox, type Effect, type GridType, type Item } from "@owlbear-rodeo/sdk";
+import OBR, { buildEffect, buildImage, isImage, isLight, type BoundingBox, type Effect, type GridType, type Image, type Item } from "@owlbear-rodeo/sdk";
 import { LOCAL_EFFECT_KEY } from "../../constants";
 import type { DesiredEffect, ShaderDynamicField, ShaderEffectDefinitionV1, StrengthLinkDirection } from "../../types";
 import type { EffectDispatchBatch, EffectExecutor, EffectReconcileReport } from "../registry";
@@ -25,6 +25,15 @@ interface RuntimeState {
   preset: ShaderEffectDefinitionV1["preset"];
   layoutHash: string;
   radar?: RadarRuntime;
+  gridImages?: Map<string, string>;
+}
+
+export interface GridImageLayout {
+  center: { x: number; y: number };
+  width: number;
+  height: number;
+  rotation: number;
+  visible: boolean;
 }
 
 const EPSILON = 0.005;
@@ -52,6 +61,35 @@ export function gridWorldRange(outerRange: number, dpi: number, scaleMultiplier:
 
 export function gridLocalValue(worldValue: number, worldRange: number, outerRadius: number): number {
   return worldValue / Math.max(worldRange, Number.EPSILON) * outerRadius;
+}
+
+export function gridImageLayout(
+  effectLayout: { width: number; height: number; position: { x: number; y: number } },
+  position: { x: number; y: number },
+  halfSize: { x: number; y: number },
+  geometry: ReturnType<typeof resolveShaderGeometry>,
+  scale: number,
+  shape: ShaderEffectDefinitionV1["shape"],
+): GridImageLayout {
+  const effectSize = { x: geometry.width / 100, y: geometry.height / 100 };
+  const angle = geometry.rotation * Math.PI / 180;
+  const x = position.x * effectSize.x;
+  const y = position.y * effectSize.y;
+  const normalized = {
+    x: geometry.offsetX / 100 / scale + Math.cos(angle) * x - Math.sin(angle) * y,
+    y: geometry.offsetY / 100 / scale + Math.sin(angle) * x + Math.cos(angle) * y,
+  };
+  const metric = shape === "square" ? Math.max(Math.abs(position.x), Math.abs(position.y)) : Math.hypot(position.x, position.y);
+  return {
+    center: {
+      x: effectLayout.position.x + effectLayout.width * (0.5 + normalized.x / 2),
+      y: effectLayout.position.y + effectLayout.height * (0.5 + normalized.y / 2),
+    },
+    width: halfSize.x * 2 * effectSize.x * effectLayout.width,
+    height: halfSize.y * 2 * effectSize.y * effectLayout.height,
+    rotation: geometry.rotation,
+    visible: metric >= geometry.innerRadius / 100 / scale && metric <= geometry.outerRadius / 100 / scale,
+  };
 }
 
 export const gridTypeValue = (type: GridType): number => ({ SQUARE: 0, HEX_VERTICAL: 1, HEX_HORIZONTAL: 2, DIMETRIC: 3, ISOMETRIC: 4 })[type];
@@ -225,7 +263,7 @@ export function shaderUniforms(effect: ShaderEffectDefinitionV1, strength: numbe
 }
 
 export function shaderConfigHash(effect: ShaderEffectDefinitionV1): string {
-  return JSON.stringify([effect.preset, effect.shape, effect.placement, effect.color, effect.colorGradient, effect.maxIntensity, effect.intensityStrengthLinked, effect.spread, effect.spreadStrengthLink, effect.dynamicRanges, effect.geometry, effect.beamWidth, effect.beamWidthStrengthLink, effect.beamOriginWidth, effect.radar, effect.animation]);
+  return JSON.stringify([effect.preset, effect.shape, effect.placement, effect.color, effect.colorGradient, effect.maxIntensity, effect.intensityStrengthLinked, effect.spread, effect.spreadStrengthLink, effect.dynamicRanges, effect.geometry, effect.beamWidth, effect.beamWidthStrengthLink, effect.beamOriginWidth, effect.radar, effect.grid, effect.animation]);
 }
 
 export function shaderZIndexForTarget(targetZIndex: number, _runtimeKey: string, placement: ShaderEffectDefinitionV1["placement"]): number {
@@ -251,6 +289,10 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
   private initialized = false;
   private radarTimer: number | undefined;
   private radarTicking = false;
+
+  private stateItemIds(state: RuntimeState): string[] {
+    return [state.localItemId, ...(state.gridImages?.values() ?? [])];
+  }
 
   private ensureRadarTimer(): void {
     if (this.radarTimer !== undefined || ![...this.states.values()].some((state) => state.radar && radarSweepIsAnimated(state.radar.effect))) return;
@@ -327,7 +369,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
     const active = new Set(desired.map((entry) => entry.runtimeKey));
     const obsolete = [...this.states.entries()].filter(([key, state]) => !active.has(key) && (!state.radar || (state.radar.effect.radar?.sweepType ?? DEFAULT_RADAR.sweepType) === "none"));
     if (obsolete.length) {
-      await OBR.scene.local.deleteItems(obsolete.map(([, state]) => state.localItemId));
+      await OBR.scene.local.deleteItems(obsolete.flatMap(([, state]) => this.stateItemIds(state)));
       for (const [key] of obsolete) this.states.delete(key);
     }
     for (const [key, state] of this.states) if (!active.has(key) && state.radar) state.radar.candidates = [];
@@ -349,7 +391,10 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
       const resolved = resolveStrengthLinkedShaderValues(effect, context.strength);
       const scale = effectScale(effect, resolved);
       const effectLayout = layout(bounds, scale);
-      const effectZIndex = shaderZIndexForTarget(context.target!.zIndex, context.runtimeKey, effect.placement);
+      const showGridImages = effect.preset === "grid" && (effect.grid?.showImages ?? false);
+      const effectZIndex = showGridImages && effect.placement === "below"
+        ? context.target!.zIndex - 2
+        : shaderZIndexForTarget(context.target!.zIndex, context.runtimeKey, effect.placement);
       const effectLayer = context.target!.layer;
       const nextLayoutHash = JSON.stringify([effectLayout, direction, responsiveDirection, effectZIndex, effectLayer]);
       const hash = shaderConfigHash(effect);
@@ -357,7 +402,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
       // Owlbear does not reliably recompile SkSL when an existing Effect item's
       // source changes. Recreate on preset changes; uniform-only changes stay fast.
       if (existing && existing.preset !== effect.preset) {
-        await OBR.scene.local.deleteItems([existing.localItemId]);
+        await OBR.scene.local.deleteItems(this.stateItemIds(existing));
         this.states.delete(context.runtimeKey);
         existing = undefined;
       }
@@ -398,7 +443,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
         });
         const now = performance.now();
         const radar = effect.preset === "radar" ? { candidates: [], echoes: new Map<string, RadarEcho>(), lastPhase: 0, phaseOrigin: now, effect, strength: context.strength, colorStrength: radarColorStrength, scale } satisfies RadarRuntime : undefined;
-        this.states.set(context.runtimeKey, { localItemId: item.id, strength: context.strength, configHash: hash, preset: effect.preset, layoutHash: nextLayoutHash, ...(radar ? { radar } : {}) });
+        this.states.set(context.runtimeKey, { localItemId: item.id, strength: context.strength, configHash: hash, preset: effect.preset, layoutHash: nextLayoutHash, ...(radar ? { radar } : {}), ...(effect.preset === "grid" ? { gridImages: new Map() } : {}) });
         existing = this.states.get(context.runtimeKey);
       } else if (Math.abs(existing.strength - context.strength) >= EPSILON || existing.configHash !== hash || existing.layoutHash !== nextLayoutHash) {
         await OBR.scene.local.updateItems<Effect>([existing.localItemId], (items) => {
@@ -479,6 +524,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
           return { center: itemBounds.center, bounds: itemBounds };
         }));
         const uniforms = shaderUniforms(effect, context.strength, scale, { x: 0, y: -1 }, resolved, { x: 0, y: -1 }, radarColorStrength);
+        const desiredImages = new Map<string, { emitter: Image; layout: GridImageLayout }>();
         const showGrid = uniforms.find((uniform) => uniform.name === "showGrid"); if (showGrid) showGrid.value = effect.grid?.showGrid ? 1 : 0;
         const type = uniforms.find((uniform) => uniform.name === "gridType"); if (type) type.value = gridTypeValue(sceneGridType);
         const dpi = uniforms.find((uniform) => uniform.name === "gridDpi"); if (dpi) dpi.value = gridDpi;
@@ -503,6 +549,12 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
             if (markerDataB) markerDataB.value = { x: 0, y: 0, z: gridLocalValue(emitter.attenuationRadius, worldRange, localOuterRadius) };
             if (markerDataC) markerDataC.value = { x: gridLocalValue(emitter.sourceRadius, worldRange, localOuterRadius), y: Math.max(0.05, emitter.falloff), z: emitter.rotation * Math.PI / 180 };
             if (markerDataD) markerDataD.value = { x: markerStrength, y: emitter.innerAngle * Math.PI / 180, z: emitter.outerAngle * Math.PI / 180 };
+          } else if (sample.bounds && isImage(emitter) && showGridImages) {
+            const imageLayout = gridImageLayout(effectLayout, position, {
+              x: gridLocalValue(sample.bounds.width / 2, worldRange, localOuterRadius),
+              y: gridLocalValue(sample.bounds.height / 2, worldRange, localOuterRadius),
+            }, geometry, scale, effect.shape);
+            if (imageLayout.visible) desiredImages.set(emitter.id, { emitter, layout: imageLayout });
           } else if (sample.bounds) {
             if (markerDataA) markerDataA.value = { x: 1, y: position.x, z: position.y };
             if (markerDataB) markerDataB.value = { x: gridLocalValue(sample.bounds.width / 2, worldRange, localOuterRadius), y: gridLocalValue(sample.bounds.height / 2, worldRange, localOuterRadius), z: 0 };
@@ -510,6 +562,61 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
           }
         });
         await OBR.scene.local.updateItems<Effect>([existing.localItemId], (items) => { for (const item of items) item.uniforms = uniforms; });
+        existing.gridImages ??= new Map();
+        const staleImages = [...existing.gridImages].filter(([emitterId]) => !desiredImages.has(emitterId));
+        if (staleImages.length) {
+          await OBR.scene.local.deleteItems(staleImages.map(([, localId]) => localId));
+          for (const [emitterId] of staleImages) existing.gridImages.delete(emitterId);
+        }
+        const imageZIndex = context.target!.zIndex + (effect.placement === "above" ? 2 : -1);
+        const newImages: Array<{ emitterId: string; item: Image }> = [];
+        const imageUpdates = new Map<string, { emitter: Image; layout: GridImageLayout; grid: Image["grid"]; scale: Image["scale"] }>();
+        for (const [emitterId, image] of desiredImages) {
+          const centeredGrid = { dpi: image.emitter.image.width, offset: { x: image.emitter.image.width / 2, y: image.emitter.image.height / 2 } };
+          const imageScale = {
+            x: image.layout.width / Math.max(1, image.emitter.image.width),
+            y: image.layout.height / Math.max(1, image.emitter.image.height),
+          };
+          const localId = existing.gridImages.get(emitterId);
+          if (localId) {
+            imageUpdates.set(localId, { emitter: image.emitter, layout: image.layout, grid: centeredGrid, scale: imageScale });
+          } else {
+            newImages.push({ emitterId, item: buildImage(image.emitter.image, centeredGrid)
+              .name(`Proximity Signal: grid image (${image.emitter.name || emitterId})`)
+              .position(image.layout.center)
+              .scale(imageScale)
+              .rotation(image.layout.rotation)
+              .zIndex(imageZIndex)
+              .layer(effectLayer)
+              .attachedTo(context.target!.id)
+              .disableAttachmentBehavior(["SCALE", "ROTATION"])
+              .locked(true)
+              .disableHit(true)
+              .disableAutoZIndex(true)
+              .metadata({ [LOCAL_EFFECT_KEY]: { runtimeKey: context.runtimeKey, emitterId } })
+              .build() });
+          }
+        }
+        if (imageUpdates.size) {
+          await OBR.scene.local.updateItems<Image>([...imageUpdates.keys()], (items) => {
+            for (const item of items) {
+              const update = imageUpdates.get(item.id);
+              if (!update) continue;
+              item.image = update.emitter.image;
+              item.grid = update.grid;
+              item.position = update.layout.center;
+              item.scale = update.scale;
+              item.rotation = update.layout.rotation;
+              item.zIndex = imageZIndex;
+              item.layer = effectLayer;
+              item.visible = true;
+            }
+          });
+        }
+        if (newImages.length) {
+          await OBR.scene.local.addItems(newImages.map(({ item }) => item));
+          for (const { emitterId, item } of newImages) existing.gridImages.set(emitterId, item.id);
+        }
       }
     }
     this.ensureRadarTimer();
@@ -520,7 +627,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
   }
 
   async clear(): Promise<void> {
-    const ids = [...this.states.values()].map((state) => state.localItemId);
+    const ids = [...this.states.values()].flatMap((state) => this.stateItemIds(state));
     if (ids.length) await OBR.scene.local.deleteItems(ids);
     this.states.clear();
     if (this.radarTimer !== undefined) window.clearInterval(this.radarTimer);
