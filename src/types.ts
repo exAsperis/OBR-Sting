@@ -6,7 +6,7 @@ export type ShaderShape = "circle" | "square";
 export type ShaderPlacement = "above" | "below";
 export type ShaderAnimationMode = "none" | "pulse" | "flicker" | "radial-pulse";
 export type StrengthLinkDirection = "min" | "max";
-export type ShaderDynamicField = "intensity" | "softness" | "innerRadius" | "outerRadius" | "beamWidth" | "beamOriginWidth" | "width" | "height" | "offsetX" | "offsetY" | "responsiveOffset" | "rotation" | "animationRate" | "animationDepth" | "waveWidth" | "echoFadeDuration" | "radarBrightness" | "radarSweepTrail" | "radarEchoSize" | "indicatorSize";
+export type ShaderDynamicField = "intensity" | "softness" | "segments" | "innerRadius" | "outerRadius" | "beamWidth" | "beamOriginWidth" | "width" | "height" | "offsetX" | "offsetY" | "responsiveOffset" | "rotation" | "animationRate" | "animationDepth" | "waveWidth" | "echoFadeDuration" | "radarBrightness" | "radarSweepTrail" | "radarEchoSize" | "indicatorSize";
 export interface DynamicValueRange { minimum: number; maximum: number; enabled?: boolean }
 export type EffectLifecycle = "continuous" | "enter" | "exit" | "nearest-change";
 export type JsonPrimitive = string | number | boolean | null;

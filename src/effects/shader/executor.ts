@@ -299,7 +299,7 @@ export function shaderUniforms(effect: ShaderEffectDefinitionV1, strength: numbe
     values.push({ name: "beamOriginWidth", value: resolved.beamOriginWidth / 100 / scale / (geometry.width / 100) });
   }
   if (effect.preset === "glow") {
-    values.push({ name: "segmentCount", value: effect.glow?.segments ?? 1 });
+    values.push({ name: "segmentCount", value: Math.round(resolveDynamicValue(effect, "segments", effect.glow?.segments ?? 1, strength, undefined, 1, 30)) });
     values.push({ name: "segmentAlignment", value: effect.glow?.segmentAlignment === "boundary" ? 1 : 0 });
     values.push({ name: "signalDirection", value: direction });
   }

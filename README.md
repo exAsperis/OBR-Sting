@@ -4,7 +4,7 @@ See [OBR local-light compatibility](docs/local-light-compatibility.md) for the c
 
 Proximity sensing effects triggers.
 
-Sting is a generic, declarative proximity rules engine for Owlbear Rodeo. Scene items can emit arbitrary signal tags; detectors respond with shader, state, light, and integration effects.
+Sting is a generic, declarative proximity rules engine for Owlbear Rodeo. Scene items can emit arbitrary signal tags; detectors respond with visual, state, light, and integration effects.
 
 ## Modular effects and integrations
 
@@ -52,9 +52,9 @@ Only the GM can configure items. Select one scene item and open **Sting…** fro
 1. Add zero or more emitter signal tags.
 2. Add detector rules with a signal, closest/all detection mode, an inclusive inner-to-outer scene-unit detection band, and smooth, linear, logarithmic, or binary falloff. Emitters closer than the inner bound are ignored; the inner edge is full strength.
 3. Add any number of effects to each rule.
-4. Add shader effects such as Glow/Shadow or Directional Beam, state effects such as Face, Hide/Show, Lock/Unlock, Set Image, or Add/Remove Emitter, and Dynamic Fog light effects.
+4. Add visual effects such as Glow/Shadow or Directional Beam, state effects such as Face, Hide/Show, Lock/Unlock, Set Image, or Add/Remove Emitter, and Dynamic Fog light effects.
 5. Choose each effect's target and action-specific settings. Set Image selects replacement artwork from Owlbear and can preserve the target's displayed size.
-6. Optionally link supported shader animation, softness, beam, scale, rotation, offset, and radius controls to signal strength with the `MIN` or `MAX` endpoint controls.
+6. Optionally link supported visual-effect animation, softness, beam, scale, rotation, offset, and radius controls to signal strength with the `MIN` or `MAX` endpoint controls.
 7. Changes save automatically to item metadata after a short validation delay.
 
 Open **Settings** without selecting an item to choose how Sting measures distance for the scene:
@@ -120,7 +120,7 @@ pnpm run build
 
 ## Current SDK notes
 
-- Shader effects use experimental local-only Owlbear `ATTACHMENT` Effect items.
+- Visual effects use experimental local-only Owlbear `ATTACHMENT` Effect items.
 - Attachment effects fill the target's bounds. The built-in glow preset therefore renders a transparent color overlay within those bounds; renderer behavior on transparent or hidden artwork should be checked in the target Owlbear release.
 - Item ownership is encapsulated through `createdUserId`, which is the ownership identity exposed on SDK items. GM **Assign Owner** behavior should be verified in multiplayer testing.
 - Hidden emitters are not filtered. A player can only evaluate hidden items that Owlbear exposes to that player's client; the extension does not bypass Owlbear visibility boundaries.

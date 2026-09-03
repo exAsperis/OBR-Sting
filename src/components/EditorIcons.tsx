@@ -1,5 +1,5 @@
 export const CaretIcon = ({ collapsed }: { collapsed: boolean }) => <svg viewBox="0 0 24 24" aria-hidden="true"><path d={collapsed ? "m9 5 7 7-7 7" : "m5 9 7 7 7-7"} /></svg>;
 export const TrashIcon = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 3h6l1 4H8l1-4Zm-3 4 1 14h10l1-14M10 11v6m4-6v6" /></svg>;
-export const SaveToBookIcon = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13.5A3.5 3.5 0 0 1 8.5 10H11v10H8.5A3.5 3.5 0 0 0 5 23v-9.5ZM19 13.5a3.5 3.5 0 0 0-3.5-3.5H13v10h2.5A3.5 3.5 0 0 1 19 23v-9.5ZM12 1v7m-3-3 3 3 3-3" /></svg>;
+export const SaveToBookIcon = () => <span className="editable-glyph editable-glyph-save" aria-hidden="true" />;
 
 export const GearsIcon = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 4.5 9.3 6l1.7.4 1.4-.9 1.1 1.1-.9 1.4.4 1.7 1.5.8v1.5l-1.5.8-.4 1.7.9 1.4-1.1 1.1-1.4-.9-1.7.4-.8 1.5H7l-.8-1.5-1.7-.4-1.4.9L2 14.9l.9-1.4-.4-1.7L1 11V9.5l1.5-.8.4-1.7L2 5.6l1.1-1.1 1.4.9L6.2 5 7 3.5h1.5Zm-.7 4A2.3 2.3 0 1 0 7.8 13a2.3 2.3 0 0 0 0-4.5Zm9.7 6 .6 1.1 1.2.3 1-.6.8.8-.6 1 .3 1.2 1.1.6V20l-1.1.6-.3 1.2.6 1-.8.8-1-.6-1.2.3-.6 1.1h-1.1l-.6-1.1-1.2-.3-1 .6-.8-.8.6-1-.3-1.2L12 20v-1.1l1.1-.6.3-1.2-.6-1 .8-.8 1 .6 1.2-.3.6-1.1h1.1Zm-.6 3a1.7 1.7 0 1 0 0 3.4 1.7 1.7 0 0 0 0-3.4Z" /></svg>;

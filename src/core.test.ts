@@ -298,9 +298,10 @@ describe("versioned detector parsing", () => {
       .toMatchObject({ dynamicRanges: { responsiveOffset: { minimum: 60, maximum: -20 } } });
   });
   it("parses generic dynamic shader ranges and rejects invalid endpoints", () => {
-    const configured = { ...effect(), dynamicRanges: { intensity: { minimum: 0.25, maximum: 1.5 }, innerRadius: { minimum: 80, maximum: 20 }, outerRadius: { minimum: 90, maximum: 160, enabled: false } } };
+    const configured = { ...effect(), dynamicRanges: { intensity: { minimum: 0.25, maximum: 1.5 }, segments: { minimum: 1, maximum: 30 }, innerRadius: { minimum: 80, maximum: 20 }, outerRadius: { minimum: 90, maximum: 160, enabled: false } } };
     expect(parseEffectDefinition(configured)).toMatchObject(configured);
     expect(parseEffectDefinition({ ...configured, dynamicRanges: { intensity: { minimum: -1, maximum: 1 } } })).toBeNull();
+    expect(parseEffectDefinition({ ...configured, dynamicRanges: { segments: { minimum: 0, maximum: 31 } } })).toBeNull();
     expect(parseEffectDefinition({ ...configured, dynamicRanges: { unknown: { minimum: 0, maximum: 1 } } })).toBeNull();
   });
   it("parses shader gradient, intensity, and GM audience options", () => {

@@ -307,6 +307,12 @@ describe("segmented glow uniforms", () => {
     expect(uniforms.find((uniform) => uniform.name === "segmentAlignment")?.value).toBe(0);
   });
 
+  it("resolves dynamic segment counts to whole numbers", () => {
+    const dynamic = { ...glow, dynamicRanges: { segments: { minimum: 1, maximum: 12 } } };
+    const uniforms = shaderUniforms(dynamic, 0.5, 1, { x: 0, y: -1 });
+    expect(uniforms.find((uniform) => uniform.name === "segmentCount")?.value).toBe(7);
+  });
+
   it("includes Glow segmentation in configuration hashing", () => {
     expect(shaderConfigHash(glow)).not.toBe(shaderConfigHash({ ...glow, glow: { ...glow.glow!, segments: 11 } }));
     expect(shaderConfigHash(glow)).not.toBe(shaderConfigHash({ ...glow, glow: { ...glow.glow!, segmentAlignment: "center" } }));

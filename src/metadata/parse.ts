@@ -203,7 +203,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   if (!finite(value.spread) || value.spread < 0 || value.spread > 4) return null;
   if (value.spreadStrengthLink !== undefined && !["min", "max"].includes(String(value.spreadStrengthLink))) return null;
   const dynamicBounds: Record<ShaderDynamicField, [number, number]> = {
-    intensity: [0, 2], softness: [0, 4], innerRadius: [0, 199], outerRadius: [1, 200], beamWidth: [0, 120], beamOriginWidth: [0, 100],
+    intensity: [0, 2], softness: [0, 4], segments: [1, 30], innerRadius: [0, 199], outerRadius: [1, 200], beamWidth: [0, 120], beamOriginWidth: [0, 100],
     width: [5, 400], height: [5, 400], offsetX: [-100, 100], offsetY: [-100, 100], responsiveOffset: [-100, 100],
     rotation: [-180, 180], animationRate: [0, 10], animationDepth: [0, 1], waveWidth: [0, 1], echoFadeDuration: [0.1, 30], radarBrightness: [0, 1], radarSweepTrail: [0, 100], radarEchoSize: [10, 400], indicatorSize: [16, 160],
   };
