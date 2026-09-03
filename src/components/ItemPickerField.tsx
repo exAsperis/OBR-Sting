@@ -17,7 +17,10 @@ export function PickSceneItemButton({ items, onPick, onError }: PickButtonProps)
   const [picking, setPicking] = useState(false);
   const mounted = useRef(true);
   const ownsPick = useRef(false);
-  useEffect(() => () => { mounted.current = false; if (ownsPick.current) void cancelItemPick(); }, []);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; if (ownsPick.current) void cancelItemPick(); };
+  }, []);
   const pick = async () => {
     if (picking) { await cancelItemPick(); setPicking(false); return; }
     setPicking(true);

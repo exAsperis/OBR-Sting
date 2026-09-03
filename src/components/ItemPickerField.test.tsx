@@ -2,6 +2,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Item } from "@owlbear-rodeo/sdk";
+import { StrictMode } from "react";
 
 const picker = vi.hoisted(() => ({ pickSceneItem: vi.fn(), cancelItemPick: vi.fn() }));
 vi.mock("../runtime/itemPicker", () => picker);
@@ -26,6 +27,16 @@ describe("SpecificItemField", () => {
     render(<SpecificItemField items={items} value="a" onChange={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "Pick" }));
     expect((await screen.findByRole("alert")).textContent).toContain("cannot be used");
+  });
+
+  it("returns to Pick after completion under React Strict Mode", async () => {
+    let resolvePick!: (item: Item) => void;
+    picker.pickSceneItem.mockReturnValue(new Promise<Item>((resolve) => { resolvePick = resolve; }));
+    render(<StrictMode><SpecificItemField items={items} value="a" onChange={vi.fn()} /></StrictMode>);
+    fireEvent.click(screen.getByRole("button", { name: "Pick" }));
+    expect(screen.getByRole("button", { name: "Picking…" })).toBeTruthy();
+    resolvePick(items[1]);
+    expect(await screen.findByRole("button", { name: "Pick" })).toBeTruthy();
   });
 });
 
