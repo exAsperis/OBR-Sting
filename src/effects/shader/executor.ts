@@ -1,9 +1,10 @@
-import OBR, { buildEffect, buildImage, isImage, isLight, type BoundingBox, type Effect, type GridType, type Image, type Item } from "@owlbear-rodeo/sdk";
+import OBR, { buildBillboard, buildEffect, buildImage, isImage, isLight, type Billboard, type BoundingBox, type Effect, type GridType, type Image, type Item } from "@owlbear-rodeo/sdk";
 import { LOCAL_EFFECT_KEY } from "../../constants";
 import type { DesiredEffect, ShaderDynamicField, ShaderEffectDefinitionV1, StrengthLinkDirection } from "../../types";
 import type { EffectDispatchBatch, EffectExecutor, EffectReconcileReport } from "../registry";
 import { resolveShaderGeometry } from "./geometry";
 import { GRID_MARKER_CAPACITY, RADAR_ECHO_CAPACITY, SHADERS } from "./shaders";
+import { barIndicatorLayout, edgeIndicatorLayout, transformedBounds, type EdgeIndicatorLayout } from "./edgeGeometry";
 
 interface RadarCandidate { id: string; position: { x: number; y: number }; phase: number; size: number; rune: number; color: { x: number; y: number; z: number } }
 interface RadarEcho { position: { x: number; y: number }; refreshedAt: number; size: number; rune: number; color: { x: number; y: number; z: number } }
@@ -26,6 +27,19 @@ interface RuntimeState {
   layoutHash: string;
   radar?: RadarRuntime;
   gridImages?: Map<string, string>;
+  edge?: EdgeRuntime;
+}
+
+interface EdgeRuntime {
+  effect: ShaderEffectDefinitionV1;
+  strength: number;
+  targetBounds: BoundingBox;
+  emitterBounds: BoundingBox;
+  emitter: Item;
+  imageId?: string;
+  imageScale?: number;
+  imageCircleDiameter?: number;
+  layoutHash?: string;
 }
 
 export interface GridImageLayout {
@@ -38,6 +52,9 @@ export interface GridImageLayout {
 
 const EPSILON = 0.005;
 const itemCenter = async (item: Item): Promise<{ x: number; y: number }> => isLight(item) ? item.position : (await OBR.scene.items.getItemBounds([item.id])).center;
+const itemBounds = async (item: Item): Promise<BoundingBox> => isLight(item)
+  ? { center: item.position, width: 0, height: 0, min: item.position, max: item.position }
+  : OBR.scene.items.getItemBounds([item.id]);
 export const DEFAULT_RADAR = { echoStyle: "circle", echoSize: 100, distanceScale: "linear", decoration: "none", sweepTrail: 0, brightness: 0.35, sweepType: "none", sweepDirection: "outward", echoFadeDuration: 3 } as const;
 
 export function radarSweepIsAnimated(effect: ShaderEffectDefinitionV1): boolean {
@@ -156,6 +173,45 @@ export function resolveStrengthLinkedShaderValues(effect: ShaderEffectDefinition
   };
 }
 
+export function resolveEdgeSize(effect: ShaderEffectDefinitionV1, strength: number): number {
+  return resolveDynamicValue(effect, "indicatorSize", effect.edge?.size ?? 48, strength, undefined, 16, 160);
+}
+
+export function edgeImageScale(image: { width: number; height: number }, circleDiameter: number): number {
+  return circleDiameter / Math.max(Math.hypot(image.width, image.height), 1);
+}
+
+export function calibrateEdgeImageScale(seedScale: number, circleDiameter: number, renderedDiagonal: number): number {
+  return seedScale * circleDiameter / Math.max(renderedDiagonal, 1);
+}
+
+export function edgeFootprintSize(effect: ShaderEffectDefinitionV1, strength: number): number {
+  const circleDiameter = resolveEdgeSize(effect, strength);
+  return effect.edge?.appearance === "image" ? circleDiameter * Math.SQRT2 : circleDiameter;
+}
+
+function edgeUniforms(effect: ShaderEffectDefinitionV1, strength: number, viewport: { width: number; height: number } = { width: 1, height: 1 }, layout: EdgeIndicatorLayout & { edge?: number } = { center: { x: 0, y: 0 }, direction: { x: 0, y: -1 }, visible: false }) {
+  const animationModes = { none: 0, pulse: 1, flicker: 2, "radial-pulse": 3 } as const;
+  return [
+    { name: "signalColor", value: resolveSignalColor(effect, strength) },
+    { name: "strength", value: resolveEffectIntensity(effect, strength) },
+    { name: "rate", value: resolveDynamicValue(effect, "animationRate", effect.animation?.rate ?? 1, strength, effect.animation?.rateStrengthLink, 0, 10) },
+    { name: "depth", value: resolveDynamicValue(effect, "animationDepth", effect.animation?.depth ?? 0, strength, effect.animation?.depthStrengthLink, 0, 1) },
+    { name: "animationMode", value: animationModes[effect.animation?.mode ?? "none"] },
+    { name: "radialDirection", value: effect.animation?.radialDirection === "inward" ? -1 : 1 },
+    { name: "waveWidth", value: resolveDynamicValue(effect, "waveWidth", effect.animation?.waveWidth ?? 0.22, strength, effect.animation?.waveWidthStrengthLink, 0, 1) },
+    { name: "spread", value: resolveDynamicValue(effect, "softness", effect.spread, strength, effect.spreadStrengthLink, 0, 4) },
+    { name: "indicatorCenter", value: layout.center },
+    { name: "indicatorDirection", value: layout.direction },
+    { name: "indicatorSize", value: resolveEdgeSize(effect, strength) },
+    { name: "appearanceMode", value: effect.edge?.appearance === "disk" ? 1 : effect.edge?.appearance === "image" ? 2 : effect.edge?.appearance === "bar" ? 3 : 0 },
+    { name: "indicatorVisible", value: layout.visible ? 1 : 0 },
+    { name: "viewportSize", value: { x: viewport.width, y: viewport.height } },
+    { name: "edgeInset", value: effect.edge?.inset ?? 16 },
+    { name: "barEdge", value: layout.edge ?? 0 },
+  ];
+}
+
 export function resolveRadarFadeDuration(effect: ShaderEffectDefinitionV1, strength: number): number {
   return resolveDynamicValue(effect, "echoFadeDuration", effect.radar?.echoFadeDuration ?? DEFAULT_RADAR.echoFadeDuration, strength, undefined, 0.1, 30);
 }
@@ -268,7 +324,7 @@ export function shaderUniforms(effect: ShaderEffectDefinitionV1, strength: numbe
 }
 
 export function shaderConfigHash(effect: ShaderEffectDefinitionV1): string {
-  return JSON.stringify([effect.preset, effect.shape, effect.placement, effect.color, effect.colorGradient, effect.maxIntensity, effect.intensityStrengthLinked, effect.spread, effect.spreadStrengthLink, effect.dynamicRanges, effect.geometry, effect.beamWidth, effect.beamWidthStrengthLink, effect.beamOriginWidth, effect.glow, effect.radar, effect.grid, effect.animation]);
+  return JSON.stringify([effect.preset, effect.shape, effect.placement, effect.color, effect.colorGradient, effect.maxIntensity, effect.intensityStrengthLinked, effect.spread, effect.spreadStrengthLink, effect.dynamicRanges, effect.geometry, effect.beamWidth, effect.beamWidthStrengthLink, effect.beamOriginWidth, effect.glow, effect.radar, effect.grid, effect.edge, effect.animation]);
 }
 
 export function shaderZIndexForTarget(targetZIndex: number, _runtimeKey: string, placement: ShaderEffectDefinitionV1["placement"]): number {
@@ -294,9 +350,63 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
   private initialized = false;
   private radarTimer: number | undefined;
   private radarTicking = false;
+  private edgeTimer: number | undefined;
+  private edgeTicking = false;
 
   private stateItemIds(state: RuntimeState): string[] {
-    return [state.localItemId, ...(state.gridImages?.values() ?? [])];
+    return [state.localItemId, ...(state.gridImages?.values() ?? []), ...(state.edge?.imageId ? [state.edge.imageId] : [])];
+  }
+
+  private ensureEdgeTimer(): void {
+    if (this.edgeTimer !== undefined || ![...this.states.values()].some((state) => state.edge)) return;
+    this.edgeTimer = window.setInterval(() => void this.tickEdges(), 50);
+  }
+
+  private stopEdgeTimerIfIdle(): void {
+    if (this.edgeTimer === undefined || [...this.states.values()].some((state) => state.edge)) return;
+    window.clearInterval(this.edgeTimer);
+    this.edgeTimer = undefined;
+  }
+
+  private async tickEdges(): Promise<void> {
+    if (this.edgeTicking) return;
+    this.edgeTicking = true;
+    try {
+      const edgeStates = [...this.states.values()].filter((state): state is RuntimeState & { edge: EdgeRuntime } => !!state.edge);
+      if (!edgeStates.length) { this.stopEdgeTimerIfIdle(); return; }
+      const [width, height] = await Promise.all([OBR.viewport.getWidth(), OBR.viewport.getHeight()]);
+      await Promise.all(edgeStates.map(async (state) => {
+        const runtime = state.edge;
+        const target = runtime.targetBounds.center;
+        const emitter = runtime.emitterBounds.center;
+        const corners = [
+          { x: runtime.emitterBounds.min.x, y: runtime.emitterBounds.min.y },
+          { x: runtime.emitterBounds.max.x, y: runtime.emitterBounds.min.y },
+          { x: runtime.emitterBounds.max.x, y: runtime.emitterBounds.max.y },
+          { x: runtime.emitterBounds.min.x, y: runtime.emitterBounds.max.y },
+        ];
+        const [targetScreen, emitterScreen, ...screenCorners] = await Promise.all([target, emitter, ...corners].map((point) => OBR.viewport.transformPoint(point)));
+        const viewport = { width, height };
+        const emitterScreenBounds = transformedBounds(screenCorners);
+        const layout = runtime.effect.edge?.appearance === "bar"
+          ? barIndicatorLayout(targetScreen, emitterScreen, emitterScreenBounds, viewport, runtime.effect.edge?.inset ?? 16)
+          : edgeIndicatorLayout(targetScreen, emitterScreen, emitterScreenBounds, viewport, edgeFootprintSize(runtime.effect, runtime.strength), runtime.effect.edge?.inset ?? 16);
+        const hash = JSON.stringify(layout);
+        if (hash === runtime.layoutHash) return;
+        runtime.layoutHash = hash;
+        await OBR.scene.local.updateItems<Effect>([state.localItemId], (items) => { for (const item of items) item.uniforms = edgeUniforms(runtime.effect, runtime.strength, viewport, layout); });
+        if (runtime.imageId) {
+          const position = layout.visible ? await OBR.viewport.inverseTransformPoint(layout.center) : { x: 0, y: 0 };
+          const circleDiameter = resolveEdgeSize(runtime.effect, runtime.strength);
+          if (runtime.imageScale !== undefined && runtime.imageCircleDiameter && Math.abs(circleDiameter - runtime.imageCircleDiameter) > 0.01) {
+            runtime.imageScale *= circleDiameter / runtime.imageCircleDiameter;
+            runtime.imageCircleDiameter = circleDiameter;
+          }
+          const imageScale = runtime.imageScale ?? (isImage(runtime.emitter) ? edgeImageScale(runtime.emitter.image, circleDiameter) : 1);
+          await OBR.scene.local.updateItems<Billboard>([runtime.imageId], (items) => { for (const item of items) { item.position = position; item.scale = { x: imageScale, y: imageScale }; item.visible = layout.visible; } }, true);
+        }
+      }));
+    } finally { this.edgeTicking = false; }
   }
 
   private ensureRadarTimer(): void {
@@ -381,6 +491,82 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
 
     for (const context of desired) {
       const effect = context.effect as ShaderEffectDefinitionV1;
+      if (effect.preset === "edge") {
+        const emitter = context.detectedEmitter;
+        if (!emitter) continue;
+        const hash = shaderConfigHash(effect);
+        let existing = this.states.get(context.runtimeKey);
+        if (existing && existing.preset !== "edge") {
+          await OBR.scene.local.deleteItems(this.stateItemIds(existing));
+          this.states.delete(context.runtimeKey);
+          existing = undefined;
+        }
+        const [targetBounds, emitterBounds] = await Promise.all([itemBounds(context.target!), itemBounds(emitter)]);
+        const wantsImage = effect.edge?.appearance === "image" && isImage(emitter) && !!emitter.image.url;
+        const priorEmitter = existing?.edge?.emitter;
+        const imageChanged = priorEmitter?.id !== emitter.id
+          || (priorEmitter && isImage(priorEmitter) ? priorEmitter.image.url : undefined) !== (isImage(emitter) ? emitter.image.url : undefined)
+          || existing?.configHash !== hash;
+        if (existing?.edge?.imageId && (!wantsImage || imageChanged)) {
+          await OBR.scene.local.deleteItems([existing.edge.imageId]);
+          existing.edge.imageId = undefined;
+          existing.edge.imageScale = undefined;
+          existing.edge.imageCircleDiameter = undefined;
+        }
+        if (!existing) {
+          const item = buildEffect()
+            .name("Proximity Signal: edge")
+            .effectType("VIEWPORT")
+            .sksl(SHADERS.edge)
+            .uniforms(edgeUniforms(effect, context.strength))
+            .blendMode("SRC_OVER")
+            .locked(true)
+            .disableHit(true)
+            .disableAutoZIndex(true)
+            .layer("POPOVER")
+            .metadata({ [LOCAL_EFFECT_KEY]: { runtimeKey: context.runtimeKey } })
+            .build();
+          await OBR.scene.local.addItems([item]);
+          existing = { localItemId: item.id, strength: context.strength, configHash: hash, preset: "edge", layoutHash: "", edge: { effect, strength: context.strength, targetBounds, emitterBounds, emitter } };
+          this.states.set(context.runtimeKey, existing);
+        }
+        const edgeRuntime = existing.edge!;
+        edgeRuntime.effect = effect;
+        edgeRuntime.strength = context.strength;
+        edgeRuntime.targetBounds = targetBounds;
+        edgeRuntime.emitterBounds = emitterBounds;
+        edgeRuntime.emitter = emitter;
+        existing.strength = context.strength;
+        existing.configHash = hash;
+        if (wantsImage && !edgeRuntime.imageId && isImage(emitter)) {
+          const imageScale = edgeImageScale(emitter.image, resolveEdgeSize(effect, context.strength));
+          const image = buildBillboard(emitter.image, emitter.grid)
+            .name(`Edge Indicator: ${emitter.name}`)
+            .position({ x: 0, y: 0 })
+            .scale({ x: imageScale, y: imageScale })
+            .visible(false)
+            .locked(true)
+            .disableHit(true)
+            .disableAutoZIndex(true)
+            .layer("POPOVER")
+            .metadata({ [LOCAL_EFFECT_KEY]: { runtimeKey: context.runtimeKey, part: "image" } })
+            .build();
+          await OBR.scene.local.addItems([image]);
+          edgeRuntime.imageId = image.id;
+          const imageBounds = await OBR.scene.local.getItemBounds([image.id]);
+          const [screenMin, screenMax] = await Promise.all([OBR.viewport.transformPoint(imageBounds.min), OBR.viewport.transformPoint(imageBounds.max)]);
+          const renderedDiagonal = Math.hypot(screenMax.x - screenMin.x, screenMax.y - screenMin.y);
+          const circleDiameter = resolveEdgeSize(effect, context.strength);
+          const calibratedScale = calibrateEdgeImageScale(imageScale, circleDiameter, renderedDiagonal);
+          edgeRuntime.imageScale = calibratedScale;
+          edgeRuntime.imageCircleDiameter = circleDiameter;
+          await OBR.scene.local.updateItems<Billboard>([image.id], (items) => { for (const item of items) item.scale = { x: calibratedScale, y: calibratedScale }; });
+        }
+        edgeRuntime.layoutHash = undefined;
+        this.ensureEdgeTimer();
+        await this.tickEdges();
+        continue;
+      }
       const bounds = await OBR.scene.items.getItemBounds([context.target!.id]);
       const aimTarget = context.detectedEmitter?.id === context.target!.id ? context.detector : context.detectedEmitter;
       const aimCenter = aimTarget ? await itemCenter(aimTarget) : bounds.center;
@@ -633,6 +819,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
         }
       }
     }
+    this.stopEdgeTimerIfIdle();
     this.ensureRadarTimer();
     return {
       localIds: new Map([...this.states].map(([key, state]) => [key, state.localItemId])),
@@ -646,6 +833,8 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
     this.states.clear();
     if (this.radarTimer !== undefined) window.clearInterval(this.radarTimer);
     this.radarTimer = undefined;
+    if (this.edgeTimer !== undefined) window.clearInterval(this.edgeTimer);
+    this.edgeTimer = undefined;
     this.initialized = false;
   }
 }

@@ -1,12 +1,12 @@
 import type { ImageContent, ImageGrid, Item, Layer, LightType, Player } from "@owlbear-rodeo/sdk";
 
 export type Falloff = "binary" | "linear" | "smoothstep" | "logarithmic";
-export type ShaderPreset = "glow" | "beam" | "radar" | "grid";
+export type ShaderPreset = "glow" | "beam" | "radar" | "grid" | "edge";
 export type ShaderShape = "circle" | "square";
 export type ShaderPlacement = "above" | "below";
 export type ShaderAnimationMode = "none" | "pulse" | "flicker" | "radial-pulse";
 export type StrengthLinkDirection = "min" | "max";
-export type ShaderDynamicField = "intensity" | "softness" | "innerRadius" | "outerRadius" | "beamWidth" | "beamOriginWidth" | "width" | "height" | "offsetX" | "offsetY" | "responsiveOffset" | "rotation" | "animationRate" | "animationDepth" | "waveWidth" | "echoFadeDuration" | "radarBrightness" | "radarSweepTrail" | "radarEchoSize";
+export type ShaderDynamicField = "intensity" | "softness" | "innerRadius" | "outerRadius" | "beamWidth" | "beamOriginWidth" | "width" | "height" | "offsetX" | "offsetY" | "responsiveOffset" | "rotation" | "animationRate" | "animationDepth" | "waveWidth" | "echoFadeDuration" | "radarBrightness" | "radarSweepTrail" | "radarEchoSize" | "indicatorSize";
 export interface DynamicValueRange { minimum: number; maximum: number; enabled?: boolean }
 export type EffectLifecycle = "continuous" | "enter" | "exit" | "nearest-change";
 export type JsonPrimitive = string | number | boolean | null;
@@ -91,6 +91,7 @@ export interface ShaderEffectDefinitionV1 {
     echoFadeDuration: number;
   };
   grid?: { showGrid: boolean; showImages: boolean; imageBackgrounds: boolean };
+  edge?: { appearance: "triangle" | "disk" | "image" | "bar"; size: number; inset: number };
   animation?: {
     mode: ShaderAnimationMode;
     rate: number;

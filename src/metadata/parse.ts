@@ -189,7 +189,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   }
   if (value.type !== "shader") return null;
   const legacyPreset = ["outline", "pulse", "flicker"].includes(String(value.preset)) ? String(value.preset) : null;
-  const presets: ShaderPreset[] = ["glow", "beam", "radar", "grid"];
+  const presets: ShaderPreset[] = ["glow", "beam", "radar", "grid", "edge"];
   if ((!legacyPreset && !presets.includes(value.preset as ShaderPreset)) || !color(value.color)) return null;
   if (value.colorGradient !== undefined && (!record(value.colorGradient) || !color(value.colorGradient.minColor))) return null;
   const colorGradient = value.colorGradient as { minColor: string } | undefined;
@@ -205,7 +205,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   const dynamicBounds: Record<ShaderDynamicField, [number, number]> = {
     intensity: [0, 2], softness: [0, 4], innerRadius: [0, 199], outerRadius: [1, 200], beamWidth: [0, 120], beamOriginWidth: [0, 100],
     width: [5, 400], height: [5, 400], offsetX: [-100, 100], offsetY: [-100, 100], responsiveOffset: [-100, 100],
-    rotation: [-180, 180], animationRate: [0, 10], animationDepth: [0, 1], waveWidth: [0, 1], echoFadeDuration: [0.1, 30], radarBrightness: [0, 1], radarSweepTrail: [0, 100], radarEchoSize: [10, 400],
+    rotation: [-180, 180], animationRate: [0, 10], animationDepth: [0, 1], waveWidth: [0, 1], echoFadeDuration: [0.1, 30], radarBrightness: [0, 1], radarSweepTrail: [0, 100], radarEchoSize: [10, 400], indicatorSize: [16, 160],
   };
   const dynamicRanges: Partial<Record<ShaderDynamicField, DynamicValueRange>> = {};
   if (value.dynamicRanges !== undefined) {
@@ -336,6 +336,16 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     if (typeof showGrid !== "boolean" || typeof showImages !== "boolean" || typeof imageBackgrounds !== "boolean") return null;
     grid = { showGrid, showImages, imageBackgrounds };
   }
+  let edge: ShaderEffectDefinitionV1["edge"];
+  if (value.preset === "edge") {
+    if (value.edge !== undefined && !record(value.edge)) return null;
+    const edgeValue = record(value.edge) ? value.edge : {};
+    const appearance = edgeValue.appearance ?? "triangle";
+    const size = edgeValue.size ?? 48;
+    const inset = edgeValue.inset ?? 16;
+    if (!["triangle", "disk", "image", "bar"].includes(String(appearance)) || !finite(size) || size < 16 || size > 160 || !finite(inset) || inset < 0 || inset > 96) return null;
+    edge = { appearance: appearance as "triangle" | "disk" | "image" | "bar", size, inset };
+  }
   return {
     id: value.id,
     ...named,
@@ -367,6 +377,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     ...(glow ? { glow } : {}),
     ...(radar ? { radar } : {}),
     ...(grid ? { grid } : {}),
+    ...(edge ? { edge } : {}),
     ...(animation ? { animation } : {}),
   };
 }

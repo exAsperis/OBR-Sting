@@ -84,6 +84,21 @@ describe("shader presets", () => {
     expect(SHADERS.grid).not.toContain("sweepPhase");
   });
 
+  it("renders viewport-relative edge indicator appearances", () => {
+    expect(SHADERS.edge).toContain("uniform mat3 view");
+    expect(SHADERS.edge).toContain("indicatorCenter");
+    expect(SHADERS.edge).toContain("indicatorDirection");
+    expect(SHADERS.edge).toContain("triangleDistance");
+    expect(SHADERS.edge).toContain("diskDistance");
+    expect(SHADERS.edge).toContain("imageBackdropDistance");
+    expect(SHADERS.edge).toContain("cornerPoint - vec2(0.5)");
+    expect(SHADERS.edge).toContain("length(point) - 1.0");
+    expect(SHADERS.edge).toContain("edgeAnimation");
+    expect(SHADERS.edge).toContain("uniform float barEdge");
+    expect(SHADERS.edge).toContain("rectangleDistance");
+    expect(SHADERS.edge).toContain("if (before > 0.0)");
+  });
+
 
   it("lets glow range from a crisp ring to a soft aura", () => {
     expect(SHADERS.glow).toContain("innerFade");

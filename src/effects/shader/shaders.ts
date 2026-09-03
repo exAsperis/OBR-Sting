@@ -114,6 +114,101 @@ const beamMask = `
 `;
 const beam = buildShader(beamMask, configurableAnimation, 0.82, "uniform vec2 beamDirection;\nuniform float beamWidth;\nuniform float beamOriginWidth;");
 
+const edge = `
+uniform vec2 size;
+uniform mat3 view;
+uniform float time;
+uniform vec3 signalColor;
+uniform float strength;
+uniform float rate;
+uniform float depth;
+uniform float animationMode;
+uniform float radialDirection;
+uniform float waveWidth;
+uniform float spread;
+uniform vec2 indicatorCenter;
+uniform vec2 indicatorDirection;
+uniform float indicatorSize;
+uniform float appearanceMode;
+uniform float indicatorVisible;
+uniform vec2 viewportSize;
+uniform float edgeInset;
+uniform float barEdge;
+
+float rectangleDistance(vec2 point, vec2 center, vec2 halfSize) {
+  vec2 offset = abs(point - center) - max(halfSize, vec2(0.0));
+  return length(max(offset, vec2(0.0))) + min(max(offset.x, offset.y), 0.0);
+}
+
+float edgeAnimation(float radial) {
+  if (animationMode < 0.5) return 1.0;
+  if (animationMode < 1.5) return mix(1.0 - depth, 1.0, 0.5 + 0.5 * sin(time * rate * 6.283185));
+  if (animationMode < 2.5) {
+    float noise = fract(sin(floor(time * max(rate, 0.01) * 12.0) * 43758.5453));
+    return mix(1.0 - depth, 1.0, noise);
+  }
+  float cycle = fract(time * max(rate, 0.01));
+  float waveCenter = radialDirection > 0.0 ? cycle : 1.0 - cycle;
+  float waveDistance = abs(radial - waveCenter);
+  float wave = 1.0 - smoothstep(waveWidth * 0.5, waveWidth * 0.75 + 0.005, waveDistance);
+  return mix(1.0 - depth, 1.0, wave);
+}
+
+half4 main(float2 coord) {
+  vec2 screen = (vec3(coord, 1.0) * view).xy;
+  vec2 delta = screen - indicatorCenter;
+  vec2 forward = length(indicatorDirection) > 0.0001 ? normalize(indicatorDirection) : vec2(0.0, -1.0);
+  vec2 right = vec2(forward.y, -forward.x);
+  float radius = max(indicatorSize * 0.5, 1.0);
+  vec2 point = vec2(dot(delta, right), dot(delta, forward)) / radius;
+  float diskDistance = length(point) - 0.72;
+  float triangleDistance = max(abs(point.x) - max(0.0, (0.88 - point.y) * 0.58), max(-0.72 - point.y, point.y - 0.88));
+  const float DIAGONAL = 0.70710678;
+  vec2 cornerPoint = vec2(DIAGONAL * point.x + DIAGONAL * point.y, -DIAGONAL * point.x + DIAGONAL * point.y);
+  float circleDistance = length(point) - 1.0;
+  vec2 boxPoint = cornerPoint - vec2(0.5);
+  float boxDistance = max(abs(boxPoint.x) - 0.5, abs(boxPoint.y) - 0.5);
+  float imageBackdropDistance = min(circleDistance, boxDistance);
+  float shapeDistance = appearanceMode < 0.5 ? triangleDistance : appearanceMode < 1.5 ? diskDistance : imageBackdropDistance;
+  float feather = spread <= 0.0 ? 0.0 : max(0.75, spread * 2.0) / radius;
+  float mask = feather <= 0.0 ? 1.0 - step(0.0, shapeDistance) : 1.0 - smoothstep(-feather, feather, shapeDistance);
+  if (appearanceMode > 2.5) {
+    float halfLength = indicatorSize * 0.5;
+    const float halfThickness = 10.0;
+    float left = edgeInset + halfThickness;
+    float rightEdge = viewportSize.x - edgeInset - halfThickness;
+    float top = edgeInset + halfThickness;
+    float bottom = viewportSize.y - edgeInset - halfThickness;
+    float barDistance = 100000.0;
+    if (barEdge < 0.5 || (barEdge >= 1.5 && barEdge < 2.5)) {
+      float edgeY = barEdge < 0.5 ? top : bottom;
+      float start = max(left, indicatorCenter.x - halfLength);
+      float end = min(rightEdge, indicatorCenter.x + halfLength);
+      barDistance = rectangleDistance(screen, vec2((start + end) * 0.5, edgeY), vec2(max(0.0, end - start) * 0.5, halfThickness));
+      float before = max(0.0, left - (indicatorCenter.x - halfLength));
+      float after = max(0.0, indicatorCenter.x + halfLength - rightEdge);
+      float verticalDirection = barEdge < 0.5 ? 1.0 : -1.0;
+      if (before > 0.0) barDistance = min(barDistance, rectangleDistance(screen, vec2(left, edgeY + verticalDirection * before * 0.5), vec2(halfThickness, before * 0.5)));
+      if (after > 0.0) barDistance = min(barDistance, rectangleDistance(screen, vec2(rightEdge, edgeY + verticalDirection * after * 0.5), vec2(halfThickness, after * 0.5)));
+    } else {
+      float edgeX = barEdge < 1.5 ? rightEdge : left;
+      float start = max(top, indicatorCenter.y - halfLength);
+      float end = min(bottom, indicatorCenter.y + halfLength);
+      barDistance = rectangleDistance(screen, vec2(edgeX, (start + end) * 0.5), vec2(halfThickness, max(0.0, end - start) * 0.5));
+      float before = max(0.0, top - (indicatorCenter.y - halfLength));
+      float after = max(0.0, indicatorCenter.y + halfLength - bottom);
+      float horizontalDirection = barEdge < 1.5 ? -1.0 : 1.0;
+      if (before > 0.0) barDistance = min(barDistance, rectangleDistance(screen, vec2(edgeX + horizontalDirection * before * 0.5, top), vec2(before * 0.5, halfThickness)));
+      if (after > 0.0) barDistance = min(barDistance, rectangleDistance(screen, vec2(edgeX + horizontalDirection * after * 0.5, bottom), vec2(after * 0.5, halfThickness)));
+    }
+    float barFeather = spread <= 0.0 ? 0.0 : max(0.75, spread * 2.0);
+    mask = barFeather <= 0.0 ? 1.0 - step(0.0, barDistance) : 1.0 - smoothstep(-barFeather, barFeather, barDistance);
+  }
+  float radial = clamp(length(point), 0.0, 1.0);
+  float alpha = clamp(indicatorVisible * strength * edgeAnimation(radial) * mask * 0.90, 0.0, 1.0);
+  return half4(half3(signalColor) * alpha, alpha);
+}`;
+
 export const RADAR_ECHO_CAPACITY = 32;
 const radarEchoUniforms = Array.from({ length: RADAR_ECHO_CAPACITY }, (_, index) => `uniform vec2 echoPosition${index};\nuniform float echoIntensity${index};\nuniform float echoSize${index};\nuniform float echoRune${index};\nuniform vec3 echoColor${index};`).join("\n");
 const radarEchoLayers = Array.from({ length: RADAR_ECHO_CAPACITY }, (_, index) => `
@@ -385,4 +480,4 @@ half4 main(float2 coord) {
   return half4(half3(rgb) * alpha, alpha);
 }`;
 
-export const SHADERS: Record<ShaderPreset, string> = { glow, beam, radar, grid };
+export const SHADERS: Record<ShaderPreset, string> = { glow, beam, radar, grid, edge };

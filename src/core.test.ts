@@ -217,6 +217,16 @@ describe("versioned detector parsing", () => {
     expect(parseEffectDefinition({ ...effect(), preset: "grid", grid: { showGrid: false, showImages: true, imageBackgrounds: "yes" } })).toBeNull();
     expect(parseEffectDefinition({ ...effect(), preset: "grid", grid: { showGrid: false, showImages: true, hologram: true } })).toMatchObject({ grid: { imageBackgrounds: true } });
   });
+  it("parses edge indicator defaults and validates its configuration", () => {
+    expect(parseEffectDefinition({ ...effect(), preset: "edge" })).toMatchObject({ preset: "edge", edge: { appearance: "triangle", size: 48, inset: 16 } });
+    const configured = { ...effect(), preset: "edge", edge: { appearance: "image", size: 96, inset: 24 }, dynamicRanges: { indicatorSize: { minimum: 24, maximum: 120 } } };
+    expect(parseEffectDefinition(configured)).toMatchObject(configured);
+    expect(parseEffectDefinition({ ...configured, edge: { ...configured.edge, appearance: "bar" } })).toMatchObject({ edge: { appearance: "bar" } });
+    expect(parseEffectDefinition({ ...configured, edge: { ...configured.edge, appearance: "arrow" } })).toBeNull();
+    expect(parseEffectDefinition({ ...configured, edge: { ...configured.edge, size: 15 } })).toBeNull();
+    expect(parseEffectDefinition({ ...configured, edge: { ...configured.edge, inset: 97 } })).toBeNull();
+    expect(parseEffectDefinition({ ...configured, dynamicRanges: { indicatorSize: { minimum: 10, maximum: 120 } } })).toBeNull();
+  });
   it("parses optional animation rate strength linking and rejects unknown values", () => {
     expect(parseEffectDefinition({ ...effect(), animation: { mode: "pulse", rate: 2, depth: 0.5, rateStrengthLink: "max" } }))
       .toMatchObject({ animation: { mode: "pulse", rate: 2, depth: 0.5, rateStrengthLink: "max" } });

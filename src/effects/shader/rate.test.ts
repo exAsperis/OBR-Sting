@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ShaderEffectDefinitionV1 } from "../../types";
-import { averageDetectionDirections, circularPhaseCrossed, gridImageLayout, gridLocalValue, gridTypeValue, gridWorldRange, radarDistancePosition, radarEchoSize, radarSweepIsAnimated, resolveEffectIntensity, resolveRadarEchoSize, resolveRadarFadeDuration, resolveSignalColor, resolveStrengthLinkedRate, resolveStrengthLinkedShaderValues, resolveStrengthLinkedValue, shaderConfigHash, shaderUniforms } from "./executor";
+import { averageDetectionDirections, calibrateEdgeImageScale, circularPhaseCrossed, edgeFootprintSize, edgeImageScale, gridImageLayout, gridLocalValue, gridTypeValue, gridWorldRange, radarDistancePosition, radarEchoSize, radarSweepIsAnimated, resolveEdgeSize, resolveEffectIntensity, resolveRadarEchoSize, resolveRadarFadeDuration, resolveSignalColor, resolveStrengthLinkedRate, resolveStrengthLinkedShaderValues, resolveStrengthLinkedValue, shaderConfigHash, shaderUniforms } from "./executor";
 
 describe("radar helpers", () => {
   const radar: ShaderEffectDefinitionV1 = {
@@ -62,6 +62,28 @@ describe("radar helpers", () => {
   it("excludes static radar mode from all sweep and fade ticking", () => {
     expect(radarSweepIsAnimated({ ...radar, radar: { ...radar.radar!, sweepType: "none" } })).toBe(false);
     expect(radarSweepIsAnimated(radar)).toBe(true);
+  });
+});
+
+describe("edge indicator dynamic size", () => {
+  const edge: ShaderEffectDefinitionV1 = {
+    id: "edge", type: "shader", enabled: true, target: { type: "detector" }, audience: { type: "everyone" },
+    preset: "edge", shape: "circle", placement: "above", color: "#ffffff", maxIntensity: 1, spread: 1,
+    edge: { appearance: "triangle", size: 64, inset: 16 }, dynamicRanges: { indicatorSize: { minimum: 24, maximum: 120 } },
+  };
+  it("resolves independently from detection strength", () => {
+    expect(resolveEdgeSize(edge, 0)).toBe(24);
+    expect(resolveEdgeSize(edge, 0.5)).toBe(72);
+    expect(resolveEdgeSize(edge, 1)).toBe(120);
+  });
+  it("places every image bounding-box corner on the circle", () => {
+    const scale = edgeImageScale({ width: 120, height: 90 }, 100);
+    expect(Math.hypot(120 * scale / 2, 90 * scale / 2)).toBeCloseTo(50);
+    expect(calibrateEdgeImageScale(scale, 100, 40)).toBeCloseTo(scale * 2.5);
+  });
+  it("allows clearance for the single exposed tangent-square vertex", () => {
+    expect(edgeFootprintSize({ ...edge, edge: { ...edge.edge!, appearance: "image" } }, 0.5)).toBeCloseTo(72 * Math.SQRT2);
+    expect(edgeFootprintSize({ ...edge, edge: { ...edge.edge!, appearance: "disk" } }, 0.5)).toBe(72);
   });
 });
 
