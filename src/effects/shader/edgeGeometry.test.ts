@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { barIndicatorLayout, edgeIndicatorLayout, segmentRectInterval, transformedBounds } from "./edgeGeometry";
+import { edgeIndicatorLayout, nearestViewportBoundaryDirection, segmentRectInterval, transformedBounds } from "./edgeGeometry";
 
 const offscreen = (x: number, y: number) => ({ left: x - 5, top: y - 5, right: x + 5, bottom: y + 5 });
 
@@ -32,12 +32,14 @@ describe("edge indicator geometry", () => {
     expect(transformedBounds([{ x: 8, y: 2 }, { x: -2, y: 6 }, { x: 4, y: -3 }])).toEqual({ left: -2, top: -3, right: 8, bottom: 6 });
   });
 
-  it.each([
-    [{ x: 50, y: 50 }, { x: 50, y: -50 }, 0],
-    [{ x: 50, y: 50 }, { x: 150, y: 50 }, 1],
-    [{ x: 50, y: 50 }, { x: 50, y: 150 }, 2],
-    [{ x: 50, y: 50 }, { x: -50, y: 50 }, 3],
-  ])("identifies the viewport edge used by a bar", (target, emitter, edge) => {
-    expect(barIndicatorLayout(target, emitter, offscreen(emitter.x, emitter.y), { width: 100, height: 100 }, 5)).toMatchObject({ edge, visible: true });
+  it("allows negative inset to move an indicator toward and beyond the viewport edge", () => {
+    expect(edgeIndicatorLayout({ x: 50, y: 50 }, { x: 150, y: 50 }, offscreen(150, 50), { width: 100, height: 100 }, 20, -10)).toMatchObject({ center: { x: 100, y: 50 }, visible: true });
+    expect(edgeIndicatorLayout({ x: 50, y: 50 }, { x: 150, y: 50 }, offscreen(150, 50), { width: 100, height: 100 }, 20, -20)).toMatchObject({ center: { x: 110, y: 50 }, visible: true });
+  });
+
+  it("orients indicators toward the nearest viewport boundary", () => {
+    expect(nearestViewportBoundaryDirection({ x: 80, y: 40 }, { width: 100, height: 100 })).toEqual({ x: 1, y: 0 });
+    expect(nearestViewportBoundaryDirection({ x: 40, y: 15 }, { width: 100, height: 100 })).toEqual({ x: 0, y: -1 });
+    expect(edgeIndicatorLayout({ x: 50, y: 50 }, { x: 150, y: 75 }, offscreen(150, 75), { width: 100, height: 100 }, 20, 10, "toward-edge").direction).toEqual({ x: 1, y: 0 });
   });
 });

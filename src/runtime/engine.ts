@@ -29,6 +29,7 @@ export class ProximityEngine {
   private ruleStates = new Map<string, RuleSnapshot>();
   private lastActiveEffects = new Map<string, DesiredEffect>();
   private distanceMethod: DistanceMethod = "scene";
+  private enabled = true;
 
   constructor(authority: SharedEffectAuthority) {
     this.registry.register(new ShaderEffectExecutor());
@@ -42,6 +43,7 @@ export class ProximityEngine {
   setPlayer(player: Pick<Player, "id" | "role" | "connectionId">): void { this.player = player; this.schedule(); }
   setParty(party: Player[]): void { this.party = party; this.schedule(); }
   setDistanceMethod(method: DistanceMethod): void { this.distanceMethod = method; this.schedule(); }
+  setEnabled(enabled: boolean): void { this.enabled = enabled; this.schedule(); }
 
   schedule(): void {
     this.dirty = true;
@@ -65,6 +67,7 @@ export class ProximityEngine {
 
   private async reconcile(): Promise<void> {
     if (!this.player) return;
+    if (!this.enabled) { await this.clearEffects(); return; }
     const graph = buildAttachmentGraph(this.latestItems);
     const signalIndex = indexEmittersBySignal(this.latestItems);
     const [gridScale, gridDpi, gridType, gridMeasurement] = await Promise.all([OBR.scene.grid.getScale(), OBR.scene.grid.getDpi(), OBR.scene.grid.getType(), OBR.scene.grid.getMeasurement()]);
@@ -208,6 +211,10 @@ export class ProximityEngine {
   async clear(): Promise<void> {
     this.latestItems = [];
     this.latestLights = [];
+    await this.clearEffects();
+  }
+
+  private async clearEffects(): Promise<void> {
     this.ruleStates.clear();
     this.lastActiveEffects.clear();
     localStorage.removeItem(DEBUG_STORAGE_KEY);

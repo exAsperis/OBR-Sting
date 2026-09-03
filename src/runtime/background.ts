@@ -1,5 +1,5 @@
 import OBR, { isLight } from "@owlbear-rodeo/sdk";
-import { CONTEXT_MENU_ID, EMANATION_INTEGRATION_KEY, SETTINGS_KEY } from "../constants";
+import { CONTEXT_MENU_ID, EFFECTS_ENABLED_STORAGE_KEY, EMANATION_INTEGRATION_KEY, SETTINGS_KEY } from "../constants";
 import { ProximityEngine } from "./engine";
 import { parseSceneSettings } from "../settings";
 import { clearSelectedFacePivots, syncSelectedFacePivots } from "./pivotDebug";
@@ -12,6 +12,7 @@ OBR.onReady(async () => {
   const authority = new AuthorityCoordinator(initialPlayer, initialParty);
   const stopPublicApi = registerStingPublicApi();
   const engine = new ProximityEngine(authority);
+  engine.setEnabled(localStorage.getItem(EFFECTS_ENABLED_STORAGE_KEY) !== "false");
   let stopItems: (() => void) | undefined;
   let stopGrid: (() => void) | undefined;
   let stopLocal: (() => void) | undefined;
@@ -79,7 +80,10 @@ OBR.onReady(async () => {
   const stopReady = OBR.scene.onReadyChange((ready) => void attachScene(ready));
   const stopPlayer = OBR.player.onChange(() => void refreshPlayer());
   const stopParty = OBR.party.onChange((party) => { engine.setParty(party); authority.setParty(party); });
-  const integrationChanged = (event: StorageEvent) => { if (event.key === EMANATION_INTEGRATION_KEY) engine.schedule(); };
+  const integrationChanged = (event: StorageEvent) => {
+    if (event.key === EMANATION_INTEGRATION_KEY) engine.schedule();
+    if (event.key === EFFECTS_ENABLED_STORAGE_KEY) engine.setEnabled(event.newValue !== "false");
+  };
   window.addEventListener("storage", integrationChanged);
   engine.setPlayer(initialPlayer);
   engine.setParty(initialParty);

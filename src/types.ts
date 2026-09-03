@@ -91,7 +91,7 @@ export interface ShaderEffectDefinitionV1 {
     echoFadeDuration: number;
   };
   grid?: { showGrid: boolean; showImages: boolean; imageBackgrounds: boolean };
-  edge?: { appearance: "triangle" | "disk" | "image" | "bar"; size: number; inset: number };
+  edge?: { appearance: "triangle" | "disk" | "image" | "square" | "target" | "echo" | "rune" | "arcane"; orientation: "toward-edge" | "toward-detection"; size: number; inset: number };
   animation?: {
     mode: ShaderAnimationMode;
     rate: number;

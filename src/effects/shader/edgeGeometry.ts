@@ -1,7 +1,16 @@
 export interface ScreenPoint { x: number; y: number }
 export interface ScreenRect { left: number; top: number; right: number; bottom: number }
 export interface EdgeIndicatorLayout { center: ScreenPoint; direction: ScreenPoint; visible: boolean }
-export interface BarIndicatorLayout extends EdgeIndicatorLayout { edge: 0 | 1 | 2 | 3 }
+
+export function nearestViewportBoundaryDirection(center: ScreenPoint, viewport: { width: number; height: number }): ScreenPoint {
+  const candidates = [
+    { distance: Math.abs(center.y), direction: { x: 0, y: -1 } },
+    { distance: Math.abs(viewport.width - center.x), direction: { x: 1, y: 0 } },
+    { distance: Math.abs(viewport.height - center.y), direction: { x: 0, y: 1 } },
+    { distance: Math.abs(center.x), direction: { x: -1, y: 0 } },
+  ];
+  return candidates.reduce((nearest, candidate) => candidate.distance < nearest.distance ? candidate : nearest).direction;
+}
 
 const intersects = (a: ScreenRect, b: ScreenRect) => a.right >= b.left && a.left <= b.right && a.bottom >= b.top && a.top <= b.bottom;
 
@@ -19,27 +28,6 @@ export function segmentRectInterval(start: ScreenPoint, end: ScreenPoint, rect: 
   return [enter, exit];
 }
 
-/** Edge order is top, right, bottom, left. */
-export function barIndicatorLayout(
-  target: ScreenPoint,
-  emitter: ScreenPoint,
-  emitterBounds: ScreenRect,
-  viewport: { width: number; height: number },
-  inset: number,
-  thickness = 20,
-): BarIndicatorLayout {
-  const layout = edgeIndicatorLayout(target, emitter, emitterBounds, viewport, thickness, inset);
-  if (!layout.visible) return { ...layout, edge: 0 };
-  const centerline = Math.max(0, inset) + thickness / 2;
-  const distances = [
-    Math.abs(layout.center.y - centerline),
-    Math.abs(layout.center.x - (viewport.width - centerline)),
-    Math.abs(layout.center.y - (viewport.height - centerline)),
-    Math.abs(layout.center.x - centerline),
-  ];
-  return { ...layout, edge: distances.indexOf(Math.min(...distances)) as 0 | 1 | 2 | 3 };
-}
-
 export function edgeIndicatorLayout(
   target: ScreenPoint,
   emitter: ScreenPoint,
@@ -47,6 +35,7 @@ export function edgeIndicatorLayout(
   viewport: { width: number; height: number },
   size: number,
   inset: number,
+  orientation: "toward-edge" | "toward-detection" = "toward-detection",
 ): EdgeIndicatorLayout {
   const hidden = { center: { x: 0, y: 0 }, direction: { x: 0, y: -1 }, visible: false };
   const viewportRect = { left: 0, top: 0, right: viewport.width, bottom: viewport.height };
@@ -54,15 +43,16 @@ export function edgeIndicatorLayout(
   const dx = emitter.x - target.x, dy = emitter.y - target.y;
   const length = Math.hypot(dx, dy);
   if (length < 1e-6 || !segmentRectInterval(target, emitter, viewportRect)) return hidden;
-  const clearance = Math.max(0, inset) + Math.max(0, size) / 2;
+  const clearance = inset + Math.max(0, size) / 2;
   const safeRect = { left: clearance, top: clearance, right: viewport.width - clearance, bottom: viewport.height - clearance };
   if (safeRect.left > safeRect.right || safeRect.top > safeRect.bottom) return hidden;
   const safeInterval = segmentRectInterval(target, emitter, safeRect);
   if (!safeInterval) return hidden;
   const t = safeInterval[1];
+  const center = { x: target.x + dx * t, y: target.y + dy * t };
   return {
-    center: { x: target.x + dx * t, y: target.y + dy * t },
-    direction: { x: dx / length, y: dy / length },
+    center,
+    direction: orientation === "toward-edge" ? nearestViewportBoundaryDirection(center, viewport) : { x: dx / length, y: dy / length },
     visible: true,
   };
 }

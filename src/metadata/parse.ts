@@ -340,11 +340,13 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   if (value.preset === "edge") {
     if (value.edge !== undefined && !record(value.edge)) return null;
     const edgeValue = record(value.edge) ? value.edge : {};
-    const appearance = edgeValue.appearance ?? "triangle";
+    const rawAppearance = edgeValue.appearance ?? "triangle";
+    const appearance = rawAppearance === "bar" ? "square" : rawAppearance;
+    const orientation = edgeValue.orientation ?? "toward-detection";
     const size = edgeValue.size ?? 48;
     const inset = edgeValue.inset ?? 16;
-    if (!["triangle", "disk", "image", "bar"].includes(String(appearance)) || !finite(size) || size < 16 || size > 160 || !finite(inset) || inset < 0 || inset > 96) return null;
-    edge = { appearance: appearance as "triangle" | "disk" | "image" | "bar", size, inset };
+    if (!["triangle", "disk", "image", "square", "target", "echo", "rune", "arcane"].includes(String(appearance)) || !["toward-edge", "toward-detection"].includes(String(orientation)) || !finite(size) || size < 16 || size > 160 || !finite(inset) || inset < -96 || inset > 96) return null;
+    edge = { appearance: appearance as NonNullable<ShaderEffectDefinitionV1["edge"]>["appearance"], orientation: orientation as "toward-edge" | "toward-detection", size, inset };
   }
   return {
     id: value.id,

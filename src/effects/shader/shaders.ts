@@ -129,15 +129,92 @@ uniform float spread;
 uniform vec2 indicatorCenter;
 uniform vec2 indicatorDirection;
 uniform float indicatorSize;
+uniform vec2 indicatorScale;
 uniform float appearanceMode;
+uniform float indicatorRune;
 uniform float indicatorVisible;
-uniform vec2 viewportSize;
-uniform float edgeInset;
-uniform float barEdge;
 
-float rectangleDistance(vec2 point, vec2 center, vec2 halfSize) {
-  vec2 offset = abs(point - center) - max(halfSize, vec2(0.0));
-  return length(max(offset, vec2(0.0))) + min(max(offset.x, offset.y), 0.0);
+float edgeRuneSegment(vec2 point, vec2 start, vec2 end) {
+  vec2 fromStart = point - start;
+  vec2 segment = end - start;
+  return length(fromStart - segment * clamp(dot(fromStart, segment) / max(dot(segment, segment), 0.0001), 0.0, 1.0));
+}
+
+float edgeRuneDistance(vec2 point, float glyph) {
+  float d = 10.0;
+  if (glyph < 0.5) {
+    d = min(edgeRuneSegment(point, vec2(-0.58, -0.58), vec2(0.0, 0.62)), edgeRuneSegment(point, vec2(0.0, 0.62), vec2(0.58, -0.58)));
+    d = min(d, edgeRuneSegment(point, vec2(-0.34, -0.18), vec2(0.34, -0.18)));
+  } else if (glyph < 1.5) {
+    d = min(edgeRuneSegment(point, vec2(0.35, -0.62), vec2(-0.28, -0.10)), edgeRuneSegment(point, vec2(-0.28, -0.10), vec2(0.30, 0.08)));
+    d = min(d, edgeRuneSegment(point, vec2(0.30, 0.08), vec2(-0.38, 0.62)));
+  } else if (glyph < 2.5) {
+    d = edgeRuneSegment(point, vec2(0.0, -0.62), vec2(0.0, 0.62));
+    d = min(d, edgeRuneSegment(point, vec2(0.0, -0.30), vec2(-0.48, -0.55)));
+    d = min(d, edgeRuneSegment(point, vec2(0.0, -0.30), vec2(0.48, -0.55)));
+    d = min(d, edgeRuneSegment(point, vec2(-0.34, 0.32), vec2(0.34, 0.32)));
+  } else if (glyph < 3.5) {
+    d = min(edgeRuneSegment(point, vec2(-0.48, -0.58), vec2(0.48, 0.58)), edgeRuneSegment(point, vec2(0.48, -0.58), vec2(-0.48, 0.58)));
+    d = min(d, edgeRuneSegment(point, vec2(-0.48, -0.58), vec2(0.48, -0.58)));
+    d = min(d, edgeRuneSegment(point, vec2(-0.48, 0.58), vec2(0.48, 0.58)));
+  } else if (glyph < 4.5) {
+    d = min(edgeRuneSegment(point, vec2(0.0, -0.62), vec2(0.52, -0.05)), edgeRuneSegment(point, vec2(0.52, -0.05), vec2(0.0, 0.62)));
+    d = min(d, edgeRuneSegment(point, vec2(0.0, 0.62), vec2(-0.52, -0.05)));
+    d = min(d, edgeRuneSegment(point, vec2(-0.52, -0.05), vec2(0.0, -0.62)));
+    d = min(d, edgeRuneSegment(point, vec2(-0.34, 0.30), vec2(0.34, -0.30)));
+  } else if (glyph < 5.5) {
+    d = edgeRuneSegment(point, vec2(0.0, 0.62), vec2(0.0, -0.08));
+    d = min(d, edgeRuneSegment(point, vec2(0.0, -0.08), vec2(-0.52, -0.58)));
+    d = min(d, edgeRuneSegment(point, vec2(0.0, -0.08), vec2(0.52, -0.58)));
+    d = min(d, edgeRuneSegment(point, vec2(-0.34, 0.30), vec2(0.34, 0.30)));
+  } else if (glyph < 6.5) {
+    d = min(edgeRuneSegment(point, vec2(-0.50, -0.58), vec2(0.32, -0.18)), edgeRuneSegment(point, vec2(0.32, -0.18), vec2(-0.30, 0.18)));
+    d = min(d, edgeRuneSegment(point, vec2(-0.30, 0.18), vec2(0.50, 0.58)));
+    d = min(d, edgeRuneSegment(point, vec2(-0.42, 0.02), vec2(0.42, 0.02)));
+  } else if (glyph < 7.5) {
+    d = min(edgeRuneSegment(point, vec2(0.45, -0.55), vec2(-0.38, -0.30)), edgeRuneSegment(point, vec2(-0.38, -0.30), vec2(-0.38, 0.30)));
+    d = min(d, edgeRuneSegment(point, vec2(-0.38, 0.30), vec2(0.45, 0.55)));
+    d = min(d, edgeRuneSegment(point, vec2(-0.10, 0.0), vec2(0.52, 0.0)));
+  } else if (glyph < 8.5) {
+    d = min(edgeRuneSegment(point, vec2(0.0, -0.65), vec2(0.44, -0.12)), edgeRuneSegment(point, vec2(0.44, -0.12), vec2(0.0, 0.42)));
+    d = min(d, edgeRuneSegment(point, vec2(0.0, 0.42), vec2(-0.44, -0.12)));
+    d = min(d, edgeRuneSegment(point, vec2(-0.44, -0.12), vec2(0.0, -0.65)));
+    d = min(d, edgeRuneSegment(point, vec2(0.0, 0.42), vec2(0.0, 0.65)));
+  } else if (glyph < 9.5) {
+    d = edgeRuneSegment(point, vec2(0.0, -0.62), vec2(0.0, 0.62));
+    d = min(d, edgeRuneSegment(point, vec2(0.0, -0.28), vec2(-0.50, 0.12)));
+    d = min(d, edgeRuneSegment(point, vec2(0.0, 0.28), vec2(0.50, -0.12)));
+    d = min(d, edgeRuneSegment(point, vec2(-0.38, -0.48), vec2(0.38, 0.48)));
+  } else if (glyph < 10.5) {
+    d = min(edgeRuneSegment(point, vec2(-0.52, 0.58), vec2(0.0, -0.62)), edgeRuneSegment(point, vec2(0.0, -0.62), vec2(0.52, 0.58)));
+    d = min(d, edgeRuneSegment(point, vec2(-0.38, 0.20), vec2(0.38, 0.20)));
+    d = min(d, edgeRuneSegment(point, vec2(0.0, -0.62), vec2(0.0, 0.58)));
+  } else if (glyph < 11.5) {
+    d = edgeRuneSegment(point, vec2(-0.48, -0.58), vec2(-0.48, 0.58));
+    d = min(d, edgeRuneSegment(point, vec2(-0.48, -0.58), vec2(0.44, -0.24)));
+    d = min(d, edgeRuneSegment(point, vec2(0.44, -0.24), vec2(-0.48, 0.05)));
+    d = min(d, edgeRuneSegment(point, vec2(-0.48, 0.05), vec2(0.50, 0.58)));
+  } else if (glyph < 12.5) {
+    d = min(edgeRuneSegment(point, vec2(0.48, -0.56), vec2(-0.48, -0.18)), edgeRuneSegment(point, vec2(-0.48, -0.18), vec2(0.48, 0.18)));
+    d = min(d, edgeRuneSegment(point, vec2(0.48, 0.18), vec2(-0.48, 0.56)));
+    d = min(d, edgeRuneSegment(point, vec2(-0.48, -0.18), vec2(-0.48, 0.56)));
+  } else if (glyph < 13.5) {
+    d = edgeRuneSegment(point, vec2(0.0, -0.64), vec2(0.0, 0.64));
+    d = min(d, edgeRuneSegment(point, vec2(-0.48, -0.42), vec2(0.0, -0.05)));
+    d = min(d, edgeRuneSegment(point, vec2(0.0, -0.05), vec2(0.48, -0.42)));
+    d = min(d, edgeRuneSegment(point, vec2(-0.48, 0.42), vec2(0.0, 0.05)));
+    d = min(d, edgeRuneSegment(point, vec2(0.0, 0.05), vec2(0.48, 0.42)));
+  } else if (glyph < 14.5) {
+    d = min(edgeRuneSegment(point, vec2(-0.50, -0.55), vec2(0.50, -0.55)), edgeRuneSegment(point, vec2(0.50, -0.55), vec2(-0.30, 0.02)));
+    d = min(d, edgeRuneSegment(point, vec2(-0.30, 0.02), vec2(0.50, 0.55)));
+    d = min(d, edgeRuneSegment(point, vec2(-0.30, 0.02), vec2(0.28, 0.02)));
+  } else {
+    d = edgeRuneSegment(point, vec2(-0.44, -0.62), vec2(-0.44, 0.62));
+    d = min(d, edgeRuneSegment(point, vec2(-0.44, -0.62), vec2(0.48, -0.62)));
+    d = min(d, edgeRuneSegment(point, vec2(-0.44, -0.04), vec2(0.34, -0.04)));
+    d = min(d, edgeRuneSegment(point, vec2(-0.44, 0.62), vec2(0.48, 0.62)));
+  }
+  return d;
 }
 
 float edgeAnimation(float radial) {
@@ -160,7 +237,8 @@ half4 main(float2 coord) {
   vec2 forward = length(indicatorDirection) > 0.0001 ? normalize(indicatorDirection) : vec2(0.0, -1.0);
   vec2 right = vec2(forward.y, -forward.x);
   float radius = max(indicatorSize * 0.5, 1.0);
-  vec2 point = vec2(dot(delta, right), dot(delta, forward)) / radius;
+  vec2 safeScale = max(indicatorScale, vec2(0.05));
+  vec2 point = vec2(dot(delta, right), dot(delta, forward)) / radius / safeScale;
   float diskDistance = length(point) - 0.72;
   float triangleDistance = max(abs(point.x) - max(0.0, (0.88 - point.y) * 0.58), max(-0.72 - point.y, point.y - 0.88));
   const float DIAGONAL = 0.70710678;
@@ -169,41 +247,26 @@ half4 main(float2 coord) {
   vec2 boxPoint = cornerPoint - vec2(0.5);
   float boxDistance = max(abs(boxPoint.x) - 0.5, abs(boxPoint.y) - 0.5);
   float imageBackdropDistance = min(circleDistance, boxDistance);
-  float shapeDistance = appearanceMode < 0.5 ? triangleDistance : appearanceMode < 1.5 ? diskDistance : imageBackdropDistance;
+  float squareDistance = max(abs(point.x), abs(point.y)) - 0.72;
+  float shapeDistance = appearanceMode < 0.5 ? triangleDistance : appearanceMode < 1.5 ? diskDistance : appearanceMode < 2.5 ? imageBackdropDistance : squareDistance;
   float feather = spread <= 0.0 ? 0.0 : max(0.75, spread * 2.0) / radius;
   float mask = feather <= 0.0 ? 1.0 - step(0.0, shapeDistance) : 1.0 - smoothstep(-feather, feather, shapeDistance);
-  if (appearanceMode > 2.5) {
-    float halfLength = indicatorSize * 0.5;
-    const float halfThickness = 10.0;
-    float left = edgeInset + halfThickness;
-    float rightEdge = viewportSize.x - edgeInset - halfThickness;
-    float top = edgeInset + halfThickness;
-    float bottom = viewportSize.y - edgeInset - halfThickness;
-    float barDistance = 100000.0;
-    if (barEdge < 0.5 || (barEdge >= 1.5 && barEdge < 2.5)) {
-      float edgeY = barEdge < 0.5 ? top : bottom;
-      float start = max(left, indicatorCenter.x - halfLength);
-      float end = min(rightEdge, indicatorCenter.x + halfLength);
-      barDistance = rectangleDistance(screen, vec2((start + end) * 0.5, edgeY), vec2(max(0.0, end - start) * 0.5, halfThickness));
-      float before = max(0.0, left - (indicatorCenter.x - halfLength));
-      float after = max(0.0, indicatorCenter.x + halfLength - rightEdge);
-      float verticalDirection = barEdge < 0.5 ? 1.0 : -1.0;
-      if (before > 0.0) barDistance = min(barDistance, rectangleDistance(screen, vec2(left, edgeY + verticalDirection * before * 0.5), vec2(halfThickness, before * 0.5)));
-      if (after > 0.0) barDistance = min(barDistance, rectangleDistance(screen, vec2(rightEdge, edgeY + verticalDirection * after * 0.5), vec2(halfThickness, after * 0.5)));
-    } else {
-      float edgeX = barEdge < 1.5 ? rightEdge : left;
-      float start = max(top, indicatorCenter.y - halfLength);
-      float end = min(bottom, indicatorCenter.y + halfLength);
-      barDistance = rectangleDistance(screen, vec2(edgeX, (start + end) * 0.5), vec2(halfThickness, max(0.0, end - start) * 0.5));
-      float before = max(0.0, top - (indicatorCenter.y - halfLength));
-      float after = max(0.0, indicatorCenter.y + halfLength - bottom);
-      float horizontalDirection = barEdge < 1.5 ? -1.0 : 1.0;
-      if (before > 0.0) barDistance = min(barDistance, rectangleDistance(screen, vec2(edgeX + horizontalDirection * before * 0.5, top), vec2(before * 0.5, halfThickness)));
-      if (after > 0.0) barDistance = min(barDistance, rectangleDistance(screen, vec2(edgeX + horizontalDirection * after * 0.5, bottom), vec2(after * 0.5, halfThickness)));
-    }
-    float barFeather = spread <= 0.0 ? 0.0 : max(0.75, spread * 2.0);
-    mask = barFeather <= 0.0 ? 1.0 - step(0.0, barDistance) : 1.0 - smoothstep(-barFeather, barFeather, barDistance);
-  }
+  float glyphFeather = max(0.012, feather);
+  float pointRadius = length(point);
+  float targetDistance = min(pointRadius - 0.18, min(abs(pointRadius - 0.42) - 0.035, min(abs(pointRadius - 0.68) - 0.035, abs(pointRadius - 0.94) - 0.035)));
+  float targetMask = 1.0 - smoothstep(-glyphFeather, glyphFeather, targetDistance);
+  float wedgeAngle = abs(atan(point.x, -point.y));
+  float wedgeMask = 1.0 - smoothstep(0.392699 - glyphFeather, 0.392699 + glyphFeather, wedgeAngle);
+  float runeMask = 1.0 - smoothstep(0.055, 0.055 + glyphFeather * 2.0, edgeRuneDistance(point, indicatorRune));
+  vec2 arcaneSquare0 = vec2(0.707107 * point.x - 0.707107 * point.y, 0.707107 * point.x + 0.707107 * point.y);
+  vec2 arcaneSquare30 = vec2(0.965926 * point.x - 0.258819 * point.y, 0.258819 * point.x + 0.965926 * point.y);
+  vec2 arcaneSquare60 = vec2(0.965926 * point.x + 0.258819 * point.y, -0.258819 * point.x + 0.965926 * point.y);
+  float arcaneDistance = min(abs(pointRadius - 0.96), min(abs(max(abs(arcaneSquare0.x), abs(arcaneSquare0.y)) - 0.68), min(abs(max(abs(arcaneSquare30.x), abs(arcaneSquare30.y)) - 0.68), abs(max(abs(arcaneSquare60.x), abs(arcaneSquare60.y)) - 0.68))));
+  float arcaneMask = 1.0 - smoothstep(0.025, 0.025 + glyphFeather * 2.0, arcaneDistance);
+  if (appearanceMode > 3.5 && appearanceMode < 4.5) mask = targetMask;
+  if (appearanceMode > 4.5 && appearanceMode < 5.5) mask = targetMask * wedgeMask;
+  if (appearanceMode > 5.5 && appearanceMode < 6.5) mask = runeMask;
+  if (appearanceMode > 6.5) mask = arcaneMask;
   float radial = clamp(length(point), 0.0, 1.0);
   float alpha = clamp(indicatorVisible * strength * edgeAnimation(radial) * mask * 0.90, 0.0, 1.0);
   return half4(half3(signalColor) * alpha, alpha);
@@ -297,11 +360,39 @@ float runeDistance(vec2 point, float glyph) {
     distanceToRune = min(distanceToRune, runeSegment(point, vec2(0.0, 0.42), vec2(-0.44, -0.12)));
     distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.44, -0.12), vec2(0.0, -0.65)));
     distanceToRune = min(distanceToRune, runeSegment(point, vec2(0.0, 0.42), vec2(0.0, 0.65)));
-  } else {
+  } else if (glyph < 9.5) {
     distanceToRune = runeSegment(point, vec2(0.0, -0.62), vec2(0.0, 0.62));
     distanceToRune = min(distanceToRune, runeSegment(point, vec2(0.0, -0.28), vec2(-0.50, 0.12)));
     distanceToRune = min(distanceToRune, runeSegment(point, vec2(0.0, 0.28), vec2(0.50, -0.12)));
     distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.38, -0.48), vec2(0.38, 0.48)));
+  } else if (glyph < 10.5) {
+    distanceToRune = min(runeSegment(point, vec2(-0.52, 0.58), vec2(0.0, -0.62)), runeSegment(point, vec2(0.0, -0.62), vec2(0.52, 0.58)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.38, 0.20), vec2(0.38, 0.20)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(0.0, -0.62), vec2(0.0, 0.58)));
+  } else if (glyph < 11.5) {
+    distanceToRune = runeSegment(point, vec2(-0.48, -0.58), vec2(-0.48, 0.58));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.48, -0.58), vec2(0.44, -0.24)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(0.44, -0.24), vec2(-0.48, 0.05)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.48, 0.05), vec2(0.50, 0.58)));
+  } else if (glyph < 12.5) {
+    distanceToRune = min(runeSegment(point, vec2(0.48, -0.56), vec2(-0.48, -0.18)), runeSegment(point, vec2(-0.48, -0.18), vec2(0.48, 0.18)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(0.48, 0.18), vec2(-0.48, 0.56)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.48, -0.18), vec2(-0.48, 0.56)));
+  } else if (glyph < 13.5) {
+    distanceToRune = runeSegment(point, vec2(0.0, -0.64), vec2(0.0, 0.64));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.48, -0.42), vec2(0.0, -0.05)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(0.0, -0.05), vec2(0.48, -0.42)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.48, 0.42), vec2(0.0, 0.05)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(0.0, 0.05), vec2(0.48, 0.42)));
+  } else if (glyph < 14.5) {
+    distanceToRune = min(runeSegment(point, vec2(-0.50, -0.55), vec2(0.50, -0.55)), runeSegment(point, vec2(0.50, -0.55), vec2(-0.30, 0.02)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.30, 0.02), vec2(0.50, 0.55)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.30, 0.02), vec2(0.28, 0.02)));
+  } else {
+    distanceToRune = runeSegment(point, vec2(-0.44, -0.62), vec2(-0.44, 0.62));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.44, -0.62), vec2(0.48, -0.62)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.44, -0.04), vec2(0.34, -0.04)));
+    distanceToRune = min(distanceToRune, runeSegment(point, vec2(-0.44, 0.62), vec2(0.48, 0.62)));
   }
   return distanceToRune;
 }

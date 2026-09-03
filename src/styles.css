@@ -59,6 +59,14 @@ code { color: var(--obr-muted); font-size: 10px; word-break: break-all; }
 .brand, .header-actions { display: flex; align-items: center; gap: 8px; }
 .brand img { width: 30px; height: 30px; object-fit: contain; }
 .header-actions { margin-left: auto; }
+.effects-stop-button { display: inline-flex; min-width: 66px; height: 38px; padding: 4px 9px; align-items: center; justify-content: center; gap: 6px; border: 3px solid rgba(0, 0, 0, .35); border-radius: 7px; color: #fff; box-shadow: inset 0 2px 0 rgba(255,255,255,.25), inset 0 -3px 0 rgba(0,0,0,.22), 0 2px 4px rgba(0,0,0,.3); font-size: 12px; font-weight: 950; letter-spacing: .06em; text-shadow: 0 1px 1px rgba(0,0,0,.55); }
+.effects-stop-button.stop { background: linear-gradient(#f04444, #b40808); }
+.effects-stop-button.start { background: linear-gradient(#30b85b, #08762c); }
+.effects-stop-button:hover { filter: brightness(1.08); }
+.effects-stop-button:active { transform: translateY(1px); box-shadow: inset 0 3px 4px rgba(0,0,0,.28); }
+.effects-stop-light { width: 9px; height: 9px; border: 1px solid rgba(0,0,0,.4); border-radius: 50%; background: currentColor; box-shadow: 0 0 5px currentColor; }
+.player-settings-placeholder { margin-top: 8px; }
+@media (max-width: 340px) { .brand h1 { display: none; } }
 .icon-button { display: inline-grid; width: 36px; height: 36px; padding: 0; place-items: center; border: 1px solid var(--border); border-radius: 50%; background: transparent; color: var(--obr-muted); text-decoration: none; font-size: 16px; font-weight: 800; }
 .icon-button:hover, .icon-button.active { border-color: color-mix(in srgb, var(--obr-primary) 55%, transparent); background: var(--soft); color: var(--obr-primary); }
 .icon-button svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }

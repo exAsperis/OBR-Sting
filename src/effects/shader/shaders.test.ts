@@ -28,6 +28,7 @@ describe("shader presets", () => {
     expect(SHADERS.radar).toContain("vec3 sweepActiveColor");
     expect(SHADERS.radar).toContain("vec3 echoActiveColor");
     expect(SHADERS.radar).toContain("glyph < 8.5");
+    expect(SHADERS.radar).toContain("glyph < 14.5");
     expect(SHADERS.radar).toContain("decorationMode");
     expect(SHADERS.radar).toContain("ringDistance");
     expect(SHADERS.radar).toContain("innerBand");
@@ -94,9 +95,17 @@ describe("shader presets", () => {
     expect(SHADERS.edge).toContain("cornerPoint - vec2(0.5)");
     expect(SHADERS.edge).toContain("length(point) - 1.0");
     expect(SHADERS.edge).toContain("edgeAnimation");
-    expect(SHADERS.edge).toContain("uniform float barEdge");
-    expect(SHADERS.edge).toContain("rectangleDistance");
-    expect(SHADERS.edge).toContain("if (before > 0.0)");
+    expect(SHADERS.edge).toContain("squareDistance");
+    expect(SHADERS.edge).toContain("dot(delta, right)");
+    expect(SHADERS.edge).toContain("uniform vec2 indicatorScale");
+    expect(SHADERS.edge).toContain("uniform float indicatorRune");
+    expect(SHADERS.edge).toContain("targetMask");
+    expect(SHADERS.edge).toContain("wedgeMask");
+    expect(SHADERS.edge).toContain("atan(point.x, -point.y)");
+    expect(SHADERS.edge).toContain("edgeRuneDistance");
+    expect(SHADERS.edge).toContain("arcaneMask");
+    expect(SHADERS.edge).toContain("/ safeScale");
+    expect(SHADERS.edge).not.toContain("barEdge");
   });
 
 

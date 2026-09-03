@@ -9,6 +9,7 @@ export const SETTINGS_KEY = `${EXTENSION_ID}/settings`;
 export const EFFECT_LIBRARY_STORAGE_KEY = `${EXTENSION_ID}/effect-library`;
 export const RULE_LIBRARY_STORAGE_KEY = `${EXTENSION_ID}/rule-library`;
 export const ACTION_HEIGHT_STORAGE_KEY = `${EXTENSION_ID}/action-height`;
+export const EFFECTS_ENABLED_STORAGE_KEY = `${EXTENSION_ID}/effects-enabled`;
 export const CONTEXT_MENU_ID = `${EXTENSION_ID}/configure`;
 export const LOCAL_EFFECT_KEY = `${EXTENSION_ID}/runtime-effect`;
 export const LOCAL_LIGHT_KEY = `${EXTENSION_ID}/local-light`;

@@ -4,7 +4,7 @@ import type { DesiredEffect, ShaderDynamicField, ShaderEffectDefinitionV1, Stren
 import type { EffectDispatchBatch, EffectExecutor, EffectReconcileReport } from "../registry";
 import { resolveShaderGeometry } from "./geometry";
 import { GRID_MARKER_CAPACITY, RADAR_ECHO_CAPACITY, SHADERS } from "./shaders";
-import { barIndicatorLayout, edgeIndicatorLayout, transformedBounds, type EdgeIndicatorLayout } from "./edgeGeometry";
+import { edgeIndicatorLayout, transformedBounds, type EdgeIndicatorLayout } from "./edgeGeometry";
 
 interface RadarCandidate { id: string; position: { x: number; y: number }; phase: number; size: number; rune: number; color: { x: number; y: number; z: number } }
 interface RadarEcho { position: { x: number; y: number }; refreshedAt: number; size: number; rune: number; color: { x: number; y: number; z: number } }
@@ -187,11 +187,29 @@ export function calibrateEdgeImageScale(seedScale: number, circleDiameter: numbe
 
 export function edgeFootprintSize(effect: ShaderEffectDefinitionV1, strength: number): number {
   const circleDiameter = resolveEdgeSize(effect, strength);
-  return effect.edge?.appearance === "image" ? circleDiameter * Math.SQRT2 : circleDiameter;
+  const geometry = resolveStrengthLinkedShaderValues(effect, strength).geometry;
+  const scaledDiameter = circleDiameter * Math.max(geometry.width, geometry.height) / 100;
+  return effect.edge?.appearance === "image" ? scaledDiameter * Math.SQRT2 : scaledDiameter;
 }
 
-function edgeUniforms(effect: ShaderEffectDefinitionV1, strength: number, viewport: { width: number; height: number } = { width: 1, height: 1 }, layout: EdgeIndicatorLayout & { edge?: number } = { center: { x: 0, y: 0 }, direction: { x: 0, y: -1 }, visible: false }) {
+export function rotateEdgeDirection(direction: { x: number; y: number }, degrees: number): { x: number; y: number } {
+  const radians = degrees * Math.PI / 180;
+  const cosine = Math.cos(radians), sine = Math.sin(radians);
+  return { x: direction.x * cosine - direction.y * sine, y: direction.x * sine + direction.y * cosine };
+}
+
+export function runeValueFromId(id: string): number {
+  const first = id.trim().charAt(0);
+  const hexadecimal = Number.parseInt(first, 16);
+  if (/^[0-9a-f]$/i.test(first) && Number.isFinite(hexadecimal)) return hexadecimal;
+  let hash = 0;
+  for (const character of id) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  return hash % 16;
+}
+
+function edgeUniforms(effect: ShaderEffectDefinitionV1, strength: number, layout: EdgeIndicatorLayout = { center: { x: 0, y: 0 }, direction: { x: 0, y: -1 }, visible: false }, rune = 0) {
   const animationModes = { none: 0, pulse: 1, flicker: 2, "radial-pulse": 3 } as const;
+  const geometry = resolveStrengthLinkedShaderValues(effect, strength).geometry;
   return [
     { name: "signalColor", value: resolveSignalColor(effect, strength) },
     { name: "strength", value: resolveEffectIntensity(effect, strength) },
@@ -202,13 +220,12 @@ function edgeUniforms(effect: ShaderEffectDefinitionV1, strength: number, viewpo
     { name: "waveWidth", value: resolveDynamicValue(effect, "waveWidth", effect.animation?.waveWidth ?? 0.22, strength, effect.animation?.waveWidthStrengthLink, 0, 1) },
     { name: "spread", value: resolveDynamicValue(effect, "softness", effect.spread, strength, effect.spreadStrengthLink, 0, 4) },
     { name: "indicatorCenter", value: layout.center },
-    { name: "indicatorDirection", value: layout.direction },
+    { name: "indicatorDirection", value: rotateEdgeDirection(layout.direction, geometry.rotation) },
     { name: "indicatorSize", value: resolveEdgeSize(effect, strength) },
-    { name: "appearanceMode", value: effect.edge?.appearance === "disk" ? 1 : effect.edge?.appearance === "image" ? 2 : effect.edge?.appearance === "bar" ? 3 : 0 },
+    { name: "indicatorScale", value: { x: geometry.width / 100, y: geometry.height / 100 } },
+    { name: "appearanceMode", value: ({ triangle: 0, disk: 1, image: 2, square: 3, target: 4, echo: 5, rune: 6, arcane: 7 } as const)[effect.edge?.appearance ?? "triangle"] },
+    { name: "indicatorRune", value: rune },
     { name: "indicatorVisible", value: layout.visible ? 1 : 0 },
-    { name: "viewportSize", value: { x: viewport.width, y: viewport.height } },
-    { name: "edgeInset", value: effect.edge?.inset ?? 16 },
-    { name: "barEdge", value: layout.edge ?? 0 },
   ];
 }
 
@@ -302,7 +319,7 @@ export function shaderUniforms(effect: ShaderEffectDefinitionV1, strength: numbe
       values.push({ name: `echoPosition${index}`, value: { x: 0, y: 0 } });
       values.push({ name: `echoIntensity${index}`, value: 0 });
       values.push({ name: `echoSize${index}`, value: 0.028 });
-      values.push({ name: `echoRune${index}`, value: index % 10 });
+      values.push({ name: `echoRune${index}`, value: index % 16 });
       values.push({ name: `echoColor${index}`, value: resolveSignalColor(effect, 0) });
     }
   }
@@ -388,13 +405,11 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
         const [targetScreen, emitterScreen, ...screenCorners] = await Promise.all([target, emitter, ...corners].map((point) => OBR.viewport.transformPoint(point)));
         const viewport = { width, height };
         const emitterScreenBounds = transformedBounds(screenCorners);
-        const layout = runtime.effect.edge?.appearance === "bar"
-          ? barIndicatorLayout(targetScreen, emitterScreen, emitterScreenBounds, viewport, runtime.effect.edge?.inset ?? 16)
-          : edgeIndicatorLayout(targetScreen, emitterScreen, emitterScreenBounds, viewport, edgeFootprintSize(runtime.effect, runtime.strength), runtime.effect.edge?.inset ?? 16);
+        const layout = edgeIndicatorLayout(targetScreen, emitterScreen, emitterScreenBounds, viewport, edgeFootprintSize(runtime.effect, runtime.strength), runtime.effect.edge?.inset ?? 16, runtime.effect.edge?.orientation ?? "toward-detection");
         const hash = JSON.stringify(layout);
         if (hash === runtime.layoutHash) return;
         runtime.layoutHash = hash;
-        await OBR.scene.local.updateItems<Effect>([state.localItemId], (items) => { for (const item of items) item.uniforms = edgeUniforms(runtime.effect, runtime.strength, viewport, layout); });
+        await OBR.scene.local.updateItems<Effect>([state.localItemId], (items) => { for (const item of items) item.uniforms = edgeUniforms(runtime.effect, runtime.strength, layout, runeValueFromId(runtime.emitter.id)); });
         if (runtime.imageId) {
           const position = layout.visible ? await OBR.viewport.inverseTransformPoint(layout.center) : { x: 0, y: 0 };
           const circleDiameter = resolveEdgeSize(runtime.effect, runtime.strength);
@@ -403,7 +418,8 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
             runtime.imageCircleDiameter = circleDiameter;
           }
           const imageScale = runtime.imageScale ?? (isImage(runtime.emitter) ? edgeImageScale(runtime.emitter.image, circleDiameter) : 1);
-          await OBR.scene.local.updateItems<Billboard>([runtime.imageId], (items) => { for (const item of items) { item.position = position; item.scale = { x: imageScale, y: imageScale }; item.visible = layout.visible; } }, true);
+          const geometry = resolveStrengthLinkedShaderValues(runtime.effect, runtime.strength).geometry;
+          await OBR.scene.local.updateItems<Billboard>([runtime.imageId], (items) => { for (const item of items) { item.position = position; item.scale = { x: imageScale * geometry.width / 100, y: imageScale * geometry.height / 100 }; item.visible = layout.visible; } }, true);
         }
       }));
     } finally { this.edgeTicking = false; }
@@ -671,7 +687,7 @@ export class ShaderEffectExecutor implements EffectExecutor<ShaderEffectDefiniti
           const position = { x: unit.x * radius / shapeMetric, y: unit.y * radius / shapeMetric };
           const phase = sweepType === "radial" ? Math.max(0, Math.min(1, detection.distance / context.rule.range.outer)) : ((Math.atan2(position.x, -position.y) / (Math.PI * 2)) + 1) % 1;
           const echoSize = resolveRadarEchoSize(effect, detection.strength, samples[index].area, targetArea);
-          return { id: detection.emitter.id, position, phase, size: echoSize, rune: index % 10, color: resolveSignalColor(effect, detection.strength) };
+          return { id: detection.emitter.id, position, phase, size: echoSize, rune: runeValueFromId(detection.emitter.id), color: resolveSignalColor(effect, detection.strength) };
         });
         const previousSweepType = existing.radar.effect.radar?.sweepType ?? DEFAULT_RADAR.sweepType;
         if (previousSweepType === "none" && sweepType !== "none") {

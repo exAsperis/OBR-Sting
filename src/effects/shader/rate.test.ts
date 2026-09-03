@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ShaderEffectDefinitionV1 } from "../../types";
-import { averageDetectionDirections, calibrateEdgeImageScale, circularPhaseCrossed, edgeFootprintSize, edgeImageScale, gridImageLayout, gridLocalValue, gridTypeValue, gridWorldRange, radarDistancePosition, radarEchoSize, radarSweepIsAnimated, resolveEdgeSize, resolveEffectIntensity, resolveRadarEchoSize, resolveRadarFadeDuration, resolveSignalColor, resolveStrengthLinkedRate, resolveStrengthLinkedShaderValues, resolveStrengthLinkedValue, shaderConfigHash, shaderUniforms } from "./executor";
+import { averageDetectionDirections, calibrateEdgeImageScale, circularPhaseCrossed, edgeFootprintSize, edgeImageScale, gridImageLayout, gridLocalValue, gridTypeValue, gridWorldRange, radarDistancePosition, radarEchoSize, radarSweepIsAnimated, resolveEdgeSize, resolveEffectIntensity, resolveRadarEchoSize, resolveRadarFadeDuration, resolveSignalColor, resolveStrengthLinkedRate, resolveStrengthLinkedShaderValues, resolveStrengthLinkedValue, rotateEdgeDirection, runeValueFromId, shaderConfigHash, shaderUniforms } from "./executor";
 
 describe("radar helpers", () => {
   const radar: ShaderEffectDefinitionV1 = {
@@ -52,7 +52,7 @@ describe("radar helpers", () => {
     expect(runeUniforms.find((entry) => entry.name === "echoStyle")?.value).toBe(2);
     expect(runeUniforms.find((entry) => entry.name === "echoRune0")?.value).toBe(0);
     expect(runeUniforms.find((entry) => entry.name === "echoRune6")?.value).toBe(6);
-    expect(runeUniforms.find((entry) => entry.name === "echoRune11")?.value).toBe(1);
+    expect(runeUniforms.find((entry) => entry.name === "echoRune11")?.value).toBe(11);
     const gradientRadar = { ...radar, colorGradient: { minColor: "#000000" } };
     const strongestColorUniforms = shaderUniforms(gradientRadar, 0.2, 1, { x: 0, y: -1 }, undefined, undefined, 0.8);
     expect(strongestColorUniforms.find((entry) => entry.name === "signalColor")?.value).toEqual(resolveSignalColor(gradientRadar, 0.8));
@@ -69,7 +69,7 @@ describe("edge indicator dynamic size", () => {
   const edge: ShaderEffectDefinitionV1 = {
     id: "edge", type: "shader", enabled: true, target: { type: "detector" }, audience: { type: "everyone" },
     preset: "edge", shape: "circle", placement: "above", color: "#ffffff", maxIntensity: 1, spread: 1,
-    edge: { appearance: "triangle", size: 64, inset: 16 }, dynamicRanges: { indicatorSize: { minimum: 24, maximum: 120 } },
+    edge: { appearance: "triangle", orientation: "toward-detection", size: 64, inset: 16 }, dynamicRanges: { indicatorSize: { minimum: 24, maximum: 120 } },
   };
   it("resolves independently from detection strength", () => {
     expect(resolveEdgeSize(edge, 0)).toBe(24);
@@ -84,6 +84,18 @@ describe("edge indicator dynamic size", () => {
   it("allows clearance for the single exposed tangent-square vertex", () => {
     expect(edgeFootprintSize({ ...edge, edge: { ...edge.edge!, appearance: "image" } }, 0.5)).toBeCloseTo(72 * Math.SQRT2);
     expect(edgeFootprintSize({ ...edge, edge: { ...edge.edge!, appearance: "disk" } }, 0.5)).toBe(72);
+  });
+  it("rotates clockwise relative to the calculated orientation", () => {
+    expect(rotateEdgeDirection({ x: 0, y: -1 }, 90).x).toBeCloseTo(1);
+    expect(rotateEdgeDirection({ x: 0, y: -1 }, 90).y).toBeCloseTo(0);
+    expect(rotateEdgeDirection({ x: 1, y: 0 }, -90).y).toBeCloseTo(-1);
+  });
+  it("assigns hexadecimal rune values from emitter IDs", () => {
+    expect(runeValueFromId("0abc-light-id")).toBe(0);
+    expect(runeValueFromId("9abc-item-id")).toBe(9);
+    expect(runeValueFromId("Aabc-item-id")).toBe(10);
+    expect(runeValueFromId("fabc-item-id")).toBe(15);
+    expect(runeValueFromId("not-a-guid")).toBe(runeValueFromId("not-a-guid"));
   });
 });
 
