@@ -152,6 +152,12 @@ code { color: var(--obr-muted); font-size: 10px; word-break: break-all; }
 .form-grid .wide { grid-column: 1 / -1; }
 .checkbox-field .toggle { min-height: 36px; padding: 0; }
 .field-label { display: block; margin-bottom: 4px; color: var(--obr-muted); font-size: 10px; font-weight: 750; text-transform: uppercase; }
+.specific-item-field, .item-match-field { min-width: 0; }
+.item-picker-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; align-items: center; }
+.item-picker-row select, .item-picker-row input { width: 100%; min-width: 0; }
+.item-picker-button { min-width: 54px; height: 34px; padding: 5px 9px; white-space: nowrap; background: color-mix(in srgb, var(--obr-paper) 65%, transparent); color: var(--obr-primary); border-color: color-mix(in srgb, var(--obr-primary) 30%, transparent); }
+.item-picker-button.active { border-color: var(--obr-primary); background: var(--soft); }
+.field-error { display: block; margin-top: 4px; color: #d74343; font-size: 11px; }
 .numeric-control { min-width: 0; }
 .numeric-heading { display: grid; min-height: 28px; grid-template-columns: minmax(0, 1fr) 64px; align-items: center; gap: 6px; }
 .numeric-heading:has(.numeric-editor) { grid-template-columns: minmax(0, 1fr) max-content; }

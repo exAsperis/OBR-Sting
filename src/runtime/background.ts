@@ -5,12 +5,14 @@ import { parseSceneSettings } from "../settings";
 import { clearSelectedFacePivots, syncSelectedFacePivots } from "./pivotDebug";
 import { applyAuthorityBadge, AuthorityCoordinator } from "./authority";
 import { registerStingPublicApi } from "./publicApi";
+import { registerItemPickerHost } from "./itemPickerHost";
 
 OBR.onReady(async () => {
   const [role, connectionId, initialParty] = await Promise.all([OBR.player.getRole(), OBR.player.getConnectionId(), OBR.party.getPlayers()]);
   const initialPlayer = { id: OBR.player.id, role, connectionId };
   const authority = new AuthorityCoordinator(initialPlayer, initialParty);
   const stopPublicApi = registerStingPublicApi();
+  const stopItemPicker = registerItemPickerHost();
   const engine = new ProximityEngine(authority);
   engine.setEnabled(localStorage.getItem(EFFECTS_ENABLED_STORAGE_KEY) !== "false");
   let stopItems: (() => void) | undefined;
@@ -99,6 +101,7 @@ OBR.onReady(async () => {
     stopParty();
     stopAuthority();
     stopPublicApi();
+    stopItemPicker();
     window.removeEventListener("storage", integrationChanged);
     void OBR.contextMenu.remove(CONTEXT_MENU_ID);
     void engine.clear();

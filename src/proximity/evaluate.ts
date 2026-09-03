@@ -7,6 +7,7 @@ import { getSceneDistance } from "./distance";
 import { calculateStrength } from "./strength";
 import type { DistanceMethod } from "../settings";
 import { parseEmitterSignal } from "../signals/normalize";
+import { itemLabelText } from "../scene/itemText";
 
 export interface IndexedEmitter { item: Item; range?: number }
 interface ItemBounds { min: { x: number; y: number }; max: { x: number; y: number } }
@@ -121,12 +122,6 @@ export async function evaluateRule(
     const selected = selectRuleEvaluations(rule, candidates);
     return { matchingEmitterCount: lights.length, evaluations: rule.aggregation === "all" ? selected : [selected[0] ?? { detector, rule, matchingEmitterCount: lights.length, detectedEmitter: null, distance: null, strength: 0 }] };
   }
-  const itemLabel = (item: Item) => {
-    if (!("text" in item)) return "";
-    const text = (item as Item & { text: { plainText: string } }).text.plainText;
-    if (item.type === "LABEL") return text;
-    return item.type === "IMAGE" && "textItemType" in item && item.textItemType === "LABEL" ? text : "";
-  };
   const matchingSignals = [...sources.signals].filter(([signal]) => matchesRuleText(signal, rule.signal, rule.matchType)).flatMap(([, emitters]) => emitters);
   const deduplicatedSignals = [...matchingSignals.reduce((items, emitter) => {
     const current = items.get(emitter.item.id);
@@ -136,7 +131,7 @@ export async function evaluateRule(
   const sourceMatches: IndexedEmitter[] = rule.source?.type === "item-name"
     ? (sources.items ?? []).filter((item) => matchesRuleText(item.name, rule.signal, rule.matchType)).map((item) => ({ item }))
     : rule.source?.type === "item-label"
-      ? (sources.items ?? []).filter((item) => matchesRuleText(itemLabel(item), rule.signal, rule.matchType)).map((item) => ({ item }))
+      ? (sources.items ?? []).filter((item) => matchesRuleText(itemLabelText(item), rule.signal, rule.matchType)).map((item) => ({ item }))
       : deduplicatedSignals;
   const matches = sourceMatches.filter(({ item }) =>
     !rule.excludeLayers.includes(item.layer) && !isSameAttachmentFamily(detector, item, graph) && (!rule.ignoreHidden || item.visible)
