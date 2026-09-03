@@ -269,8 +269,8 @@ output { float: right; color: var(--obr-muted); font-size: 10px; }
 .validation-error { margin-top: 10px; padding: 9px; border: 1px solid #d74343; border-radius: 9px; color: #d74343; }
 .debug-view article { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
 .debug-view .facts { grid-template-columns: 1fr 1fr; }
-.debug-emitter-labels { margin-top: 12px; }
-.debug-emitter-labels p { margin: 6px 0 0; text-align: center; }
+.debug-label-controls { display: grid; gap: 8px; margin-top: 12px; }
+.debug-label-controls p { margin: -2px 0 2px; text-align: center; }
 .authority-card { margin: 12px 0; padding: 11px; border: 1px solid var(--border); border-left: 4px solid var(--obr-primary); border-radius: 9px; background: var(--soft); }
 .authority-card.authority-standby { border-left-color: #d97706; }
 .authority-card.authority-ineligible { border-left-color: var(--obr-muted); }

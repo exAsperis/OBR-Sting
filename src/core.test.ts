@@ -4,7 +4,7 @@ import { EMITTER_KEY } from "./constants";
 import { buildRuntimeEffectKey } from "./effects/runtimeKey";
 import { parseDetectorMetadata, parseEffectDefinition, parseEmitterMetadata } from "./metadata/parse";
 import { calculateStrength } from "./proximity/strength";
-import { evaluateRule, indexEmittersBySignal, matchesRuleText, selectRuleEvaluations } from "./proximity/evaluate";
+import { evaluateRule, indexEmittersBySignal, lightAreaStrength, matchesRuleText, selectRuleEvaluations } from "./proximity/evaluate";
 import { getSceneDistance, toSceneUnits } from "./proximity/distance";
 import { buildAttachmentGraph, isSameAttachmentFamily, resolveCarrier, resolveParent } from "./scene/attachments";
 import { isAudienceMember, isShaderAudienceMember, resolveEffectTarget } from "./scene/resolve";
@@ -25,7 +25,7 @@ const effect = (id = "effect-1"): ShaderEffectDefinitionV1 => ({
 });
 
 const rule = (id: string, effects: EffectDefinitionV1[] = []): DetectionRuleV1 => ({
-  id, enabled: true, signal: "orc", matchType: "exact", excludeLayers: [], range: { outer: 60, inner: 5 }, aggregation: "nearest", ignoreHidden: false, falloff: "smoothstep", effects,
+  id, enabled: true, signal: "orc", detectionArea: "distance", matchType: "exact", excludeLayers: [], range: { outer: 60, inner: 5 }, aggregation: "nearest", ignoreHidden: false, falloff: "smoothstep", effects,
 });
 
 describe("signal normalization", () => {
@@ -125,10 +125,21 @@ describe("versioned detector parsing", () => {
     await expect(getSceneDistance({ x: 0, y: 0 }, { x: 0, y: 100 }, 5, { dpi: 100, type: "HEX_HORIZONTAL", measurement: "CHEBYSHEV" }, "hexagon")).resolves.toBe(5);
     await expect(getSceneDistance({ x: 0, y: 0 }, { x: Math.sqrt(3) * 50, y: 50 }, 5, { dpi: 100, type: "ISOMETRIC", measurement: "CHEBYSHEV" }, "chessboard")).resolves.toBe(5);
   });
-  it("accepts closest and all aggregation modes", () => {
+  it("accepts detection areas and independent match-selection modes", () => {
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [rule("closest")] })?.rules[0].aggregation).toBe("nearest");
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("all"), aggregation: "all" }] })?.rules[0].aggregation).toBe("all");
+    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("area"), detectionArea: "source-area" }] })?.rules[0].detectionArea).toBe("source-area");
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("bad"), aggregation: "count" }] })).toBeNull();
+    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("bad-area"), detectionArea: "shape" }] })).toBeNull();
+  });
+  it("migrates legacy light detection and bounds aggregation", () => {
+    const { detectionArea: _area, ...legacy } = rule("legacy");
+    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...legacy, source: { type: "obr-light", detection: "distance" }, aggregation: "nearest" }] })?.rules[0])
+      .toMatchObject({ source: { type: "obr-light" }, detectionArea: "distance", aggregation: "nearest" });
+    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...legacy, source: { type: "obr-light", detection: "within-radius" }, aggregation: "all" }] })?.rules[0])
+      .toMatchObject({ source: { type: "obr-light" }, detectionArea: "source-area", aggregation: "all" });
+    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...legacy, aggregation: "within-bounds" }] })?.rules[0])
+      .toMatchObject({ detectionArea: "source-area", aggregation: "all" });
   });
   it("defaults legacy rules to detecting hidden emitters and validates ignoreHidden", () => {
     const { ignoreHidden: _ignoreHidden, ...legacy } = rule("legacy");
@@ -488,6 +499,25 @@ describe("rule aggregation", () => {
     expect(selected.map((entry) => entry.detectedEmitter?.id)).toEqual(["near", "middle"]);
   });
 
+  it.each(["nearest", "all"] as const)("detects matching items whose inclusive bounds contain the detector in %s mode", async (aggregation) => {
+    const inside = { ...item("inside"), position: { x: 100, y: 100 }, metadata: { [EMITTER_KEY]: { version: 1, signals: ["orc[1]"] } } };
+    const edge = { ...item("edge"), position: { x: 200, y: 200 }, metadata: { [EMITTER_KEY]: { version: 1, signals: ["orc"] } } };
+    const outside = { ...item("outside"), position: { x: 300, y: 300 }, metadata: { [EMITTER_KEY]: { version: 1, signals: ["orc"] } } };
+    const items = [detector, inside, edge, outside];
+    const bounds = new Map([
+      ["inside", { min: { x: -10, y: -10 }, max: { x: 10, y: 10 } }],
+      ["edge", { min: { x: 0, y: 0 }, max: { x: 20, y: 20 } }],
+      ["outside", { min: { x: 1, y: 1 }, max: { x: 20, y: 20 } }],
+    ]);
+    const result = await evaluateRule(detector, { ...rule("bounds"), detectionArea: "source-area", aggregation, falloff: "logarithmic" }, {
+      signals: indexEmittersBySignal(items), lights: [], items,
+      getItemBounds: async (entry) => bounds.get(entry.id)!,
+    }, buildAttachmentGraph(items), 5, { dpi: 100, type: "SQUARE", measurement: "CHEBYSHEV" }, "euclidean");
+    expect(result.evaluations.map((entry) => ({ id: entry.detectedEmitter?.id, strength: entry.strength }))).toEqual(aggregation === "all"
+      ? [{ id: "inside", strength: 1 }, { id: "edge", strength: 1 }]
+      : [{ id: "inside", strength: 1 }]);
+  });
+
   it("excludes hidden emitters only when the rule requests it", async () => {
     const hiddenEmitter = { ...item("hidden"), visible: false, metadata: { [EMITTER_KEY]: { version: 1, signals: ["orc"] } } };
     const visibleEmitter = { ...item("visible"), position: { x: 10, y: 0 }, metadata: { [EMITTER_KEY]: { version: 1, signals: ["orc"] } } };
@@ -571,17 +601,33 @@ describe("rule aggregation", () => {
     expect(result.evaluations).toMatchObject([{ detectedEmitter: { id: "in-band" }, distance: 10 }]);
   });
 
-  it("applies the band to distance-based OBR lights but not Within Light Radius rules", async () => {
+  it("applies the configured band to distance-based OBR lights but not light-area rules", async () => {
     const light = { ...item("light"), type: "LIGHT", position: { x: 40, y: 0 }, attenuationRadius: 100, sourceRadius: 0, falloff: 0.5, innerAngle: 360, outerAngle: 360, lightType: "PRIMARY" } as Light;
     const sources = { signals: new Map(), lights: [light], items: [] };
     const graph = buildAttachmentGraph([detector, light]);
     const grid = { dpi: 100, type: "SQUARE" as const, measurement: "CHEBYSHEV" as const };
-    const distanceRule = { ...rule("light-distance"), source: { type: "obr-light" as const, detection: "distance" as const } };
-    const areaRule = { ...rule("light-area"), source: { type: "obr-light" as const, detection: "within-radius" as const } };
+    const distanceRule = { ...rule("light-distance"), source: { type: "obr-light" as const } };
+    const areaRule = { ...rule("light-area"), detectionArea: "source-area" as const, source: { type: "obr-light" as const } };
     await expect(evaluateRule(detector, distanceRule, sources, graph, 5, grid, "euclidean"))
       .resolves.toMatchObject({ evaluations: [{ detectedEmitter: null, strength: 0 }] });
     const area = await evaluateRule(detector, areaRule, sources, graph, 5, grid, "euclidean");
     expect(area.evaluations[0]).toMatchObject({ detectedEmitter: { id: "light" }, distance: 2 });
     expect(area.evaluations[0].strength).toBeGreaterThan(0);
+  });
+
+  it("derives OBR light-area strength from radial falloff and soft cone angles", () => {
+    const base = { ...item("light"), type: "LIGHT", position: { x: 0, y: 0 }, attenuationRadius: 100, sourceRadius: 80, falloff: 0, innerAngle: 360, outerAngle: 360, lightType: "PRIMARY" } as Light;
+    expect(lightAreaStrength({ x: 100, y: 0 }, base)).toBe(1);
+    expect(lightAreaStrength({ x: 101, y: 0 }, base)).toBe(0);
+    const fuzzy = { ...base, falloff: 0.5 };
+    expect(lightAreaStrength({ x: 25, y: 0 }, fuzzy)).toBe(1);
+    expect(lightAreaStrength({ x: 75, y: 0 }, fuzzy)).toBeCloseTo(0.5);
+    expect(lightAreaStrength({ x: 100, y: 0 }, fuzzy)).toBe(0);
+    const cone = { ...base, rotation: 0, innerAngle: 60, outerAngle: 120 };
+    expect(lightAreaStrength({ x: 0, y: 0 }, cone)).toBe(1);
+    expect(lightAreaStrength({ x: 0, y: -50 }, cone)).toBe(1);
+    expect(lightAreaStrength({ x: 50 * Math.sin(Math.PI / 4), y: -50 * Math.cos(Math.PI / 4) }, cone)).toBeCloseTo(0.5);
+    expect(lightAreaStrength({ x: 50, y: 0 }, cone)).toBe(0);
+    expect(lightAreaStrength({ x: 0, y: 50 }, { ...cone, rotation: 180 })).toBe(1);
   });
 });

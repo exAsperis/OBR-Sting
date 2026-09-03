@@ -19,6 +19,7 @@ export const PIVOT_DEBUG_KEY = `${EXTENSION_ID}/pivot-debug`;
 export const EMANATION_INTEGRATION_KEY = `${EXTENSION_ID}/emanation-enabled`;
 export const RUMBLE_INTEGRATION_KEY = `${EXTENSION_ID}/rumble-enabled`;
 export const EMITTER_LABEL_DEBUG_KEY = `${EXTENSION_ID}/emitter-label-debug`;
+export const DETECTOR_LABEL_DEBUG_KEY = `${EXTENSION_ID}/detector-label-debug`;
 export const AUTHORITY_OVERRIDE_KEY = `${EXTENSION_ID}/authority-override`;
 export const AUTHORITY_PRESENCE_CHANNEL = `${EXTENSION_ID}/authority/presence`;
 export const AUTHORITY_CONTROL_CHANNEL = `${EXTENSION_ID}/authority/control`;

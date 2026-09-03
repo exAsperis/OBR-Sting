@@ -223,7 +223,8 @@ export interface DetectionRuleV1 {
   name?: string;
   enabled: boolean;
   signal: string;
-  source?: { type: "sting-emitter" | "item-name" | "item-label" } | { type: "obr-light"; detection: "distance" | "within-radius"; lightType?: LightType; ownership?: "any" | "sting" | "external"; attachment?: "any" | "attached" | "unattached" };
+  source?: { type: "sting-emitter" | "item-name" | "item-label" } | { type: "obr-light"; lightType?: LightType; ownership?: "any" | "sting" | "external"; attachment?: "any" | "attached" | "unattached" };
+  detectionArea: "distance" | "source-area";
   matchType: "exact" | "wildcard" | "regex";
   excludeLayers: Layer[];
   range: { outer: number; inner: number };
@@ -312,7 +313,9 @@ export interface DebugRuleState {
   detectorId: string;
   detectorName: string;
   ruleId: string;
+  ruleName?: string;
   signal: string;
+  detectionArea: DetectionRuleV1["detectionArea"];
   aggregation: DetectionRuleV1["aggregation"];
   range: DetectionRuleV1["range"];
   matchingEmitterCount: number;

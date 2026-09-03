@@ -395,17 +395,23 @@ export function parseDetectionRule(value: unknown): DetectionRuleV1 | null {
   if (value.excludeLayers !== undefined && (!Array.isArray(value.excludeLayers) || value.excludeLayers.some((layer) => !layers.includes(layer as typeof layers[number])))) return null;
   const excludeLayers = [...new Set((value.excludeLayers as DetectionRuleV1["excludeLayers"] | undefined) ?? [])];
   let source: DetectionRuleV1["source"];
+  let legacyLightDetection: "distance" | "within-radius" | undefined;
   if (value.source !== undefined) {
     if (!record(value.source) || !["sting-emitter", "item-name", "item-label", "obr-light"].includes(String(value.source.type))) return null;
     if (value.source.type === "obr-light") {
-      if (!["distance", "within-radius"].includes(String(value.source.detection))) return null;
+      if (value.source.detection !== undefined && !["distance", "within-radius"].includes(String(value.source.detection))) return null;
       if (value.source.lightType !== undefined && !["PRIMARY", "SECONDARY", "AUXILIARY"].includes(String(value.source.lightType))) return null;
       if (value.source.ownership !== undefined && !["any", "sting", "external"].includes(String(value.source.ownership))) return null;
       if (value.source.attachment !== undefined && !["any", "attached", "unattached"].includes(String(value.source.attachment))) return null;
-      source = { type: "obr-light", detection: value.source.detection as "distance" | "within-radius", ...(value.source.lightType ? { lightType: value.source.lightType as "PRIMARY" | "SECONDARY" | "AUXILIARY" } : {}), ...(value.source.ownership ? { ownership: value.source.ownership as "any" | "sting" | "external" } : {}), ...(value.source.attachment ? { attachment: value.source.attachment as "any" | "attached" | "unattached" } : {}) };
+      legacyLightDetection = value.source.detection as "distance" | "within-radius" | undefined;
+      source = { type: "obr-light", ...(value.source.lightType ? { lightType: value.source.lightType as "PRIMARY" | "SECONDARY" | "AUXILIARY" } : {}), ...(value.source.ownership ? { ownership: value.source.ownership as "any" | "sting" | "external" } : {}), ...(value.source.attachment ? { attachment: value.source.attachment as "any" | "attached" | "unattached" } : {}) };
     } else source = { type: value.source.type as "sting-emitter" | "item-name" | "item-label" };
   }
-  if ((!signal && source?.type !== "obr-light") || !["nearest", "all"].includes(String(value.aggregation)) || !["binary", "linear", "smoothstep", "logarithmic"].includes(String(value.falloff))) return null;
+  if (value.detectionArea !== undefined && !["distance", "source-area"].includes(String(value.detectionArea))) return null;
+  if ((!signal && source?.type !== "obr-light") || !["nearest", "all", "within-bounds"].includes(String(value.aggregation)) || !["binary", "linear", "smoothstep", "logarithmic"].includes(String(value.falloff))) return null;
+  const legacyBounds = value.aggregation === "within-bounds";
+  const detectionArea = (value.detectionArea as DetectionRuleV1["detectionArea"] | undefined) ?? (legacyBounds || legacyLightDetection === "within-radius" ? "source-area" : "distance");
+  const aggregation: DetectionRuleV1["aggregation"] = legacyBounds ? "all" : value.aggregation as DetectionRuleV1["aggregation"];
   if (value.ignoreHidden !== undefined && typeof value.ignoreHidden !== "boolean") return null;
   if (!record(value.range) || !finite(value.range.outer) || !finite(value.range.inner)) return null;
   if (value.range.outer <= 0 || value.range.inner < 0 || value.range.inner > value.range.outer) return null;
@@ -423,10 +429,11 @@ export function parseDetectionRule(value: unknown): DetectionRuleV1 | null {
     enabled: value.enabled,
     signal,
     ...(source ? { source } : {}),
+    detectionArea,
     matchType,
     excludeLayers,
     range: { outer: value.range.outer, inner: value.range.inner },
-    aggregation: value.aggregation as DetectionRuleV1["aggregation"],
+    aggregation,
     ignoreHidden: value.ignoreHidden ?? false,
     falloff: value.falloff as DetectionRuleV1["falloff"],
     effects,

@@ -86,7 +86,7 @@ export class ProximityEngine {
       const metadata = parseDetectorMetadata(detector.metadata[DETECTOR_KEY]);
       if (!metadata?.enabled) continue;
       for (const rule of metadata.rules.filter((entry) => entry.enabled)) {
-        const result = await evaluateRule(detector, rule, { signals: signalIndex, lights: this.latestLights, items: this.latestItems }, graph, gridScale.parsed.multiplier, { dpi: gridDpi, type: gridType, measurement: gridMeasurement }, this.distanceMethod);
+        const result = await evaluateRule(detector, rule, { signals: signalIndex, lights: this.latestLights, items: this.latestItems, getItemBounds: async (item) => OBR.scene.items.getItemBounds([item.id]) }, graph, gridScale.parsed.multiplier, { dpi: gridDpi, type: gridType, measurement: gridMeasurement }, this.distanceMethod);
         const activeEvaluations = result.evaluations.filter((evaluation) => evaluation.strength > 0 && evaluation.detectedEmitter);
         const responsiveEmitters = activeEvaluations.map((evaluation) => evaluation.detectedEmitter!);
         const responsiveDetections = activeEvaluations.map((evaluation) => ({ emitter: evaluation.detectedEmitter!, distance: evaluation.distance!, strength: evaluation.strength }));
@@ -156,7 +156,9 @@ export class ProximityEngine {
           detectorId: detector.id,
           detectorName: detector.name,
           ruleId: rule.id,
+          ruleName: rule.name ?? `Rule ${metadata.rules.indexOf(rule) + 1}`,
           signal: rule.signal,
+          detectionArea: rule.detectionArea,
           aggregation: rule.aggregation,
           range: rule.range,
           matchingEmitterCount: result.matchingEmitterCount,

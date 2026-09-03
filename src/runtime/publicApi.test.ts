@@ -5,7 +5,7 @@ import type { DetectionRuleV1 } from "../types";
 import { parseStingApiRequest, StingPublicApi, type StingApiDependencies, type StingApiResult } from "./publicApi";
 
 const template: DetectionRuleV1 = {
-  id: "template", enabled: true, signal: "magic", matchType: "exact", excludeLayers: [], range: { inner: 0, outer: 30 },
+  id: "template", enabled: true, signal: "magic", detectionArea: "distance", matchType: "exact", excludeLayers: [], range: { inner: 0, outer: 30 },
   aggregation: "nearest", ignoreHidden: false, falloff: "binary", effects: [],
 };
 
