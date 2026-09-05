@@ -22,6 +22,7 @@ const versions = new Map([
   ["manifest popover query", new URL(manifest.action.popover).searchParams.get("v")],
   ["manifest icon query", new URL(manifest.icon).searchParams.get("v")],
   ["manifest action icon query", new URL(manifest.action.icon).searchParams.get("v")],
+  ["manifest background query", new URL(manifest.background_url).searchParams.get("v")],
   ["src/version.ts", versionMatch[1]],
 ]);
 

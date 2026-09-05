@@ -131,4 +131,4 @@ pnpm run build
 - Extension ID: `com.ex-asperis.sting`
 - Published author: `ex Asperis`
 - Stable manifest: `public/manifest.json`
-- Versioned manifest: `public/manifest-v0.1.5.json`
+- Versioned manifest: `public/manifest-v0.1.6.json`
