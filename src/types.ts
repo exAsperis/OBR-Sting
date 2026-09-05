@@ -230,6 +230,7 @@ export interface DetectionRuleV1 {
   range: { outer: number; inner: number };
   aggregation: "nearest" | "all";
   ignoreHidden: boolean;
+  disableWhenHidden: boolean;
   falloff: Falloff;
   effects: EffectDefinitionV1[];
 }

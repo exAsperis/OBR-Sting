@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SliderNumber } from "./SliderNumber";
+import { NumericLimitsProvider } from "./NumericLimits";
 
 afterEach(cleanup);
 
@@ -57,5 +58,19 @@ describe("SliderNumber", () => {
     fireEvent.change(screen.getByRole("spinbutton", { name: "Edit Rate" }), { target: { value: "2.5" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply Rate" }));
     expect(onChange).toHaveBeenCalledWith(2.5);
+  });
+
+  it("allows and flags an out-of-bounds value when numerical limits are overridden", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<NumericLimitsProvider value><SliderNumber label="Rate" value={1} min={0} max={10} step={1} onChange={onChange} /></NumericLimitsProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Edit Rate: 1" }));
+    const input = screen.getByRole("spinbutton", { name: "Edit Rate" });
+    expect(input.hasAttribute("min")).toBe(false);
+    expect(input.hasAttribute("max")).toBe(false);
+    fireEvent.change(input, { target: { value: "15" } });
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledWith(15);
+    rerender(<NumericLimitsProvider value><SliderNumber label="Rate" value={15} min={0} max={10} step={1} onChange={onChange} /></NumericLimitsProvider>);
+    expect(screen.getByRole("slider", { name: "Rate" }).classList.contains("out-of-bounds")).toBe(true);
   });
 });

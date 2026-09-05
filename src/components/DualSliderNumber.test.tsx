@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DualSliderNumber } from "./DualSliderNumber";
+import { NumericLimitsProvider } from "./NumericLimits";
 
 afterEach(cleanup);
 
@@ -53,5 +54,11 @@ describe("DualSliderNumber", () => {
     fireEvent.change(screen.getByRole("slider", { name: "Full strength at" }), { target: { value: "80" } });
     expect(onChange).toHaveBeenNthCalledWith(1, 5, 5);
     expect(onChange).toHaveBeenNthCalledWith(2, 60, 60);
+  });
+
+  it("flags only the endpoint outside its normal range", () => {
+    render(<NumericLimitsProvider value><DualSliderNumber label="Range" labelContent={<span>Range</span>} minimumValue={150} maximumValue={40} min={0} max={100} step={1} onChange={vi.fn()} /></NumericLimitsProvider>);
+    expect(screen.getByRole("slider", { name: "Range at minimum detection" }).classList.contains("out-of-bounds")).toBe(true);
+    expect(screen.getByRole("slider", { name: "Range at maximum detection" }).classList.contains("out-of-bounds")).toBe(false);
   });
 });

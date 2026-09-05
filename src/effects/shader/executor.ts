@@ -163,7 +163,7 @@ export function resolveStrengthLinkedShaderValues(effect: ShaderEffectDefinition
     innerRadius: resolveDynamicValue(effect, "innerRadius", configured.innerRadius, strength, configured.innerRadiusStrengthLink, 0, Math.max(0, configured.outerRadius - 1)),
     outerRadius: resolveDynamicValue(effect, "outerRadius", configured.outerRadius, strength, configured.outerRadiusStrengthLink, configured.innerRadius + 1, 200),
   };
-  geometry.outerRadius = Math.min(200, Math.max(geometry.innerRadius + 1, geometry.outerRadius));
+  geometry.outerRadius = Math.max(geometry.innerRadius + 1, geometry.outerRadius);
   geometry.innerRadius = Math.min(geometry.innerRadius, geometry.outerRadius - 1);
   return {
     geometry,

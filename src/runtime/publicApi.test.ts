@@ -6,7 +6,7 @@ import { parseStingApiRequest, StingPublicApi, type StingApiDependencies, type S
 
 const template: DetectionRuleV1 = {
   id: "template", enabled: true, signal: "magic", detectionArea: "distance", matchType: "exact", excludeLayers: [], range: { inner: 0, outer: 30 },
-  aggregation: "nearest", ignoreHidden: false, falloff: "binary", effects: [],
+  aggregation: "nearest", ignoreHidden: false, disableWhenHidden: false, falloff: "binary", effects: [],
 };
 
 const item = (id: string, metadata: Record<string, unknown> = {}) => ({ id, metadata }) as Item;

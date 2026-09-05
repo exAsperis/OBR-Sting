@@ -37,10 +37,10 @@ const parseImageAsset = (value: unknown): Extract<MechanicalEffectDefinitionV1, 
 const jsonObject = (value: unknown): value is JsonObject => {
   try { return record(value) && JSON.stringify(value) !== undefined; } catch { return false; }
 };
-const parseLightValue = (value: unknown, minimum: number, maximum: number): LightDynamicValueV1 | null => {
-  if (!record(value) || !finite(value.value) || value.value < minimum || value.value > maximum) return null;
+const parseLightValue = (value: unknown, _minimum: number, _maximum: number): LightDynamicValueV1 | null => {
+  if (!record(value) || !finite(value.value)) return null;
   if (value.range === undefined) return { value: value.value };
-  if (!record(value.range) || !finite(value.range.minimum) || !finite(value.range.maximum) || value.range.minimum < minimum || value.range.minimum > maximum || value.range.maximum < minimum || value.range.maximum > maximum) return null;
+  if (!record(value.range) || !finite(value.range.minimum) || !finite(value.range.maximum)) return null;
   if (value.range.enabled !== undefined && typeof value.range.enabled !== "boolean") return null;
   return { value: value.value, range: { minimum: value.range.minimum, maximum: value.range.maximum, ...(value.range.enabled === false ? { enabled: false } : {}) } };
 };
@@ -81,10 +81,9 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   if (value.type === "mechanical") {
     if (value.action === "face") {
       if (!finite(value.faceAngle) || !finite(value.speed)) return null;
-      if (value.faceAngle < 0 || value.faceAngle > 359 || value.speed < 15 || value.speed > 720) return null;
       const pivotX = value.pivotX ?? 0;
       const pivotY = value.pivotY ?? 0;
-      if (!finite(pivotX) || !finite(pivotY) || pivotX < -500 || pivotX > 500 || pivotY < -500 || pivotY > 500) return null;
+      if (!finite(pivotX) || !finite(pivotY)) return null;
       if (value.reverseOnExit !== undefined && typeof value.reverseOnExit !== "boolean") return null;
       return {
         id: value.id,
@@ -142,10 +141,10 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     if (value.lightType !== undefined && !["PRIMARY", "SECONDARY", "AUXILIARY"].includes(String(value.lightType))) return null;
     if (value.radiusOperation !== undefined && !["set", "add", "multiply"].includes(String(value.radiusOperation))) return null;
     if (value.rotationBehavior !== undefined && !["target", "fixed"].includes(String(value.rotationBehavior))) return null;
-    if (value.rotation !== undefined && (!finite(value.rotation) || value.rotation < -360 || value.rotation > 360)) return null;
+    if (value.rotation !== undefined && !finite(value.rotation)) return null;
     const spotlightAngle = value.spotlightAngle ?? 0;
     const spotlightSpeed = value.spotlightSpeed ?? 180;
-    if (!finite(spotlightAngle) || spotlightAngle < 0 || spotlightAngle > 359 || !finite(spotlightSpeed) || spotlightSpeed < 15 || spotlightSpeed > 720) return null;
+    if (!finite(spotlightAngle) || !finite(spotlightSpeed)) return null;
     // Spotlight already aims at the detected emitter, so using it as the light target is self-referential.
     const lightTarget = value.action === "spotlight" && target.type === "detected-emitter" ? { type: "detector" as const } : target;
     return { id: value.id, ...named, type: "light", enabled: value.enabled, action: value.action as LightEffectDefinitionV1["action"], duration: value.duration as LightEffectDefinitionV1["duration"] ?? "temporary", target: lightTarget, audience, attenuationRadius, ...(sourceRadius ? { sourceRadius } : {}), ...(falloff ? { falloff } : {}), ...(innerAngle ? { innerAngle } : {}), ...(outerAngle ? { outerAngle } : {}), ...(value.lightType ? { lightType: value.lightType as LightEffectDefinitionV1["lightType"] } : {}), radiusOperation: value.radiusOperation as LightEffectDefinitionV1["radiusOperation"] ?? "set", rotationBehavior: value.rotationBehavior as LightEffectDefinitionV1["rotationBehavior"] ?? "target", ...(value.rotation !== undefined ? { rotation: value.rotation } : {}), ...(value.action === "spotlight" ? { spotlightAngle, spotlightSpeed } : {}) };
@@ -197,10 +196,10 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   if (value.shape !== undefined && !shapes.includes(value.shape as ShaderShape)) return null;
   const placements: ShaderPlacement[] = ["above", "below"];
   if (value.placement !== undefined && !placements.includes(value.placement as ShaderPlacement)) return null;
-  if (!finite(value.maxIntensity) || value.maxIntensity < 0 || value.maxIntensity > 2) return null;
+  if (!finite(value.maxIntensity)) return null;
   if (value.intensityStrengthLinked !== undefined && typeof value.intensityStrengthLinked !== "boolean") return null;
   if (value.alwaysIncludeGm !== undefined && typeof value.alwaysIncludeGm !== "boolean") return null;
-  if (!finite(value.spread) || value.spread < 0 || value.spread > 4) return null;
+  if (!finite(value.spread)) return null;
   if (value.spreadStrengthLink !== undefined && !["min", "max"].includes(String(value.spreadStrengthLink))) return null;
   const dynamicBounds: Record<ShaderDynamicField, [number, number]> = {
     intensity: [0, 2], softness: [0, 4], segments: [1, 30], innerRadius: [0, 199], outerRadius: [1, 200], beamWidth: [0, 120], beamOriginWidth: [0, 100],
@@ -212,8 +211,6 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     if (!record(value.dynamicRanges)) return null;
     for (const [field, candidate] of Object.entries(value.dynamicRanges)) {
       if (!(field in dynamicBounds) || !record(candidate) || !finite(candidate.minimum) || !finite(candidate.maximum)) return null;
-      const [minimum, maximum] = dynamicBounds[field as ShaderDynamicField];
-      if (candidate.minimum < minimum || candidate.minimum > maximum || candidate.maximum < minimum || candidate.maximum > maximum) return null;
       if (candidate.enabled !== undefined && typeof candidate.enabled !== "boolean") return null;
       dynamicRanges[field as ShaderDynamicField] = { minimum: candidate.minimum, maximum: candidate.maximum, ...(candidate.enabled === false ? { enabled: false } : {}) };
     }
@@ -224,24 +221,21 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     const geometryValue = value.geometry;
     const { offsetX, offsetY, innerRadius, outerRadius } = geometryValue;
     if (!finite(offsetX) || !finite(offsetY) || !finite(innerRadius) || !finite(outerRadius)) return null;
-    if (offsetX < -100 || offsetX > 100 || offsetY < -100 || offsetY > 100) return null;
-    if (innerRadius < 0 || outerRadius <= innerRadius || outerRadius > 200) return null;
+    if (outerRadius <= innerRadius) return null;
     const width = geometryValue.width ?? 100;
     const height = geometryValue.height ?? 100;
     const responsiveOffset = geometryValue.responsiveOffset ?? 0;
     const rotation = geometryValue.rotation ?? 0;
     if (!finite(width) || !finite(height) || !finite(responsiveOffset) || !finite(rotation)) return null;
-    if (width < 5 || width > 400 || height < 5 || height > 400 || responsiveOffset < -100 || responsiveOffset > 100 || rotation < -180 || rotation > 180) return null;
     let responsiveOffsetRange: DynamicValueRange | undefined;
     if (geometryValue.responsiveOffsetRange !== undefined) {
       if (!record(geometryValue.responsiveOffsetRange)) return null;
       const range = geometryValue.responsiveOffsetRange;
       if (finite(range.minimum) && finite(range.maximum)) {
-        if (range.minimum < -100 || range.minimum > 100 || range.maximum < -100 || range.maximum > 100) return null;
         responsiveOffsetRange = { minimum: range.minimum, maximum: range.maximum };
       } else {
         // Migrate the experimental sorted endpoints plus REV representation.
-        if (!finite(range.min) || !finite(range.max) || range.min < -100 || range.max > 100 || range.min > range.max) return null;
+        if (!finite(range.min) || !finite(range.max) || range.min > range.max) return null;
         if (range.reversed !== undefined && typeof range.reversed !== "boolean") return null;
         responsiveOffsetRange = range.reversed ? { minimum: range.max, maximum: range.min } : { minimum: range.min, maximum: range.max };
       }
@@ -258,14 +252,13 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   let animation: ShaderEffectDefinitionV1["animation"];
   if (value.animation !== undefined) {
     if (!record(value.animation) || !finite(value.animation.rate) || !finite(value.animation.depth)) return null;
-    if (value.animation.rate < 0 || value.animation.rate > 10 || value.animation.depth < 0 || value.animation.depth > 1) return null;
     if (value.animation.rateStrengthLink !== undefined && !["min", "max"].includes(String(value.animation.rateStrengthLink))) return null;
     if (value.animation.depthStrengthLink !== undefined && !["min", "max"].includes(String(value.animation.depthStrengthLink))) return null;
     const inferredMode = legacyPreset === "pulse" || legacyPreset === "flicker" ? legacyPreset : "none";
     const modes: ShaderAnimationMode[] = ["none", "pulse", "flicker", "radial-pulse"];
     if (value.animation.mode !== undefined && !modes.includes(value.animation.mode as ShaderAnimationMode)) return null;
     if (value.animation.radialDirection !== undefined && !["outward", "inward"].includes(String(value.animation.radialDirection))) return null;
-    if (value.animation.waveWidth !== undefined && (!finite(value.animation.waveWidth) || value.animation.waveWidth < 0 || value.animation.waveWidth > 1)) return null;
+    if (value.animation.waveWidth !== undefined && !finite(value.animation.waveWidth)) return null;
     if (value.animation.waveWidthStrengthLink !== undefined && !["min", "max"].includes(String(value.animation.waveWidthStrengthLink))) return null;
     if (value.animation.waveWidthStrengthLink !== undefined && value.animation.waveWidth === undefined) return null;
     animation = {
@@ -283,14 +276,14 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
   }
   let beamWidth: number | undefined;
   if (value.beamWidth !== undefined) {
-    if (!finite(value.beamWidth) || value.beamWidth < 0 || value.beamWidth > 120) return null;
+    if (!finite(value.beamWidth)) return null;
     beamWidth = value.beamWidth;
   }
   if (value.beamWidthStrengthLink !== undefined && !["min", "max"].includes(String(value.beamWidthStrengthLink))) return null;
   if (value.beamWidthStrengthLink !== undefined && value.beamWidth === undefined) return null;
   let beamOriginWidth: number | undefined;
   if (value.beamOriginWidth !== undefined) {
-    if (!finite(value.beamOriginWidth) || value.beamOriginWidth < 0 || value.beamOriginWidth > 100) return null;
+    if (!finite(value.beamOriginWidth)) return null;
     beamOriginWidth = value.beamOriginWidth;
   }
   let glow: ShaderEffectDefinitionV1["glow"];
@@ -299,7 +292,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     const glowValue = record(value.glow) ? value.glow : {};
     const segments = glowValue.segments ?? 1;
     const segmentAlignment = glowValue.segmentAlignment ?? "center";
-    if (!finite(segments) || !Number.isInteger(segments) || segments < 1 || segments > 30) return null;
+    if (!finite(segments) || !Number.isInteger(segments)) return null;
     if (!["center", "boundary"].includes(String(segmentAlignment))) return null;
     glow = { segments, segmentAlignment: segmentAlignment as "center" | "boundary" };
   }
@@ -319,11 +312,11 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     const sweepType = radarValue.sweepType ?? "none";
     const sweepDirection = radarValue.sweepDirection ?? (sweepType === "angular" ? "clockwise" : "outward");
     const echoFadeDuration = radarValue.echoFadeDuration ?? 3;
-    if (!["circle", "blob", "rune"].includes(String(echoStyle)) || !finite(echoSize) || echoSize < 10 || echoSize > 400 || !["linear", "logarithmic"].includes(String(distanceScale)) || !["none", "m314", "modern", "arcane"].includes(String(decoration)) || !["none", "radial", "angular"].includes(String(sweepType))) return null;
-    if (!finite(sweepTrail) || sweepTrail < 0 || sweepTrail > 100 || !finite(brightness) || brightness < 0 || brightness > 1) return null;
+    if (!["circle", "blob", "rune"].includes(String(echoStyle)) || !finite(echoSize) || !["linear", "logarithmic"].includes(String(distanceScale)) || !["none", "m314", "modern", "arcane"].includes(String(decoration)) || !["none", "radial", "angular"].includes(String(sweepType))) return null;
+    if (!finite(sweepTrail) || !finite(brightness)) return null;
     if (!["outward", "inward", "clockwise", "counterclockwise"].includes(String(sweepDirection))) return null;
     if (sweepType !== "none" && (sweepType === "radial") !== ["outward", "inward"].includes(String(sweepDirection))) return null;
-    if (!finite(echoFadeDuration) || echoFadeDuration < 0.1 || echoFadeDuration > 30) return null;
+    if (!finite(echoFadeDuration)) return null;
     radar = { echoStyle: echoStyle as "circle" | "blob" | "rune", echoSize, distanceScale: distanceScale as "linear" | "logarithmic", decoration: decoration as "none" | "m314" | "modern" | "arcane", sweepTrail, brightness, sweepType: sweepType as "none" | "radial" | "angular", sweepDirection: sweepDirection as NonNullable<ShaderEffectDefinitionV1["radar"]>["sweepDirection"], echoFadeDuration };
   }
   let grid: ShaderEffectDefinitionV1["grid"];
@@ -345,7 +338,7 @@ export function parseEffectDefinition(value: unknown): EffectDefinitionV1 | null
     const orientation = edgeValue.orientation ?? "toward-detection";
     const size = edgeValue.size ?? 48;
     const inset = edgeValue.inset ?? 16;
-    if (!["triangle", "disk", "image", "square", "target", "echo", "rune", "arcane"].includes(String(appearance)) || !["toward-edge", "toward-detection"].includes(String(orientation)) || !finite(size) || size < 16 || size > 160 || !finite(inset) || inset < -96 || inset > 96) return null;
+    if (!["triangle", "disk", "image", "square", "target", "echo", "rune", "arcane"].includes(String(appearance)) || !["toward-edge", "toward-detection"].includes(String(orientation)) || !finite(size) || !finite(inset)) return null;
     edge = { appearance: appearance as NonNullable<ShaderEffectDefinitionV1["edge"]>["appearance"], orientation: orientation as "toward-edge" | "toward-detection", size, inset };
   }
   return {
@@ -413,8 +406,9 @@ export function parseDetectionRule(value: unknown): DetectionRuleV1 | null {
   const detectionArea = (value.detectionArea as DetectionRuleV1["detectionArea"] | undefined) ?? (legacyBounds || legacyLightDetection === "within-radius" ? "source-area" : "distance");
   const aggregation: DetectionRuleV1["aggregation"] = legacyBounds ? "all" : value.aggregation as DetectionRuleV1["aggregation"];
   if (value.ignoreHidden !== undefined && typeof value.ignoreHidden !== "boolean") return null;
+  if (value.disableWhenHidden !== undefined && typeof value.disableWhenHidden !== "boolean") return null;
   if (!record(value.range) || !finite(value.range.outer) || !finite(value.range.inner)) return null;
-  if (value.range.outer <= 0 || value.range.inner < 0 || value.range.inner > value.range.outer) return null;
+  if (value.range.inner > value.range.outer) return null;
   if (!Array.isArray(value.effects)) return null;
   const effects: EffectDefinitionV1[] = [];
   for (const candidate of value.effects) {
@@ -435,6 +429,7 @@ export function parseDetectionRule(value: unknown): DetectionRuleV1 | null {
     range: { outer: value.range.outer, inner: value.range.inner },
     aggregation,
     ignoreHidden: value.ignoreHidden ?? false,
+    disableWhenHidden: value.disableWhenHidden ?? false,
     falloff: value.falloff as DetectionRuleV1["falloff"],
     effects,
   };

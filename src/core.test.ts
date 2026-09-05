@@ -25,7 +25,7 @@ const effect = (id = "effect-1"): ShaderEffectDefinitionV1 => ({
 });
 
 const rule = (id: string, effects: EffectDefinitionV1[] = []): DetectionRuleV1 => ({
-  id, enabled: true, signal: "orc", detectionArea: "distance", matchType: "exact", excludeLayers: [], range: { outer: 60, inner: 5 }, aggregation: "nearest", ignoreHidden: false, falloff: "smoothstep", effects,
+  id, enabled: true, signal: "orc", detectionArea: "distance", matchType: "exact", excludeLayers: [], range: { outer: 60, inner: 5 }, aggregation: "nearest", ignoreHidden: false, disableWhenHidden: false, falloff: "smoothstep", effects,
 });
 
 describe("signal normalization", () => {
@@ -147,6 +147,12 @@ describe("versioned detector parsing", () => {
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("ignore"), ignoreHidden: true }] })?.rules[0].ignoreHidden).toBe(true);
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("bad"), ignoreHidden: "yes" }] })).toBeNull();
   });
+  it("defaults and validates disableWhenHidden", () => {
+    const { disableWhenHidden: _disableWhenHidden, ...legacy } = rule("legacy-hidden-detector");
+    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [legacy] })?.rules[0].disableWhenHidden).toBe(false);
+    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("disable-hidden-detector"), disableWhenHidden: true }] })?.rules[0].disableWhenHidden).toBe(true);
+    expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule("bad-hidden-detector"), disableWhenHidden: "yes" }] })).toBeNull();
+  });
   it.each(["item-name", "item-label"] as const)("parses the %s source type", (type) => {
     expect(parseDetectorMetadata({ version: 1, enabled: true, rules: [{ ...rule(type), source: { type } }] })?.rules[0].source).toEqual({ type });
   });
@@ -178,11 +184,11 @@ describe("versioned detector parsing", () => {
     expect(parseEffectDefinition({ ...effect(), placement: "inside" })).toBeNull();
   });
 
-  it("defaults and validates Glow segment configuration", () => {
+  it("defaults Glow segments, preserves integer overrides, and validates structure", () => {
     expect(parseEffectDefinition(effect())).toMatchObject({ glow: { segments: 1, segmentAlignment: "center" } });
     expect(parseEffectDefinition({ ...effect(), glow: { segments: 30, segmentAlignment: "boundary" } })).toMatchObject({ glow: { segments: 30, segmentAlignment: "boundary" } });
-    expect(parseEffectDefinition({ ...effect(), glow: { segments: 0, segmentAlignment: "center" } })).toBeNull();
-    expect(parseEffectDefinition({ ...effect(), glow: { segments: 31, segmentAlignment: "center" } })).toBeNull();
+    expect(parseEffectDefinition({ ...effect(), glow: { segments: 0, segmentAlignment: "center" } })).toMatchObject({ glow: { segments: 0 } });
+    expect(parseEffectDefinition({ ...effect(), glow: { segments: 31, segmentAlignment: "center" } })).toMatchObject({ glow: { segments: 31 } });
     expect(parseEffectDefinition({ ...effect(), glow: { segments: 2.5, segmentAlignment: "center" } })).toBeNull();
     expect(parseEffectDefinition({ ...effect(), glow: { segments: 3, segmentAlignment: "diagonal" } })).toBeNull();
   });
@@ -202,7 +208,7 @@ describe("versioned detector parsing", () => {
     const radial = { ...effect(), animation: { mode: "radial-pulse", rate: 1.5, depth: 0.8, radialDirection: "inward", waveWidth: 0.3 } };
     expect(parseEffectDefinition(radial)).toMatchObject(radial);
     expect(parseEffectDefinition({ ...radial, animation: { ...radial.animation, waveWidth: 0 } })).toMatchObject({ animation: { waveWidth: 0 } });
-    expect(parseEffectDefinition({ ...radial, animation: { ...radial.animation, waveWidth: 2 } })).toBeNull();
+    expect(parseEffectDefinition({ ...radial, animation: { ...radial.animation, waveWidth: 2 } })).toMatchObject({ animation: { waveWidth: 2 } });
   });
   it("parses radar defaults, configuration, and dynamic echo fade", () => {
     expect(parseEffectDefinition({ ...effect(), preset: "radar" })).toMatchObject({ preset: "radar", radar: { echoStyle: "circle", echoSize: 100, distanceScale: "linear", decoration: "none", sweepTrail: 0, brightness: 0.35, sweepType: "none", sweepDirection: "outward", echoFadeDuration: 3 } });
@@ -213,11 +219,11 @@ describe("versioned detector parsing", () => {
     expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, decoration: "arcane" } })).toMatchObject({ radar: { decoration: "arcane" } });
     expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, echoStyle: "rune" } })).toMatchObject({ radar: { echoStyle: "rune" } });
     expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, sweepDirection: "inward" } })).toBeNull();
-    expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, echoFadeDuration: 31 } })).toBeNull();
+    expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, echoFadeDuration: 31 } })).toMatchObject({ radar: { echoFadeDuration: 31 } });
     expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, distanceScale: "exponential" } })).toBeNull();
-    expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, brightness: 2 } })).toBeNull();
-    expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, sweepTrail: 101 } })).toBeNull();
-    expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, echoSize: 401 } })).toBeNull();
+    expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, brightness: 2 } })).toMatchObject({ radar: { brightness: 2 } });
+    expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, sweepTrail: 101 } })).toMatchObject({ radar: { sweepTrail: 101 } });
+    expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, echoSize: 401 } })).toMatchObject({ radar: { echoSize: 401 } });
     expect(parseEffectDefinition({ ...configured, radar: { ...configured.radar, sweepTrail: true } })).toMatchObject({ radar: { sweepTrail: 100 } });
   });
   it("parses grid visualization defaults and configuration", () => {
@@ -239,11 +245,11 @@ describe("versioned detector parsing", () => {
     expect(parseEffectDefinition({ ...configured, edge: { ...configured.edge, appearance: "bar" } })).toMatchObject({ edge: { appearance: "square" } });
     expect(parseEffectDefinition({ ...configured, edge: { ...configured.edge, appearance: "arrow" } })).toBeNull();
     expect(parseEffectDefinition({ ...configured, edge: { ...configured.edge, orientation: "sideways" } })).toBeNull();
-    expect(parseEffectDefinition({ ...configured, edge: { ...configured.edge, size: 15 } })).toBeNull();
-    expect(parseEffectDefinition({ ...configured, edge: { ...configured.edge, inset: 97 } })).toBeNull();
+    expect(parseEffectDefinition({ ...configured, edge: { ...configured.edge, size: 15 } })).toMatchObject({ edge: { size: 15 } });
+    expect(parseEffectDefinition({ ...configured, edge: { ...configured.edge, inset: 97 } })).toMatchObject({ edge: { inset: 97 } });
     expect(parseEffectDefinition({ ...configured, edge: { ...configured.edge, inset: -96 } })).toMatchObject({ edge: { inset: -96 } });
-    expect(parseEffectDefinition({ ...configured, edge: { ...configured.edge, inset: -97 } })).toBeNull();
-    expect(parseEffectDefinition({ ...configured, dynamicRanges: { indicatorSize: { minimum: 10, maximum: 120 } } })).toBeNull();
+    expect(parseEffectDefinition({ ...configured, edge: { ...configured.edge, inset: -97 } })).toMatchObject({ edge: { inset: -97 } });
+    expect(parseEffectDefinition({ ...configured, dynamicRanges: { indicatorSize: { minimum: 10, maximum: 120 } } })).toMatchObject({ dynamicRanges: { indicatorSize: { minimum: 10, maximum: 120 } } });
   });
   it("parses optional animation rate strength linking and rejects unknown values", () => {
     expect(parseEffectDefinition({ ...effect(), animation: { mode: "pulse", rate: 2, depth: 0.5, rateStrengthLink: "max" } }))
@@ -274,9 +280,9 @@ describe("versioned detector parsing", () => {
     expect(parseEffectDefinition({ ...linked, beamWidthStrengthLink: "middle" })).toBeNull();
     expect(parseEffectDefinition({ ...linked, geometry: { ...linked.geometry, widthStrengthLink: "middle" } })).toBeNull();
   });
-  it("allows zero softness and rejects negative softness", () => {
+  it("allows softness outside its normal bounds", () => {
     expect(parseEffectDefinition({ ...effect(), spread: 0 })).toMatchObject({ spread: 0 });
-    expect(parseEffectDefinition({ ...effect(), spread: -0.01 })).toBeNull();
+    expect(parseEffectDefinition({ ...effect(), spread: -0.01 })).toMatchObject({ spread: -0.01 });
     expect(parseEffectDefinition({ ...effect(), dynamicRanges: { softness: { minimum: 0, maximum: 4 } } }))
       .toMatchObject({ dynamicRanges: { softness: { minimum: 0, maximum: 4 } } });
   });
@@ -285,9 +291,9 @@ describe("versioned detector parsing", () => {
       .toMatchObject({ beamWidth: 0, beamOriginWidth: 0 });
     expect(parseEffectDefinition({ ...effect(), preset: "beam", beamWidth: 120, beamOriginWidth: 100 }))
       .toMatchObject({ beamWidth: 120, beamOriginWidth: 100 });
-    expect(parseEffectDefinition({ ...effect(), preset: "beam", beamWidth: -1 })).toBeNull();
-    expect(parseEffectDefinition({ ...effect(), preset: "beam", beamOriginWidth: -1 })).toBeNull();
-    expect(parseEffectDefinition({ ...effect(), preset: "beam", beamOriginWidth: 101 })).toBeNull();
+    expect(parseEffectDefinition({ ...effect(), preset: "beam", beamWidth: -1 })).toMatchObject({ beamWidth: -1 });
+    expect(parseEffectDefinition({ ...effect(), preset: "beam", beamOriginWidth: -1 })).toMatchObject({ beamOriginWidth: -1 });
+    expect(parseEffectDefinition({ ...effect(), preset: "beam", beamOriginWidth: 101 })).toMatchObject({ beamOriginWidth: 101 });
     expect(parseEffectDefinition({ ...effect(), preset: "beam", beamOriginWidth: "wide" })).toBeNull();
   });
   it("parses crossed responsive endpoints and migrates legacy REV ranges", () => {
@@ -297,11 +303,11 @@ describe("versioned detector parsing", () => {
     expect(parseEffectDefinition({ ...effect(), geometry: { ...baseGeometry, responsiveOffsetRange: { min: -20, max: 60, reversed: true } } }))
       .toMatchObject({ dynamicRanges: { responsiveOffset: { minimum: 60, maximum: -20 } } });
   });
-  it("parses generic dynamic shader ranges and rejects invalid endpoints", () => {
+  it("parses generic dynamic shader ranges including overridden endpoints", () => {
     const configured = { ...effect(), dynamicRanges: { intensity: { minimum: 0.25, maximum: 1.5 }, segments: { minimum: 1, maximum: 30 }, innerRadius: { minimum: 80, maximum: 20 }, outerRadius: { minimum: 90, maximum: 160, enabled: false } } };
     expect(parseEffectDefinition(configured)).toMatchObject(configured);
-    expect(parseEffectDefinition({ ...configured, dynamicRanges: { intensity: { minimum: -1, maximum: 1 } } })).toBeNull();
-    expect(parseEffectDefinition({ ...configured, dynamicRanges: { segments: { minimum: 0, maximum: 31 } } })).toBeNull();
+    expect(parseEffectDefinition({ ...configured, dynamicRanges: { intensity: { minimum: -1, maximum: 1 } } })).toMatchObject({ dynamicRanges: { intensity: { minimum: -1, maximum: 1 } } });
+    expect(parseEffectDefinition({ ...configured, dynamicRanges: { segments: { minimum: 0, maximum: 31 } } })).toMatchObject({ dynamicRanges: { segments: { minimum: 0, maximum: 31 } } });
     expect(parseEffectDefinition({ ...configured, dynamicRanges: { unknown: { minimum: 0, maximum: 1 } } })).toBeNull();
   });
   it("parses shader gradient, intensity, and GM audience options", () => {
@@ -408,17 +414,17 @@ describe("runtime effect identity", () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  it("parses Face mechanical effects and rejects invalid configuration", () => {
+  it("parses Face mechanical effects including overridden numerical limits", () => {
     const face = { id: "face", type: "mechanical", enabled: true, action: "face", target: { type: "detector" }, faceAngle: 0, pivotX: 0, pivotY: 0, speed: 180 };
     expect(parseEffectDefinition(face)).toEqual({ ...face, reverseOnExit: false });
     const { pivotX: _pivotX, pivotY: _pivotY, ...legacyFace } = face;
     expect(parseEffectDefinition(legacyFace)).toEqual({ ...face, reverseOnExit: false });
     expect(parseEffectDefinition({ ...face, reverseOnExit: true })).toMatchObject({ reverseOnExit: true });
     expect(parseEffectDefinition({ ...face, action: "move" })).toBeNull();
-    expect(parseEffectDefinition({ ...face, faceAngle: 360 })).toBeNull();
-    expect(parseEffectDefinition({ ...face, speed: 14 })).toBeNull();
-    expect(parseEffectDefinition({ ...face, speed: 721 })).toBeNull();
-    expect(parseEffectDefinition({ ...face, pivotX: 501 })).toBeNull();
+    expect(parseEffectDefinition({ ...face, faceAngle: 360 })).toMatchObject({ faceAngle: 360 });
+    expect(parseEffectDefinition({ ...face, speed: 14 })).toMatchObject({ speed: 14 });
+    expect(parseEffectDefinition({ ...face, speed: 721 })).toMatchObject({ speed: 721 });
+    expect(parseEffectDefinition({ ...face, pivotX: 501 })).toMatchObject({ pivotX: 501 });
   });
 
   it("parses Hide/Show mechanical effects and rejects invalid configuration", () => {
@@ -455,8 +461,8 @@ describe("runtime effect identity", () => {
     expect(parseEffectDefinition(spotlight)).toMatchObject({ ...spotlight, spotlightAngle: 0, spotlightSpeed: 180 });
     expect(parseEffectDefinition({ ...spotlight, spotlightAngle: 359, spotlightSpeed: 720 })).toMatchObject({ spotlightAngle: 359, spotlightSpeed: 720 });
     expect(parseEffectDefinition({ ...spotlight, target: { type: "detected-emitter" } })).toMatchObject({ target: { type: "detector" } });
-    expect(parseEffectDefinition({ ...spotlight, spotlightAngle: 360 })).toBeNull();
-    expect(parseEffectDefinition({ ...spotlight, spotlightSpeed: 14 })).toBeNull();
+    expect(parseEffectDefinition({ ...spotlight, spotlightAngle: 360 })).toMatchObject({ spotlightAngle: 360 });
+    expect(parseEffectDefinition({ ...spotlight, spotlightSpeed: 14 })).toMatchObject({ spotlightSpeed: 14 });
   });
   it("separates all-mode effects by detected emitter", () => {
     expect(buildRuntimeEffectKey("d", "r", "e", "same-target", "shader", "", "", "a"))
@@ -466,8 +472,9 @@ describe("runtime effect identity", () => {
 
 describe("scene settings", () => {
   it("parses supported distance methods and defaults invalid settings", () => {
-    expect(parseSceneSettings({ version: 1, distanceMethod: "euclidean" })).toEqual({ version: 1, distanceMethod: "euclidean" });
-    expect(parseSceneSettings({ version: 1, distanceMethod: "grid" })).toEqual({ version: 1, distanceMethod: "scene" });
+    expect(parseSceneSettings({ version: 1, distanceMethod: "euclidean" })).toEqual({ version: 1, distanceMethod: "euclidean", allowOutOfBounds: false });
+    expect(parseSceneSettings({ version: 1, distanceMethod: "grid" })).toEqual({ version: 1, distanceMethod: "scene", allowOutOfBounds: false });
+    expect(parseSceneSettings({ version: 1, distanceMethod: "scene", allowOutOfBounds: true })).toEqual({ version: 1, distanceMethod: "scene", allowOutOfBounds: true });
     expect(parseSceneSettings({ version: 1, distanceMethod: "taxicab" })).toEqual(DEFAULT_SCENE_SETTINGS);
     expect(parseSceneSettings(undefined)).toEqual(DEFAULT_SCENE_SETTINGS);
   });
@@ -530,6 +537,23 @@ describe("rule aggregation", () => {
       .resolves.toMatchObject({ matchingEmitterCount: 2 });
     await expect(evaluateRule(detector, { ...rule("ignore"), range: { inner: 0, outer: 60 }, aggregation: "all", ignoreHidden: true }, signalIndex, graph, 5, grid, "euclidean"))
       .resolves.toMatchObject({ matchingEmitterCount: 1, evaluations: [{ detectedEmitter: { id: "visible" } }] });
+  });
+
+  it.each(["nearest", "all"] as const)("disables a %s rule while its detector is hidden", async (aggregation) => {
+    const hiddenDetector = { ...detector, visible: false };
+    const emitter = { ...item("emitter"), position: { x: 10, y: 0 }, metadata: { [EMITTER_KEY]: { version: 1, signals: ["orc"] } } };
+    const items = [hiddenDetector, emitter];
+    const result = await evaluateRule(hiddenDetector, { ...rule("hidden-detector"), aggregation, disableWhenHidden: true }, indexEmittersBySignal(items), buildAttachmentGraph(items), 5, { dpi: 100, type: "SQUARE", measurement: "CHEBYSHEV" }, "euclidean");
+    expect(result.matchingEmitterCount).toBe(0);
+    expect(result.evaluations.every((evaluation) => evaluation.strength === 0)).toBe(true);
+  });
+
+  it("keeps a hidden detector active when the option is off", async () => {
+    const hiddenDetector = { ...detector, visible: false };
+    const emitter = { ...item("emitter"), position: { x: 10, y: 0 }, metadata: { [EMITTER_KEY]: { version: 1, signals: ["orc"] } } };
+    const items = [hiddenDetector, emitter];
+    const result = await evaluateRule(hiddenDetector, { ...rule("hidden-detector-enabled"), range: { inner: 0, outer: 60 } }, indexEmittersBySignal(items), buildAttachmentGraph(items), 5, { dpi: 100, type: "SQUARE", measurement: "CHEBYSHEV" }, "euclidean");
+    expect(result.evaluations[0].strength).toBeGreaterThan(0);
   });
 
   it("excludes emitters on configured OBR layers", async () => {

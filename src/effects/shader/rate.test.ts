@@ -214,7 +214,13 @@ describe("signal-linked shader geometry", () => {
     const conflicting = { ...effect, geometry: { ...effect.geometry!, innerRadiusStrengthLink: "min" as const, outerRadiusStrengthLink: "max" as const } };
     const geometry = resolveStrengthLinkedShaderValues(conflicting, 0).geometry;
     expect(geometry.outerRadius).toBeGreaterThanOrEqual(geometry.innerRadius + 1);
-    expect(geometry.outerRadius).toBeLessThanOrEqual(200);
+  });
+
+  it("preserves outer radii beyond the normal editor range", () => {
+    const overridden = { ...effect, geometry: { ...effect.geometry!, innerRadius: 50, outerRadius: 500, innerRadiusStrengthLink: undefined, outerRadiusStrengthLink: undefined } };
+    const resolved = resolveStrengthLinkedShaderValues(overridden, 1);
+    expect(resolved.geometry.outerRadius).toBe(500);
+    expect(shaderUniforms(overridden, 1, 1, { x: 1, y: 0 }).find((uniform) => uniform.name === "outerRadius")?.value).toBe(5);
   });
 
   it("interpolates responsive offset between dynamic endpoints", () => {

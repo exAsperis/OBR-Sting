@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAllowOutOfBounds } from "./NumericLimits";
 
 interface SliderNumberProps {
   label: string;
@@ -22,17 +23,19 @@ function stepDecimals(step: number): number {
 }
 
 export function SliderNumber({ label, labelContent, value, min, max, step, inputStep = step, onChange, decimals = stepDecimals(inputStep), suffix = "", className, tooltip, editReplacesSlider = false }: SliderNumberProps) {
+  const allowOutOfBounds = useAllowOutOfBounds();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value));
   const sliderMax = max ?? Math.max(200, Math.ceil(value / 50) * 50);
+  const outOfBounds = value < min || max !== undefined && value > max;
 
   useEffect(() => { if (!editing) setDraft(String(value)); }, [editing, value]);
 
   const commit = () => {
     const parsed = Number(draft);
     if (Number.isFinite(parsed)) {
-      const clamped = Math.min(max ?? Infinity, Math.max(min, parsed));
-      const stepped = min + Math.round((clamped - min) / inputStep) * inputStep;
+      const bounded = allowOutOfBounds ? parsed : Math.min(max ?? Infinity, Math.max(min, parsed));
+      const stepped = min + Math.round((bounded - min) / inputStep) * inputStep;
       onChange(Number(stepped.toFixed(Math.max(decimals, stepDecimals(inputStep)))));
     }
     setEditing(false);
@@ -42,7 +45,7 @@ export function SliderNumber({ label, labelContent, value, min, max, step, input
     setEditing(false);
   };
   const editor = (className: string) => <div className={`numeric-editor ${className}`} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) commit(); }}>
-    <input type="number" min={min} max={max} step={inputStep} value={draft} autoFocus onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") commit(); if (event.key === "Escape") { event.preventDefault(); cancel(); } }} aria-label={`Edit ${label}`} />
+    <input type="number" min={allowOutOfBounds ? undefined : min} max={allowOutOfBounds ? undefined : max} step={inputStep} value={draft} autoFocus onFocus={(event) => event.currentTarget.select()} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") commit(); if (event.key === "Escape") { event.preventDefault(); cancel(); } }} aria-label={`Edit ${label}`} />
     <button type="button" className="numeric-editor-action cancel" title="Cancel" aria-label={`Cancel editing ${label}`} onClick={cancel}>❌</button>
     <button type="button" className="numeric-editor-action confirm" title="Apply" aria-label={`Apply ${label}`} onClick={commit}>✔️</button>
   </div>;
@@ -54,6 +57,6 @@ export function SliderNumber({ label, labelContent, value, min, max, step, input
     </div>
     {editing && editReplacesSlider
       ? editor("range-direct-editor")
-      : <input type="range" min={min} max={sliderMax} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} aria-label={label} />}
+      : <input className={outOfBounds ? "out-of-bounds" : undefined} type="range" min={min} max={sliderMax} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} aria-label={label} />}
   </div>;
 }

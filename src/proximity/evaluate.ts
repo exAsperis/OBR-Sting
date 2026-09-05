@@ -104,6 +104,11 @@ export async function evaluateRule(
   distanceMethod: DistanceMethod,
 ): Promise<RuleEvaluationSet> {
   const sources: EvaluationSources = sourcesOrSignalIndex instanceof Map ? { signals: sourcesOrSignalIndex, lights: [] } : sourcesOrSignalIndex;
+  if (rule.disableWhenHidden && !detector.visible) {
+    return rule.aggregation === "all"
+      ? { matchingEmitterCount: 0, evaluations: [] }
+      : { matchingEmitterCount: 0, evaluations: [{ detector, rule, matchingEmitterCount: 0, detectedEmitter: null, distance: null, strength: 0 }] };
+  }
   if (rule.source?.type === "obr-light") {
     const filter = rule.source;
     const lights = sources.lights.filter((light) =>
