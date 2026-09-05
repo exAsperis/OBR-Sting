@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { LightEffectEditor } from "../integrations/ui/IntegrationEffectEditor";
 import type { LightEffectDefinitionV1 } from "../../types";
@@ -37,5 +37,17 @@ describe("LightEffectEditor duration", () => {
     expect(screen.queryByRole("option", { name: "Detected item(s)" })).toBeNull();
     expect(screen.queryByText("Radius (scene units)")).toBeNull();
     expect(screen.getByText("Duration")).not.toBeNull();
+  });
+
+  it("collapses and expands the light controls", () => {
+    renderEditor(effect("add"));
+    const collapse = screen.getByRole("button", { name: "Collapse Add Light effect" });
+
+    fireEvent.click(collapse);
+    expect(screen.queryByText("Light action")).toBeNull();
+    expect(screen.getByRole("button", { name: "Expand Add Light effect" }).getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand Add Light effect" }));
+    expect(screen.getByText("Light action")).not.toBeNull();
   });
 });

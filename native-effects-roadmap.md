@@ -7,13 +7,13 @@ This document lists planned native effects for Sting, including progress, proble
 instead of the whole detector glowing evenly, the side facing the detected emitter brightens.
 This is quite a bit like Responsive offset, and may be unnecessary.
 
-### Arrow / chevron indicator
+### ☑️ Arrow / chevron indicator
 a small local arrow attached to the detector points toward the emitter. Its size, brightness, opacity, or pulse rate can scale with proximity. Extremely legible and useful.
 
 ### Tether / beam
 draw a thin line, beam, chain, lightning filament, or dotted guide from detector to detected emitter.
 
-### Radar sweep / blip: 
+### ☑️ Radar sweep / blip: 
 a rotating sweep around the detector with a blip appearing at the actual bearing of the emitter. Distance from the detector center could be normalized to detection range, so the blip moves inward as the real emitter gets closer. This could be fantastic for sci-fi.
 
 ### Directional particle drift
